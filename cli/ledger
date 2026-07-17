@@ -121,6 +121,11 @@ def build_parser():
 
     sub.add_parser("validate", help="validate config, board, cursor, provenance, and generated counts")
     sub.add_parser("reconcile", help="atomically fold all unprocessed ledger events into the board")
+    sub.add_parser("collect", help="write a read-only local/GitHub observation report")
+    render = sub.add_parser("render-packs", help="generate configured agent instruction packs")
+    render.add_argument("--runtime", action="append", choices=("generic", "claude-code"),
+                        help="runtime to render; repeat as needed")
+    render.add_argument("--force", action="store_true", help="replace existing generated files")
     serve = sub.add_parser("serve", help="run the loopback-only board and decision deck")
     serve.add_argument("--port", type=int, help="port; defaults to config ui.port")
     return parser
@@ -186,6 +191,21 @@ def main(argv=None):
 
         if args.command == "reconcile":
             result = reconciler.reconcile(home, config=config)
+            _print_json(result)
+            return 0
+        if args.command == "collect":
+            from collectors import CollectorBusyError, collect
+            try:
+                result = collect(home, config=config)
+            except CollectorBusyError as exc:
+                print("ledger: %s" % exc, file=sys.stderr)
+                return 3
+            _print_json(result)
+            return 1 if result["status"] == "degraded" else 0
+        if args.command == "render-packs":
+            from packs import render_packs
+            result = render_packs(
+                home, runtimes=args.runtime, force=args.force)
             _print_json(result)
             return 0
         if args.command == "serve":

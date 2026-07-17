@@ -35,6 +35,7 @@ QUEUE_FIELDS = frozenset((
     "scope", "outOfScope", "acceptanceCriteria", "risksTrustConcerns",
     "recommendedNextAgent", "links", "protected", "gate", "ownerOnly",
     "ownerAssignment", "dedupeKey", "pr", "mergedNote", "created", "updated",
+    "autonomousSafe", "repository", "statusKey", "protectedClass",
     "doneNote", "completionDisposition", "completionEvidence", "completionSource",
     "completionActor", "completionLedgerProvenance", "tombstone",
 ))
@@ -77,6 +78,28 @@ def default_config(project="Ledger workspace"):
             "contexts": [
                 {"id": "main", "label": project, "home": "."},
             ],
+        },
+        "automation": {
+            "ownerRole": "owner",
+            "repositories": [],
+            "sources": {
+                "github": {
+                    "enabled": False,
+                    "prLimit": 20,
+                    "mergedLimit": 20,
+                    "runLimit": 10,
+                    "issueLimit": 20,
+                },
+                "localFiles": {"enabled": False, "roots": []},
+            },
+            "workPolicy": {
+                "readyStatus": "Ready for Build",
+                "reviewStatus": "Needs Review",
+                "allowStageMerge": False,
+                "productionWrites": False,
+            },
+            "packs": {"runtimes": ["generic"]},
+            "schedule": {"enabled": False, "hour": 7, "minute": 0},
         },
         "writerRegistry": {
             "agent": {"actions": {
@@ -342,6 +365,12 @@ def validate(board, config):
                 seen_ids.add(item_id)
             if not isinstance(item.get("status"), str) or item.get("status") not in statuses:
                 errors.append("queue item %r has unknown status %r" % (item_id, item.get("status")))
+            if "autonomousSafe" in item and not isinstance(item.get("autonomousSafe"), bool):
+                errors.append("queue item %r autonomousSafe must be boolean" % item_id)
+            for field in ("repository", "statusKey", "protectedClass"):
+                if field in item and (not isinstance(item.get(field), str) or
+                                      not item.get(field, "").strip()):
+                    errors.append("queue item %r %s must be non-empty text" % (item_id, field))
     _warn_unknown_fields(warnings, "queue", queue, QUEUE_FIELDS)
 
     inbox = board.get("inbox")

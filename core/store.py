@@ -111,6 +111,9 @@ def config_errors(config):
                     if (not isinstance(context.get("home"), str) or
                             not context.get("home", "").strip()):
                         errors.append("%s.home must be non-empty text" % prefix)
+    automation = config.get("automation")
+    if automation is not None:
+        _automation_config_errors(automation, errors)
     registry = config.get("writerRegistry")
     if not isinstance(registry, dict) or not registry:
         errors.append("writerRegistry must be a non-empty object")
@@ -151,7 +154,161 @@ def config_errors(config):
                 if not isinstance(values, list) or not values or any(
                         not isinstance(value, str) or not value for value in values):
                     errors.append("schema.gateClasses.%s must be a non-empty string list" % ask_type)
+    if isinstance(automation, dict):
+        statuses = set(schema.DEFAULT_STATUSES)
+        configured_statuses = configured.get("statuses", []) if isinstance(configured, dict) else []
+        if isinstance(configured_statuses, list):
+            statuses.update(value for value in configured_statuses if isinstance(value, str))
+        policy = automation.get("workPolicy")
+        if isinstance(policy, dict):
+            for field in ("readyStatus", "reviewStatus"):
+                value = policy.get(field)
+                if isinstance(value, str) and value not in statuses:
+                    errors.append("automation.workPolicy.%s must be a configured status" % field)
     return errors
+
+
+def _closed_config_object(value, prefix, allowed, errors):
+    if not isinstance(value, dict):
+        errors.append("%s must be an object" % prefix)
+        return False
+    unknown = sorted(set(value) - set(allowed))
+    if unknown:
+        errors.append("%s has unsupported field(s): %s" % (prefix, ", ".join(unknown)))
+    return True
+
+
+def _bounded_integer(value, prefix, minimum, maximum, errors):
+    if (not isinstance(value, int) or isinstance(value, bool) or
+            not minimum <= value <= maximum):
+        errors.append("%s must be an integer from %d through %d" % (
+            prefix, minimum, maximum))
+
+
+def _automation_config_errors(automation, errors):
+    if not _closed_config_object(
+            automation, "automation",
+            {"ownerRole", "repositories", "sources", "workPolicy", "packs", "schedule"},
+            errors):
+        return
+    owner_role = automation.get("ownerRole")
+    if (not isinstance(owner_role, str) or not owner_role.strip() or
+            len(owner_role.strip()) > 80 or any(char in owner_role for char in "\r\n\x00")):
+        errors.append("automation.ownerRole must be 1-80 characters of single-line text")
+
+    repositories = automation.get("repositories")
+    if not isinstance(repositories, list):
+        errors.append("automation.repositories must be a list")
+    else:
+        seen_ids, seen_slugs = set(), set()
+        for index, repository in enumerate(repositories):
+            prefix = "automation.repositories[%d]" % index
+            if not _closed_config_object(
+                    repository, prefix,
+                    {"id", "slug", "stageBranch", "productionBranch"}, errors):
+                continue
+            repository_id = repository.get("id")
+            if (not isinstance(repository_id, str) or
+                    not re.fullmatch(r"[a-z][a-z0-9-]{0,31}", repository_id)):
+                errors.append("%s.id must be a lowercase repository id" % prefix)
+            elif repository_id in seen_ids:
+                errors.append("duplicate automation repository id %r" % repository_id)
+            else:
+                seen_ids.add(repository_id)
+            slug = repository.get("slug")
+            if (not isinstance(slug, str) or
+                    not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}", slug)):
+                errors.append("%s.slug must have owner/repository form" % prefix)
+            elif slug in seen_slugs:
+                errors.append("duplicate automation repository slug %r" % slug)
+            else:
+                seen_slugs.add(slug)
+            for field in ("stageBranch", "productionBranch"):
+                branch = repository.get(field)
+                if (not isinstance(branch, str) or
+                        not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,119}", branch) or
+                        ".." in branch or branch.endswith(("/", ".lock"))):
+                    errors.append("%s.%s is not a safe branch name" % (prefix, field))
+            if (isinstance(repository.get("stageBranch"), str) and
+                    repository.get("stageBranch") == repository.get("productionBranch")):
+                errors.append("%s stage and production branches must differ" % prefix)
+
+    sources = automation.get("sources")
+    if _closed_config_object(sources, "automation.sources", {"github", "localFiles"}, errors):
+        github = sources.get("github")
+        if _closed_config_object(
+                github, "automation.sources.github",
+                {"enabled", "prLimit", "mergedLimit", "runLimit", "issueLimit"}, errors):
+            if not isinstance(github.get("enabled"), bool):
+                errors.append("automation.sources.github.enabled must be boolean")
+            for name in ("prLimit", "mergedLimit", "runLimit", "issueLimit"):
+                _bounded_integer(github.get(name), "automation.sources.github.%s" % name,
+                                 1, 100, errors)
+        local_files = sources.get("localFiles")
+        if _closed_config_object(
+                local_files, "automation.sources.localFiles", {"enabled", "roots"}, errors):
+            if not isinstance(local_files.get("enabled"), bool):
+                errors.append("automation.sources.localFiles.enabled must be boolean")
+            roots = local_files.get("roots")
+            if not isinstance(roots, list):
+                errors.append("automation.sources.localFiles.roots must be a list")
+            else:
+                root_ids = set()
+                for index, root in enumerate(roots):
+                    prefix = "automation.sources.localFiles.roots[%d]" % index
+                    if not _closed_config_object(
+                            root, prefix, {"id", "path", "patterns", "maxFiles"}, errors):
+                        continue
+                    root_id = root.get("id")
+                    if (not isinstance(root_id, str) or
+                            not re.fullmatch(r"[a-z][a-z0-9-]{0,31}", root_id)):
+                        errors.append("%s.id must be a lowercase source id" % prefix)
+                    elif root_id in root_ids:
+                        errors.append("duplicate local-files root id %r" % root_id)
+                    else:
+                        root_ids.add(root_id)
+                    path = root.get("path")
+                    if (not isinstance(path, str) or not path.strip() or len(path) > 1024 or
+                            any(char in path for char in "\r\n\x00") or
+                            not (os.path.isabs(path) or path.startswith("~/"))):
+                        errors.append("%s.path must be an absolute or home-relative path" % prefix)
+                    patterns = root.get("patterns")
+                    if (not isinstance(patterns, list) or not patterns or any(
+                            not isinstance(pattern, str) or not pattern or len(pattern) > 160 or
+                            os.path.isabs(pattern) or ".." in pattern.split("/")
+                            for pattern in patterns)):
+                        errors.append("%s.patterns must be safe relative glob strings" % prefix)
+                    _bounded_integer(root.get("maxFiles"), "%s.maxFiles" % prefix, 1, 1000, errors)
+
+    work = automation.get("workPolicy")
+    if _closed_config_object(
+            work, "automation.workPolicy",
+            {"readyStatus", "reviewStatus", "allowStageMerge", "productionWrites"}, errors):
+        for name in ("readyStatus", "reviewStatus"):
+            value = work.get(name)
+            if (not isinstance(value, str) or not value.strip() or
+                    len(value) > 120 or any(char in value for char in "\r\n\x00")):
+                errors.append("automation.workPolicy.%s must be single-line text" % name)
+        if not isinstance(work.get("allowStageMerge"), bool):
+            errors.append("automation.workPolicy.allowStageMerge must be boolean")
+        if work.get("productionWrites") is not False:
+            errors.append("automation.workPolicy.productionWrites must be false in Phase 3")
+
+    packs = automation.get("packs")
+    if _closed_config_object(packs, "automation.packs", {"runtimes"}, errors):
+        runtimes = packs.get("runtimes")
+        allowed = {"generic", "claude-code"}
+        if (not isinstance(runtimes, list) or not runtimes or
+                any(runtime not in allowed for runtime in runtimes) or
+                len(runtimes) != len(set(runtimes))):
+            errors.append("automation.packs.runtimes must be a unique list of generic/claude-code")
+
+    schedule = automation.get("schedule")
+    if _closed_config_object(schedule, "automation.schedule", {"enabled", "hour", "minute"}, errors):
+        if not isinstance(schedule.get("enabled"), bool):
+            errors.append("automation.schedule.enabled must be boolean")
+        _bounded_integer(schedule.get("hour"), "automation.schedule.hour", 0, 23, errors)
+        _bounded_integer(schedule.get("minute"), "automation.schedule.minute", 0, 59, errors)
 
 
 def _atomic_write(path, payload, mode=0o600):
@@ -213,6 +370,28 @@ def _process_lock(path):
             lock = threading.RLock()
             _LOCKS[path] = lock
         return lock
+
+
+def save_config(home, config):
+    """Validate and atomically replace config.json under a dedicated lock."""
+    home = resolve_home(home)
+    errors = config_errors(config)
+    if errors:
+        raise ValueError("config.json is invalid:\n- " + "\n- ".join(errors))
+    path = os.path.join(home, "config.json")
+    if not os.path.exists(path):
+        raise ValueError("Ledger data directory is not initialized: %s" % home)
+    lock_path = os.path.join(home, "locks", "config.lock")
+    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+    payload = (json.dumps(config, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    with _process_lock(path):
+        with open(lock_path, "a+") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            try:
+                _atomic_write(path, payload)
+            finally:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+    return path
 
 
 class BoardStore:

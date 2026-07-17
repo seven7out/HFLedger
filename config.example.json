@@ -16,6 +16,55 @@
       }
     ]
   },
+  "automation": {
+    "ownerRole": "owner",
+    "repositories": [
+      {
+        "id": "primary",
+        "slug": "your-org/your-repository",
+        "stageBranch": "stage",
+        "productionBranch": "main"
+      }
+    ],
+    "sources": {
+      "github": {
+        "enabled": false,
+        "prLimit": 20,
+        "mergedLimit": 20,
+        "runLimit": 10,
+        "issueLimit": 20
+      },
+      "localFiles": {
+        "enabled": false,
+        "roots": [
+          {
+            "id": "notes",
+            "path": "~/work/your-project",
+            "patterns": [
+              "**/*.md"
+            ],
+            "maxFiles": 200
+          }
+        ]
+      }
+    },
+    "workPolicy": {
+      "readyStatus": "Ready for Build",
+      "reviewStatus": "Needs Review",
+      "allowStageMerge": false,
+      "productionWrites": false
+    },
+    "packs": {
+      "runtimes": [
+        "generic"
+      ]
+    },
+    "schedule": {
+      "enabled": false,
+      "hour": 7,
+      "minute": 0
+    }
+  },
   "writerRegistry": {
     "agent": {
       "actions": {

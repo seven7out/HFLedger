@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import unittest
 
+from core import store
 from tests.helpers import CLI, ROOT, load_board
 
 
@@ -74,6 +75,7 @@ class CliTests(unittest.TestCase):
             ["ask", "decision", "--help"], ["ask", "action", "--help"],
             ["done", "--help"], ["skip", "--help"],
             ["validate", "--help"], ["reconcile", "--help"],
+            ["collect", "--help"], ["render-packs", "--help"],
         )
         for command in commands:
             result = self.run_cli(command)
@@ -172,6 +174,35 @@ class CliTests(unittest.TestCase):
             [CLI, "--home", self.temp.name, "validate"],
             capture_output=True, text=True, env=environment)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_collect_and_pack_commands(self):
+        collected = self.run_cli(["collect"])
+        self.assertEqual(collected.returncode, 0, collected.stderr)
+        self.assertEqual(json.loads(collected.stdout)["status"], "idle")
+        rendered = self.run_cli(["render-packs"])
+        self.assertEqual(rendered.returncode, 0, rendered.stderr)
+        self.assertTrue(os.path.exists(json.loads(rendered.stdout)["manifest"]))
+        refused = self.run_cli(["render-packs"])
+        self.assertEqual(refused.returncode, 2)
+        forced = self.run_cli(["render-packs", "--force"])
+        self.assertEqual(forced.returncode, 0, forced.stderr)
+
+    def test_configured_collector_failure_is_nonzero_and_durable(self):
+        config = store.load_config(self.temp.name)
+        config["automation"]["sources"]["localFiles"] = {
+            "enabled": True,
+            "roots": [{
+                "id": "missing", "path": os.path.join(self.temp.name, "not-present"),
+                "patterns": ["**/*.md"], "maxFiles": 20,
+            }],
+        }
+        store.save_config(self.temp.name, config)
+        result = self.run_cli(["collect"])
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["status"], "degraded")
+        with open(os.path.join(self.temp.name, "reports", "collector-latest.json"),
+                  encoding="utf-8") as handle:
+            self.assertEqual(json.load(handle)["status"], "degraded")
 
 
 if __name__ == "__main__":

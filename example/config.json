@@ -16,6 +16,39 @@
       }
     ]
   },
+  "automation": {
+    "ownerRole": "owner",
+    "repositories": [],
+    "sources": {
+      "github": {
+        "enabled": false,
+        "prLimit": 20,
+        "mergedLimit": 20,
+        "runLimit": 10,
+        "issueLimit": 20
+      },
+      "localFiles": {
+        "enabled": false,
+        "roots": []
+      }
+    },
+    "workPolicy": {
+      "readyStatus": "Ready for Build",
+      "reviewStatus": "Needs Review",
+      "allowStageMerge": false,
+      "productionWrites": false
+    },
+    "packs": {
+      "runtimes": [
+        "generic"
+      ]
+    },
+    "schedule": {
+      "enabled": false,
+      "hour": 7,
+      "minute": 0
+    }
+  },
   "writerRegistry": {
     "agent": {
       "actions": {

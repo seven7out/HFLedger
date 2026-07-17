@@ -46,6 +46,7 @@ The Phase 1 locking implementation uses `fcntl.flock` and is POSIX-only.
 | `project` | non-empty string | Local project label copied into a new board |
 | `backupRetention` | positive integer | Maximum timestamped board backups retained |
 | `quarantineLimit` | positive integer | Maximum untrusted-text excerpts kept on the board |
+| `automation` | object, optional | Phase 3 sources, instruction-pack layouts, work policy, and schedule intent |
 | `writerRegistry` | object | Actor-to-action authorization and handling mode |
 | `schema` | object | Statuses, extensions, gates, protected classes, and counted collections |
 
@@ -125,7 +126,7 @@ The cursor is part of `board.json` so its advancement and all effects of the cor
 
 A queue item requires `id`, `title`, and `status`. Status must be built-in or configured. Built-in display states are `Needs Spec`, `Ready for Build`, `In Progress`, `Needs Review`, `Final Review`, `Done`, and `Parked`.
 
-Common optional fields include `context`, `userProblem`, `desiredOutcome`, `scope`, `outOfScope`, `acceptanceCriteria`, `risksTrustConcerns`, `recommendedNextAgent`, `links`, `protected`, `gate`, `ownerOnly`, `ownerAssignment`, `dedupeKey`, and completion tombstone metadata.
+Common optional fields include `context`, `userProblem`, `desiredOutcome`, `scope`, `outOfScope`, `acceptanceCriteria`, `risksTrustConcerns`, `recommendedNextAgent`, `links`, `protected`, `gate`, `ownerOnly`, `ownerAssignment`, `dedupeKey`, and completion tombstone metadata. Phase 3 adds `autonomousSafe` (boolean), plus non-empty text fields `repository`, `statusKey`, and `protectedClass`. Their presence describes eligibility only; runtime instructions treat missing safety metadata as gated and never infer production authority.
 
 Unknown item fields produce warnings rather than errors. This forward-compatible rule applies to queue, inbox, owner-task, and escrow items. It never permits an unknown top-level section.
 
