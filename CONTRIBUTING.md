@@ -2,6 +2,8 @@
 
 HFLedger's differentiator is the interrupt-channel protocol: strict admission before an agent escalates, durable completion capture afterward, and auditable reconciliation between them. Contributions should strengthen that contract or make it easier to adopt without weakening its safety boundary.
 
+Participation is governed by [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+
 ## Before changing code
 
 Read [`docs/protocol.md`](docs/protocol.md) for invariants and [`docs/discipline.md`](docs/discipline.md) for routing rules. In particular:

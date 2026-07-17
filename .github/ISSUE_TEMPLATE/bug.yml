@@ -1,0 +1,58 @@
+name: Bug report
+description: Report a reproducible HFLedger defect using fictional or redacted data.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve HFLedger. Never attach a real board, ledger, collector report, credential, private path, or private repository name. Build the smallest fictional reproduction instead. Use the repository Security tab for vulnerabilities.
+  - type: input
+    id: version
+    attributes:
+      label: HFLedger version
+      description: Run `ledger --version` or name the commit.
+      placeholder: HFLedger 0.4.1
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, Python version, and browser if relevant.
+      placeholder: macOS 15, Python 3.14, Safari
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Fictional reproduction
+      description: Exact commands or interface actions using authored fictional data only.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional redacted context
+      description: Include a minimal traceback only after checking it for private data.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I verified that this report contains no credentials, personal data, private paths, or real operational content.
+          required: true
+        - label: I searched existing issues for the same defect.
+          required: true

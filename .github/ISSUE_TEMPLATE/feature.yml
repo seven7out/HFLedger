@@ -1,0 +1,44 @@
+name: Feature request
+description: Propose a bounded improvement to HFLedger's protocol or reference implementation.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Explain the user problem before proposing machinery. Do not include real board content, private repository details, credentials, or private paths.
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: What interrupt, coordination, or adoption problem is not handled today?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe observable success without prescribing an implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Smallest proposed change
+      description: Include protocol, trust-boundary, or compatibility consequences.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Could documentation, configuration, or an adapter solve this instead?
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Boundary check
+      options:
+        - label: This request does not rely on private operational data.
+          required: true
+        - label: I identified any effect on admission, provenance, locking, remote access, or production authority.
+          required: true
