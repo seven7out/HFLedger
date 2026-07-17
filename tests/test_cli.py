@@ -1,0 +1,178 @@
+import json
+import os
+import subprocess
+import tempfile
+import unittest
+
+from tests.helpers import CLI, ROOT, load_board
+
+
+class CliTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="ledger-cli-tests-")
+        result = self.run_cli(["init", self.temp.name, "--project", "Fictional bakery tools"], use_home=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def run_cli(self, args, use_home=True):
+        environment = os.environ.copy()
+        if use_home:
+            environment["LEDGER_HOME"] = self.temp.name
+        return subprocess.run([CLI] + args, capture_output=True, text=True, env=environment)
+
+    def decision_args(self, key="cli:decision:timer"):
+        return [
+            "ask", "decision",
+            "--key", key,
+            "--title", "Choose the fictional timer behavior",
+            "--blocks", "task:timer:release",
+            "--gate", "judgment",
+            "--human-reason", "Two valid product behaviors remain after the agent review.",
+            "--blocked-outcome", "The fictional timer release cannot proceed until one is selected.",
+            "--risk", "The wrong behavior could confuse bakers during a busy shift.",
+            "--risk-level", "medium",
+            "--reversibility", "reversible",
+            "--rollback", "Restore the previous default in a patch.",
+            "--work-done", "Both options were implemented locally and checked against the scope.",
+            "--source", "fictional release planning record",
+            "--priority", "P1",
+            "--question", "Which timer behavior should new fictional batches use?",
+            "--option", "manual", "Manual start", "Predictable but requires an explicit start",
+            "--option", "automatic", "Automatic start", "Faster but depends on accurate batch state",
+            "--recommend", "manual",
+            "--recommend-why", "The manual start is clearer for the first release and easy to revise.",
+        ]
+
+    def action_args(self):
+        return [
+            "ask", "action",
+            "--key", "cli:action:alert",
+            "--title", "Enable the fictional release alert",
+            "--blocks", "risk:alert:disabled",
+            "--gate", "account-admin",
+            "--human-reason", "Only the account owner can change this external setting.",
+            "--blocked-outcome", "The fictional release alert remains disabled until this is complete.",
+            "--risk", "Changing the wrong account could notify an unrelated workspace.",
+            "--risk-level", "low",
+            "--reversibility", "reversible",
+            "--rollback", "Disable the setting in the same dashboard.",
+            "--work-done", "The exact account, setting path, and expected value are documented.",
+            "--source", "fictional integration checklist",
+            "--priority", "P2",
+            "--instruction", "Open the fictional account settings and enable release alerts.",
+            "--proof", "The release alert setting visibly reads enabled.",
+            "--minutes", "3",
+            "--proof-command", "printf enabled",
+            "--proof-expect", "enabled",
+        ]
+
+    def test_help_is_available_for_every_command(self):
+        commands = (
+            ["--help"], ["init", "--help"], ["ask", "--help"],
+            ["ask", "decision", "--help"], ["ask", "action", "--help"],
+            ["done", "--help"], ["skip", "--help"],
+            ["validate", "--help"], ["reconcile", "--help"],
+        )
+        for command in commands:
+            result = self.run_cli(command)
+            self.assertEqual(result.returncode, 0, (command, result.stderr))
+            self.assertIn("usage:", result.stdout)
+
+    def test_full_decision_action_completion_walkthrough(self):
+        decision = self.run_cli(self.decision_args())
+        action = self.run_cli(self.action_args())
+        self.assertEqual(decision.returncode, 0, decision.stderr)
+        self.assertEqual(action.returncode, 0, action.stderr)
+        decision_result = json.loads(decision.stdout)
+        self.assertEqual(decision_result["status"], "filed")
+        self.assertEqual(json.loads(action.stdout)["status"], "filed")
+
+        folded = self.run_cli(["reconcile"])
+        self.assertEqual(folded.returncode, 0, folded.stderr)
+        self.assertEqual(json.loads(folded.stdout)["processed"], 2)
+        valid = self.run_cli(["validate"])
+        self.assertEqual(valid.returncode, 0, valid.stdout + valid.stderr)
+
+        completed = self.run_cli([
+            "done", "--id", decision_result["id"],
+            "--evidence", "The owner confirmed the fictional timer choice is complete.",
+            "--source", "fictional acceptance review",
+        ])
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(self.run_cli(["reconcile"]).returncode, 0)
+        self.assertEqual(self.run_cli(["validate"]).returncode, 0)
+        board = load_board(self.temp.name)
+        self.assertEqual(len(board["decisions"]["items"]), 1)
+        self.assertEqual(len(board["decisions"]["resolved"]), 1)
+        self.assertEqual(board["decisions"]["resolved"][0]["id"], decision_result["id"])
+
+    def test_duplicate_is_idempotent_and_resolved_key_is_rejected(self):
+        first = self.run_cli(self.decision_args())
+        second = self.run_cli(self.decision_args())
+        self.assertEqual(first.returncode, 0)
+        self.assertEqual(json.loads(second.stdout)["status"], "already_open")
+        self.run_cli(["reconcile"])
+        item_id = json.loads(first.stdout)["id"]
+        self.run_cli([
+            "skip", "--id", item_id,
+            "--evidence", "The owner intentionally skipped the fictional choice.",
+            "--source", "fictional acceptance review",
+        ])
+        self.run_cli(["reconcile"])
+        rejected = self.run_cli(self.decision_args())
+        self.assertEqual(rejected.returncode, 2)
+        self.assertIn("already resolved", rejected.stderr)
+
+    def test_malformed_asks_exit_two_with_pointed_errors(self):
+        missing_options = self.decision_args()
+        while "--option" in missing_options:
+            index = missing_options.index("--option")
+            del missing_options[index:index + 4]
+        result = self.run_cli(missing_options)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--option", result.stderr)
+
+        placeholder = self.decision_args()
+        index = placeholder.index("--title") + 1
+        placeholder[index] = "x"
+        result = self.run_cli(placeholder)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("placeholder", result.stderr)
+
+        mutating = self.action_args()
+        index = mutating.index("printf enabled")
+        mutating[index] = "git push origin main"
+        result = self.run_cli(mutating)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("mutating git", result.stderr)
+
+    def test_dry_runs_write_nothing(self):
+        decision = self.run_cli(self.decision_args() + ["--dry-run"])
+        action = self.run_cli(self.action_args() + ["--dry-run"])
+        done = self.run_cli([
+            "done", "--id", "task:fictional:timer",
+            "--evidence", "The owner completed the fictional task.", "--dry-run",
+        ])
+        self.assertEqual((decision.returncode, action.returncode, done.returncode), (0, 0, 0))
+        with open(os.path.join(self.temp.name, "ledger.jsonl"), encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), "")
+
+    def test_example_data_directory_validates(self):
+        environment = os.environ.copy()
+        environment["LEDGER_HOME"] = os.path.join(ROOT, "example")
+        result = subprocess.run([CLI, "validate"], capture_output=True, text=True, env=environment)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_explicit_home_overrides_environment(self):
+        environment = os.environ.copy()
+        environment["LEDGER_HOME"] = "/tmp/nonexistent-fictional-ledger"
+        result = subprocess.run(
+            [CLI, "--home", self.temp.name, "validate"],
+            capture_output=True, text=True, env=environment)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "project": "Your project",
+  "backupRetention": 20,
+  "quarantineLimit": 100,
+  "writerRegistry": {
+    "agent": {
+      "actions": {
+        "built": "audit-only",
+        "pr_opened": "reconcile",
+        "merged": "reconcile",
+        "skipped": "audit-only",
+        "decision_added": "reconcile"
+      }
+    },
+    "owner-ui": {
+      "actions": {
+        "decision_resolved": "reconcile",
+        "decision_snoozed": "reconcile",
+        "task_done": "audit-only",
+        "board_reordered": "audit-only",
+        "deck_answer": "audit-only",
+        "deck_undo": "audit-only",
+        "deck_need_info": "audit-only"
+      }
+    },
+    "owner-capture": {
+      "actions": {
+        "owner_completed": "reconcile",
+        "owner_skipped": "reconcile"
+      }
+    },
+    "reconciler": {
+      "actions": {
+        "completion_propagated": "audit-only",
+        "ticket_reconciled": "audit-only"
+      }
+    }
+  },
+  "schema": {
+    "statuses": [
+      "Needs Spec",
+      "Ready for Build",
+      "In Progress",
+      "Needs Review",
+      "Final Review",
+      "Done",
+      "Parked"
+    ],
+    "extraSections": {},
+    "drawers": [],
+    "protectedClasses": [
+      "auth",
+      "payments",
+      "privacy",
+      "legal",
+      "financial",
+      "data-migration",
+      "brand"
+    ],
+    "gateClasses": {
+      "decision": [
+        "judgment",
+        "protected-class",
+        "production",
+        "irreversible"
+      ],
+      "action": [
+        "credential",
+        "account-admin",
+        "physical-device",
+        "external-send",
+        "production-manual",
+        "protected-class"
+      ]
+    },
+    "countedCollections": [
+      "queue",
+      "inbox",
+      "ownerTasks",
+      "decisions.total",
+      "changelog.entries",
+      "unmatchedCompletions",
+      "retriage"
+    ]
+  }
+}

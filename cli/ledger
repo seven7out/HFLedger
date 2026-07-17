@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+"""Ledger command-line integration surface."""
+
+import argparse
+import json
+import os
+import sys
+
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+from core import __version__  # noqa: E402
+from core import admission, ledger as ledger_log, reconcile as reconciler, schema, store  # noqa: E402
+
+
+def _print_json(value):
+    print(json.dumps(value, indent=2, ensure_ascii=False, sort_keys=True))
+
+
+def _add_common_ask_args(parser):
+    parser.add_argument("--key", required=True, dest="dedupe_key",
+                        help="stable global key; reuse it for the same underlying ask")
+    parser.add_argument("--title", required=True, help="short owner-facing title")
+    parser.add_argument("--blocks", action="append", required=True,
+                        help="stable blocked task, issue, release, or risk id; repeat as needed")
+    parser.add_argument("--clears-task-id", action="append", default=[],
+                        help="item definitively closed by completion; must also appear in --blocks")
+    parser.add_argument("--gate", required=True,
+                        help="configured human gate class; run ledger validate to check config")
+    parser.add_argument("--protected-class",
+                        help="configured protected class; valid only with --gate protected-class")
+    parser.add_argument("--human-reason", required=True,
+                        help="why an agent cannot decide or perform this safely")
+    parser.add_argument("--blocked-outcome", required=True,
+                        help="what cannot proceed until the owner responds")
+    parser.add_argument("--risk", required=True,
+                        help="concrete consequence if the wrong choice or action is taken")
+    parser.add_argument("--risk-level", required=True, choices=sorted(admission.RISK_LEVELS))
+    parser.add_argument("--reversibility", required=True, choices=sorted(admission.REVERSIBILITY))
+    parser.add_argument("--rollback", required=True, help="specific reversal or containment plan")
+    parser.add_argument("--work-done", required=True,
+                        help="analysis and preparation completed before escalation")
+    parser.add_argument("--source", required=True, help="session, document, issue, or other evidence source")
+    parser.add_argument("--priority", required=True, choices=sorted(admission.PRIORITIES))
+    parser.add_argument("--deadline", help="optional real date in YYYY-MM-DD form")
+    parser.add_argument("--detail", default="", help="optional additional context")
+    parser.add_argument("--dry-run", action="store_true", help="validate and print without appending")
+
+
+def _build_package(args):
+    common = admission.build_common(
+        args.ask_kind, args.dedupe_key, args.title, args.blocks, args.gate,
+        args.human_reason, args.blocked_outcome, args.risk, args.risk_level,
+        args.reversibility, args.rollback, args.work_done, args.source,
+        args.priority, protected_class=args.protected_class,
+        deadline=args.deadline, detail=args.detail, clears_task_ids=args.clears_task_id)
+    if args.ask_kind == "decision":
+        return admission.build_decision(
+            common, args.question, args.option, args.recommend, args.recommend_why)
+    return admission.build_action(
+        common, args.instruction, args.proof, args.minutes,
+        proof_command=args.proof_command, proof_expect=args.proof_expect)
+
+
+def _add_completion_args(parser):
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument("--id", dest="target_id", help="known board item id")
+    target.add_argument("--key", dest="target_key", help="stable key when no item id is available")
+    parser.add_argument("--evidence", required=True, help="what the owner reported and any verification")
+    parser.add_argument("--source", default=ledger_log.DEFAULT_COMPLETION_SOURCE,
+                        help="where the completion report came from")
+    parser.add_argument("--dry-run", action="store_true", help="validate and print without appending")
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        prog="ledger",
+        description="Govern and audit the interrupt channel between agents and an owner.")
+    parser.add_argument("--home", help="data directory; overrides LEDGER_HOME and XDG defaults")
+    parser.add_argument("--version", action="version", version="Ledger %s" % __version__)
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    init = sub.add_parser("init", help="create a new independent Ledger data directory")
+    init.add_argument("directory", nargs="?", help="target directory; defaults through environment resolution")
+    init.add_argument("--project", default="Ledger workspace", help="project label stored in config and board")
+
+    ask = sub.add_parser(
+        "ask", help="file an admission-gated owner decision or manual action",
+        description=(
+            "Use this only for an irreducible owner choice or an exact manual step only the owner can perform. "
+            "Agent work belongs in queue; raw ideas belong in inbox."))
+    ask_sub = ask.add_subparsers(dest="ask_kind", required=True)
+    decision = ask_sub.add_parser("decision", help="file 2-3 options with one reasoned recommendation")
+    _add_common_ask_args(decision)
+    decision.add_argument("--question", required=True, help="the exact choice to make")
+    decision.add_argument("--option", action="append", nargs=3, required=True,
+                          metavar=("ID", "LABEL", "TRADEOFF"),
+                          help="one option; repeat exactly 2 or 3 times")
+    decision.add_argument("--recommend", required=True, help="recommended option id")
+    decision.add_argument("--recommend-why", required=True, help="reason for the recommendation")
+
+    action = ask_sub.add_parser(
+        "action", help="file an exact owner-only manual action",
+        description=(
+            "The prose completion proof is required. An optional proof command is screened conservatively "
+            "for mutation but remains a trusted, read-only command rather than a sandbox."))
+    _add_common_ask_args(action)
+    action.add_argument("--instruction", required=True, help="exact manual instruction")
+    action.add_argument("--proof", required=True, help="observable evidence of completion")
+    action.add_argument("--minutes", required=True, type=int, help="estimated minutes, from 1 through 480")
+    action.add_argument("--proof-command", "--proof-cmd", dest="proof_command",
+                        help="optional single-line read-only shell command")
+    action.add_argument("--proof-expect", help="optional literal expected in proof command output")
+
+    done = sub.add_parser("done", help="capture the owner's report that an item is complete")
+    _add_completion_args(done)
+    skip = sub.add_parser("skip", help="capture the owner's report that an item is intentionally skipped")
+    _add_completion_args(skip)
+
+    sub.add_parser("validate", help="validate config, board, cursor, provenance, and generated counts")
+    sub.add_parser("reconcile", help="atomically fold all unprocessed ledger events into the board")
+    return parser
+
+
+def _home(args):
+    return store.resolve_home(args.home)
+
+
+def main(argv=None):
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "init":
+            target = store.resolve_home(args.directory or args.home)
+            created = store.initialize(target, project=args.project)
+            _print_json({"status": "initialized", "home": created})
+            return 0
+
+        home = _home(args)
+        config = store.load_config(home)
+        if args.command == "ask":
+            package = _build_package(args)
+            errors = admission.validate_package(package, schema.admission_policy(config))
+            if errors:
+                raise ValueError("ask admission rejected:\n- " + "\n- ".join(errors))
+            if args.dry_run:
+                _print_json({"status": "valid", "package": package})
+            else:
+                result = ledger_log.append_ask(package, home, config)
+                result.pop("entry", None)
+                _print_json(result)
+            return 0
+
+        if args.command in ("done", "skip"):
+            action = "owner_completed" if args.command == "done" else "owner_skipped"
+            target = args.target_id or args.target_key
+            target_type = "id" if args.target_id else "key"
+            entry = ledger_log.build_completion(
+                action, target, target_type, args.evidence, source=args.source)
+            errors = ledger_log.completion_errors(entry, config)
+            if errors:
+                raise ValueError("completion capture rejected:\n- " + "\n- ".join(errors))
+            if args.dry_run:
+                _print_json({"status": "valid", "entry": entry})
+            else:
+                ledger_log.append_record(entry, home, config)
+                _print_json({"status": "filed", "action": action,
+                             "target": target, "targetType": target_type})
+            return 0
+
+        if args.command == "validate":
+            errors, warnings = store.BoardStore(home, config=config).validate_current()
+            for warning in warnings:
+                print("WARNING: %s" % warning)
+            for error in errors:
+                print("ERROR: %s" % error)
+            if errors:
+                print("INVALID: %d error(s), %d warning(s)" % (len(errors), len(warnings)))
+                return 1
+            print("VALID: board, ledger cursor, provenance, and config are consistent")
+            return 0
+
+        if args.command == "reconcile":
+            result = reconciler.reconcile(home, config=config)
+            _print_json(result)
+            return 0
+        parser.error("unknown command")
+    except (ValueError, OSError) as exc:
+        print("ledger: %s" % exc, file=sys.stderr)
+        return 2
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

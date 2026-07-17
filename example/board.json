@@ -1,0 +1,99 @@
+{
+  "meta": {
+    "project": "Ovenlight Bakery Tools",
+    "updated": "2026-07-16T18:00:00+00:00",
+    "lastSession": {
+      "kind": "planning",
+      "summary": "Prepared fictional release work for a bakery scheduling product."
+    },
+    "ledgerCursor": {
+      "line": 0,
+      "entrySha256": null
+    }
+  },
+  "queue": [
+    {
+      "id": "task:ovenlight:proofing-timer",
+      "title": "Add a shared dough proofing timer",
+      "status": "Ready for Build",
+      "context": "The fictional bakery team currently tracks proofing windows on paper.",
+      "userProblem": "Bakers cannot see when a batch is ready from the packing station.",
+      "desiredOutcome": "A visible timer follows each batch through the morning workflow.",
+      "scope": "Local timer state and an accessible countdown display.",
+      "outOfScope": "Hardware alarms and customer notifications.",
+      "acceptanceCriteria": [
+        "A baker can start, pause, and reset a batch timer.",
+        "Reloading the page preserves the active timer."
+      ],
+      "risksTrustConcerns": "Do not imply food-safety certification.",
+      "recommendedNextAgent": "implementation agent",
+      "links": []
+    }
+  ],
+  "inbox": [
+    {
+      "id": "idea:ovenlight:flour-forecast",
+      "title": "Forecast weekly flour use",
+      "rawNote": "Explore a forecast based on the fictional shop's planned batches.",
+      "source": "fictional workshop note",
+      "date": "2026-07-16",
+      "category": "inventory",
+      "priorityGuess": "P2",
+      "status": "Needs Spec",
+      "recommendedNextAgent": "planning agent"
+    }
+  ],
+  "decisions": {
+    "note": "Owner-facing asks admitted by the protocol.",
+    "items": [],
+    "resolved": []
+  },
+  "ownerTasks": [],
+  "changelog": {
+    "entries": []
+  },
+  "statusCounts": {
+    "queue": {
+      "Ready for Build": 1
+    },
+    "decisions": {
+      "open": 0,
+      "snoozed": 0,
+      "deferred": 0,
+      "resolved": 0
+    },
+    "ownerTasks": {
+      "open": 0,
+      "done": 0
+    },
+    "inbox": 1,
+    "unmatchedCompletions": 0,
+    "retriage": 0
+  },
+  "unmatchedCompletions": [],
+  "retriage": [],
+  "quarantine": [],
+  "schemas": {
+    "version": 1,
+    "statuses": [
+      "Needs Spec",
+      "Ready for Build",
+      "In Progress",
+      "Needs Review",
+      "Final Review",
+      "Done",
+      "Parked"
+    ],
+    "extraSections": {},
+    "drawers": [],
+    "countedCollections": [
+      "queue",
+      "inbox",
+      "ownerTasks",
+      "decisions.total",
+      "changelog.entries",
+      "unmatchedCompletions",
+      "retriage"
+    ]
+  }
+}
