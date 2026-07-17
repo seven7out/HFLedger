@@ -16,6 +16,20 @@ HFLedger is agent-agnostic. Any runtime that can read files and run a command ca
 
 This is not another agent runner or a general kanban board. The core product is the protocol governing the agent-to-human handoff.
 
+```mermaid
+flowchart LR
+    A["Agent runtime"] -->|admission and completion events| L["Append-only ledger"]
+    C["Read-only collectors"] -.->|untrusted reports| A
+    L --> R["Fail-closed reconciler"]
+    R --> B["Validated board"]
+    B --> U["Board and decision deck"]
+    U -->|owner outcomes| L
+```
+
+![Fictional HFLedger decision deck](docs/assets/decision-deck.jpg)
+
+The screenshot uses the repository's fictional bakery example; no real project data is included.
+
 ## Two-minute demo
 
 Requirements: Python 3.9+ and Git on a POSIX system. Clone this repository, then:

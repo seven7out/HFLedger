@@ -22,9 +22,13 @@ from app import server  # noqa: E402
 from core import __version__  # noqa: E402
 
 
-EXPECTED_VERSION = "0.4.0"
+EXPECTED_VERSION = "0.4.1"
 REQUIRED_FILES = (
-    "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE",
+    "README.md", "CHANGELOG.md", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md",
+    "SECURITY.md", "LICENSE", ".github/workflows/ci.yml",
+    ".github/ISSUE_TEMPLATE/bug.yml", ".github/ISSUE_TEMPLATE/feature.yml",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    "docs/assets/decision-deck.jpg",
     "docs/protocol.md", "docs/quickstart.md", "docs/release.md", "docs/launch.md",
     "scripts/ledger-demo", "scripts/release-check",
 )

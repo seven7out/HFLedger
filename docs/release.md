@@ -25,8 +25,8 @@ After the maintainer chooses the publishing account and final repository slug:
 ```sh
 git remote add origin git@github.com:ACCOUNT/REPOSITORY.git
 git push -u origin main
-git tag -a v0.4.0 -m "HFLedger 0.4.0"
-git push origin v0.4.0
+git tag -a v0.4.1 -m "HFLedger 0.4.1"
+git push origin v0.4.1
 ```
 
 Before making the repository public:
@@ -35,7 +35,7 @@ Before making the repository public:
 - verify the default branch is `main` and require review for future protected changes;
 - add the actual repository URL to clone instructions where appropriate;
 - verify the MIT license is detected;
-- create the `v0.4.0` release from [`CHANGELOG.md`](../CHANGELOG.md);
+- create the `v0.4.1` release from [`CHANGELOG.md`](../CHANGELOG.md);
 - clone the public repository into a new directory and run `scripts/release-check` there.
 
 Do not publish an HFLedger data directory, generated collector report, local instruction pack, scheduler file containing machine paths, or private privacy-gate denylist.

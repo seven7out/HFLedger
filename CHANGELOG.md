@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1 — 2026-07-17
+
+Launch-hygiene release.
+
+- Added required continuous integration on the minimum supported and current stable Python lines.
+- Added privacy-aware bug and feature forms, a pull-request checklist, and a project conduct policy.
+- Added fictional product visuals and clearer architecture onboarding.
+
 ## 0.4.0 — 2026-07-17
 
 Initial public launch candidate.
