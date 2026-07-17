@@ -36,7 +36,8 @@ class InstallerTests(unittest.TestCase):
             with open(launchd, "rb") as handle:
                 plist = plistlib.load(handle)
             self.assertEqual(plist["StartCalendarInterval"], {"Hour": 6, "Minute": 15})
-            self.assertEqual(plist["ProgramArguments"][0], os.path.abspath(sys.executable))
+            self.assertTrue(os.path.samefile(
+                plist["ProgramArguments"][0], os.path.abspath(sys.executable)))
             self.assertEqual(plist["ProgramArguments"][-1], "collect")
             self.assertLess(len(plist["EnvironmentVariables"]["PATH"]), 500)
             service = next(path for path in output["schedules"]["files"] if path.endswith(".service"))
