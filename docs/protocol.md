@@ -1,8 +1,8 @@
-# Ledger protocol, version 1
+# HFLedger protocol, version 1
 
 ## 1. Scope
 
-Ledger is a file protocol for agents, an owner, and deterministic reconcilers sharing an operational board. It regulates agent-to-owner interruptions. It does not define an agent runtime, network API, user interface, scheduler, or source collector.
+HFLedger is a file protocol for agents, an owner, and deterministic reconcilers sharing an operational board. It regulates agent-to-owner interruptions. It does not define an agent runtime, network API, user interface, scheduler, or source collector.
 
 An integration needs only filesystem access and the ability to execute the `ledger` CLI. The CLI is the supported write surface for asks and completion reports. Core Python functions expose the event writer to the trusted local reference interface and later integrations.
 
@@ -166,7 +166,7 @@ Across every store transaction:
 
 `quarantine` is intentionally bounded and therefore is not counted. When it reaches `quarantineLimit`, a future collector must apply an explicit bounded-retention policy rather than grow it without limit.
 
-## 5. Ledger format
+## 5. Event-ledger format
 
 `ledger.jsonl` is UTF-8 JSON Lines. Each nonempty line is exactly one JSON object with the fixed envelope below. No other top-level fields are allowed.
 

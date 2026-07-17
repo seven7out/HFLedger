@@ -1,4 +1,4 @@
-"""Read-only observation collectors for Ledger automation."""
+"""Read-only observation collectors for HFLedger automation."""
 
 from .run import CollectorBusyError, collect
 

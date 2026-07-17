@@ -4,7 +4,7 @@ This guide reaches a real decision swipe in about two minutes, then creates a cl
 
 ## 1. Swipe the disposable demo
 
-From a clone of Ledger:
+From a clone of HFLedger:
 
 ```sh
 DEMO_HOME="$(mktemp -d)"
@@ -26,7 +26,7 @@ export LEDGER_HOME="$HOME/.ledger"
 ./cli/ledger validate
 ```
 
-The initializer refuses existing data files. `--home` overrides `LEDGER_HOME`; otherwise Ledger uses `$XDG_DATA_HOME/ledger` and then `~/.ledger`.
+The initializer refuses existing data files. `--home` overrides `LEDGER_HOME`; otherwise HFLedger uses `$XDG_DATA_HOME/ledger` and then `~/.ledger`.
 
 ## 3. File a decision
 
@@ -87,7 +87,7 @@ New workspaces default to the generic instruction layout:
 ./cli/ledger render-packs
 ```
 
-Review files under `$LEDGER_HOME/generated/packs/`. Copy or reference them deliberately from the agent runtime; Ledger does not alter global prompt directories. To configure Claude Code, collectors, repositories, and inactive schedules, continue with [`automation.md`](automation.md).
+Review files under `$LEDGER_HOME/generated/packs/`. Copy or reference them deliberately from the agent runtime; HFLedger does not alter global prompt directories. To configure Claude Code, collectors, repositories, and inactive schedules, continue with [`automation.md`](automation.md).
 
 ## Next reading
 

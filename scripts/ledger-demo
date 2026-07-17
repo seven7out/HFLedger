@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copy the fictional Ledger example into a disposable private data directory."""
+"""Copy the fictional HFLedger example into a disposable private data directory."""
 
 import argparse
 import json

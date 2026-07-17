@@ -4,6 +4,8 @@
 
 Initial public launch candidate.
 
+- Renamed the public project from its working title, Ledger, to HFLedger before publication. The `ledger` CLI and `LEDGER_*` compatibility surface remain unchanged.
+
 ### Protocol and engine
 
 - Local JSON board with closed top-level schema, extensible statuses/tracks, provenance validation, monotonic counted collections, backups, and atomic locked writes.

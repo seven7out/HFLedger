@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ledger command-line integration surface."""
+"""HFLedger command-line integration surface."""
 
 import argparse
 import json
@@ -79,12 +79,12 @@ def build_parser():
         prog="ledger",
         description="Govern and audit the interrupt channel between agents and an owner.")
     parser.add_argument("--home", help="data directory; overrides LEDGER_HOME and XDG defaults")
-    parser.add_argument("--version", action="version", version="Ledger %s" % __version__)
+    parser.add_argument("--version", action="version", version="HFLedger %s" % __version__)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    init = sub.add_parser("init", help="create a new independent Ledger data directory")
+    init = sub.add_parser("init", help="create a new independent HFLedger data directory")
     init.add_argument("directory", nargs="?", help="target directory; defaults through environment resolution")
-    init.add_argument("--project", default="Ledger workspace", help="project label stored in config and board")
+    init.add_argument("--project", default="HFLedger workspace", help="project label stored in config and board")
 
     ask = sub.add_parser(
         "ask", help="file an admission-gated owner decision or manual action",

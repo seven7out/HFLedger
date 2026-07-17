@@ -272,7 +272,7 @@ def resolve_decision(runtime, body, deck=False):
         raise ApiError(400, "manual actions must use the owner completion gate")
     _assert_source(item, body)
     resolution = _text(_required(body, "resolution"), "resolution")
-    evidence = _text(body.get("evidence", "Recorded in the Ledger owner interface."), "evidence")
+    evidence = _text(body.get("evidence", "Recorded in the HFLedger owner interface."), "evidence")
     selected = body.get("selectedOption")
     extra = {
         "schemaVersion": ledger.OWNER_UI_SCHEMA_VERSION,
@@ -322,7 +322,7 @@ def snooze_decision(runtime, body, deck=False):
         raise ApiError(400, "until must be a real YYYY-MM-DD date")
     if until_date <= _today():
         raise ApiError(400, "until must be after today")
-    reason = _text(body.get("reason", "Snoozed in the Ledger owner interface."), "reason", 1000)
+    reason = _text(body.get("reason", "Snoozed in the HFLedger owner interface."), "reason", 1000)
     extra = {
         "schemaVersion": ledger.OWNER_UI_SCHEMA_VERSION,
         "id": item_id, "snoozedUntil": until, "reason": reason,
@@ -401,18 +401,18 @@ def answer_card(runtime, body):
         resolve_body.update({
             "selectedOption": option_id,
             "resolution": "Selected: %s" % options[option_id].get("label", option_id),
-            "evidence": "Choice recorded in the Ledger decision deck.",
+            "evidence": "Choice recorded in the HFLedger decision deck.",
         })
         return resolve_decision(runtime, resolve_body, deck=True)
     if item.get("type") == "action":
         if action not in ("complete", "skip"):
             raise ApiError(400, "action cards support complete, skip, need-info, or snooze")
         evidence = _text(body.get("evidence", (
-            "The owner marked this manual action %s in the Ledger decision deck."
+            "The owner marked this manual action %s in the HFLedger decision deck."
             % ("complete" if action == "complete" else "skipped"))), "evidence")
         completion_action = "owner_completed" if action == "complete" else "owner_skipped"
         entry = ledger.build_completion(
-            completion_action, item_id, "id", evidence, source="Ledger decision deck")
+            completion_action, item_id, "id", evidence, source="HFLedger decision deck")
         errors = ledger.completion_errors(entry, context.config)
         if errors:
             raise ApiError(400, "; ".join(errors))
@@ -484,7 +484,7 @@ POST_ROUTES = {
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "LedgerLocal/1"
+    server_version = "HFLedgerLocal/1"
     protocol_version = "HTTP/1.1"
 
     @property
@@ -589,7 +589,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"error": exc.message}, status=exc.status)
         except (OSError, ValueError, BoardValidationError) as exc:
             self.log_error("GET failed: %s", exc)
-            self._send_json({"error": "unable to load validated Ledger data"}, status=500)
+            self._send_json({"error": "unable to load validated HFLedger data"}, status=500)
 
     def do_POST(self):
         try:
@@ -649,19 +649,19 @@ def serve(home, port=None, host=HOST):
         raise ValueError("port must be an integer from 1 through 65535")
     httpd = Server((host, selected_port), Handler)
     httpd.runtime = runtime
-    sys.stderr.write("Ledger UI: http://%s:%d/  (home=%s)\n" % (
+    sys.stderr.write("HFLedger UI: http://%s:%d/  (home=%s)\n" % (
         host, selected_port, runtime.home))
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        sys.stderr.write("\nLedger UI stopped.\n")
+        sys.stderr.write("\nHFLedger UI stopped.\n")
     finally:
         httpd.server_close()
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Run the loopback-only Ledger interface")
-    parser.add_argument("--home", help="primary Ledger data directory")
+    parser = argparse.ArgumentParser(description="Run the loopback-only HFLedger interface")
+    parser.add_argument("--home", help="primary HFLedger data directory")
     parser.add_argument("--port", type=int, help="loopback port; defaults to config ui.port")
     parser.add_argument("--host", default=HOST, help="loopback host only")
     args = parser.parse_args(argv)

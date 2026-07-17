@@ -11,9 +11,21 @@ from tests.helpers import ROOT
 
 DEMO = os.path.join(ROOT, "scripts", "ledger-demo")
 RELEASE_CHECK = os.path.join(ROOT, "scripts", "release-check")
+CLI = os.path.join(ROOT, "cli", "ledger")
 
 
 class DemoQuickstartTests(unittest.TestCase):
+    def test_public_brand_preserves_cli_compatibility(self):
+        result = subprocess.run([CLI, "--version"], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "HFLedger 0.4.0")
+        with open(os.path.join(ROOT, "app", "static", "manifest.webmanifest"),
+                  encoding="utf-8") as handle:
+            manifest = json.load(handle)
+        self.assertEqual(manifest["name"], "HFLedger Decision Deck")
+        self.assertEqual(manifest["short_name"], "HFLedger")
+        self.assertTrue(os.path.isfile(CLI))
+
     def test_demo_copy_is_private_valid_and_swipeable(self):
         with tempfile.TemporaryDirectory(prefix="ledger-demo-tests-") as temporary:
             home = os.path.join(temporary, "data")

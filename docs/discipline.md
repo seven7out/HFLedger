@@ -1,6 +1,6 @@
 # Agent operating discipline
 
-Ledger separates observations, agent work, owner interruptions, and durable outcomes. This is an operating contract for any agent runtime; it does not grant authority to change external systems.
+HFLedger separates observations, agent work, owner interruptions, and durable outcomes. This is an operating contract for any agent runtime; it does not grant authority to change external systems.
 
 ## Route work before escalating
 

@@ -1,6 +1,6 @@
-# Contributing to Ledger
+# Contributing to HFLedger
 
-Ledger's differentiator is the interrupt-channel protocol: strict admission before an agent escalates, durable completion capture afterward, and auditable reconciliation between them. Contributions should strengthen that contract or make it easier to adopt without weakening its safety boundary.
+HFLedger's differentiator is the interrupt-channel protocol: strict admission before an agent escalates, durable completion capture afterward, and auditable reconciliation between them. Contributions should strengthen that contract or make it easier to adopt without weakening its safety boundary.
 
 ## Before changing code
 
@@ -20,12 +20,12 @@ Protocol-breaking changes need an explicit version and migration design. A conve
 The project requires Python 3.9+ on POSIX and has no third-party Python dependencies.
 
 ```sh
-cd ledger
+cd hfledger
 python3 tests/run_all.py
 ./scripts/release-check --allow-dirty
 ```
 
-Fork or clone the repository using its host-provided URL before running these commands. Ledger does not assume a publishing organization in its source tree.
+Fork or clone the repository using its host-provided URL before running these commands. HFLedger does not assume a publishing account in its source tree.
 
 Use `apply_patch` or similarly reviewable edits, keep changes scoped, and add standard-library `unittest` coverage. JavaScript should remain dependency-free and pass `node --check` when Node is available.
 

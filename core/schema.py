@@ -63,7 +63,7 @@ def utc_now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
 
 
-def default_config(project="Ledger workspace"):
+def default_config(project="HFLedger workspace"):
     """Return a new neutral configuration document."""
     return {
         "version": 1,
@@ -147,7 +147,7 @@ def default_config(project="Ledger workspace"):
     }
 
 
-def default_board(project="Ledger workspace"):
+def default_board(project="HFLedger workspace"):
     """Return a minimal valid board with an atomic reconciler cursor."""
     now = utc_now()
     return {

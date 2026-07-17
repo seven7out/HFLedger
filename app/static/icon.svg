@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Ledger">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="HFLedger">
   <rect width="512" height="512" rx="116" fill="#171828"/>
   <rect x="104" y="242" width="78" height="154" rx="32" fill="#a89cff" opacity=".62"/>
   <rect x="217" y="105" width="78" height="291" rx="32" fill="#f8f5ed"/>

@@ -1,6 +1,6 @@
 {
-  "name": "Ledger Decision Deck",
-  "short_name": "Ledger",
+  "name": "HFLedger Decision Deck",
+  "short_name": "HFLedger",
   "description": "A local owner interface for admitted agent asks.",
   "start_url": "/deck",
   "scope": "/",
@@ -11,4 +11,3 @@
     {"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
   ]
 }
-

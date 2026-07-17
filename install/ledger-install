@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate an independent Ledger Phase 3 installation."""
+"""Generate an independent HFLedger Phase 3 installation."""
 
 import argparse
 import json
@@ -17,8 +17,8 @@ from install.generate import configure_install  # noqa: E402
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="ledger-install",
-        description="Initialize Ledger and generate inactive agent packs and schedules.")
-    parser.add_argument("directory", help="new Ledger data directory")
+        description="Initialize HFLedger and generate inactive agent packs and schedules.")
+    parser.add_argument("directory", help="new HFLedger data directory")
     parser.add_argument("--project", required=True, help="project label")
     parser.add_argument(
         "--repo", action="append", default=[],

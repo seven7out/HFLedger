@@ -1,6 +1,6 @@
 # Local reference interface
 
-Ledger Phase 2 provides two clients over one loopback-only HTTP service:
+HFLedger Phase 2 provides two clients over one loopback-only HTTP service:
 
 - the board is a wide control-room view of admitted asks, direct owner tasks, agent work, and recent outcomes;
 - the decision deck is a phone-sized, one-card-at-a-time client for decisions and owner-only manual actions.
@@ -25,7 +25,7 @@ New data directories contain this object in `config.json`:
 ```json
 {
   "ui": {
-    "title": "Ledger",
+    "title": "HFLedger",
     "subtitle": "A calm control room for owner-facing asks.",
     "accent": "#6956e8",
     "port": 7171,
@@ -44,7 +44,7 @@ Each context entry has exactly:
 |---|---|
 | `id` | Lowercase id matching `[a-z][a-z0-9-]{0,31}`; unique in the list |
 | `label` | Non-empty human-facing label |
-| `home` | An initialized Ledger data directory; relative paths resolve from the primary home |
+| `home` | An initialized HFLedger data directory; relative paths resolve from the primary home |
 
 Contexts are loaded and validated at startup. Requests carry only a context id. They cannot introduce a path or change the allowlist. Each context has its own config, board, ledger, locks, backups, and cursor.
 

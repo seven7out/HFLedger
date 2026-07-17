@@ -1,4 +1,4 @@
-"""Installer helpers that generate local Ledger automation artifacts."""
+"""Installer helpers that generate local HFLedger automation artifacts."""
 
 from .generate import configure_install, generate_schedules
 

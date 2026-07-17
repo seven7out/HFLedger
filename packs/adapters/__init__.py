@@ -1,4 +1,4 @@
-"""Supported runtime layouts for rendered Ledger instructions."""
+"""Supported runtime layouts for rendered HFLedger instructions."""
 
 
 RUNTIME_FILES = {

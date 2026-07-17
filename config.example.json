@@ -4,7 +4,7 @@
   "backupRetention": 20,
   "quarantineLimit": 100,
   "ui": {
-    "title": "Ledger",
+    "title": "HFLedger",
     "subtitle": "A calm control room for owner-facing asks.",
     "accent": "#6956e8",
     "port": 7171,

@@ -43,7 +43,7 @@ def load_config(home):
         with open(path, encoding="utf-8") as handle:
             config = json.load(handle)
     except FileNotFoundError:
-        raise ValueError("Ledger data directory is not initialized: %s" % home)
+        raise ValueError("HFLedger data directory is not initialized: %s" % home)
     except (OSError, ValueError) as exc:
         raise ValueError("config.json is unreadable: %s" % exc)
     errors = config_errors(config)
@@ -333,7 +333,7 @@ def _atomic_write(path, payload, mode=0o600):
         raise
 
 
-def initialize(home, project="Ledger workspace"):
+def initialize(home, project="HFLedger workspace"):
     """Create a new data directory without coupling it to the engine repository."""
     home = resolve_home(home)
     os.makedirs(home, exist_ok=True)
@@ -380,7 +380,7 @@ def save_config(home, config):
         raise ValueError("config.json is invalid:\n- " + "\n- ".join(errors))
     path = os.path.join(home, "config.json")
     if not os.path.exists(path):
-        raise ValueError("Ledger data directory is not initialized: %s" % home)
+        raise ValueError("HFLedger data directory is not initialized: %s" % home)
     lock_path = os.path.join(home, "locks", "config.lock")
     os.makedirs(os.path.dirname(lock_path), exist_ok=True)
     payload = (json.dumps(config, indent=2, ensure_ascii=False) + "\n").encode("utf-8")

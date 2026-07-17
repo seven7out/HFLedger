@@ -52,7 +52,7 @@ function toast(message) {
 
 function renderShell(data) {
   document.documentElement.style.setProperty("--accent", data.ui.accent);
-  document.title = `${data.ui.title} · Ledger`;
+  document.title = `${data.ui.title} · HFLedger`;
   $("#brand-title").textContent = data.ui.title;
   $("#project-title").textContent = data.project;
   $("#project-subtitle").textContent = data.ui.subtitle;
@@ -112,7 +112,7 @@ function openResolve(item) {
     : "Completed through the owner interface.";
   $("#resolve-evidence").value = item.type === "action"
     ? "The owner confirmed this manual action is complete."
-    : "Recorded in the Ledger owner interface.";
+    : "Recorded in the HFLedger owner interface.";
   $("#resolve-dialog").showModal();
 }
 

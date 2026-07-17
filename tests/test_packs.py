@@ -64,7 +64,7 @@ class PackTests(unittest.TestCase):
 
     def test_output_cannot_escape_private_data_directory(self):
         with tempfile.TemporaryDirectory(prefix="ledger-pack-outside-") as outside:
-            with self.assertRaisesRegex(ValueError, "inside the Ledger data directory"):
+            with self.assertRaisesRegex(ValueError, "inside the HFLedger data directory"):
                 render_packs(self.home, output_root=outside)
 
     def test_refuses_symlink_target_even_with_force(self):

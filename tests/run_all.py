@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Discover and run every Ledger test using only the standard library."""
+"""Discover and run every HFLedger test using only the standard library."""
 
 import os
 import sys

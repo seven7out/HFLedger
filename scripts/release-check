@@ -147,12 +147,12 @@ def check(skip_tests=False, allow_dirty=False):
         _run(["bash", publish_gate, ROOT])
     else:
         print("NOTICE: LEDGER_PUBLISH_GATE not set; external privacy gate was not run")
-    print("RELEASE READY: Ledger %s" % __version__)
+    print("RELEASE READY: HFLedger %s" % __version__)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        prog="release-check", description="Verify the local Ledger release candidate.")
+        prog="release-check", description="Verify the local HFLedger release candidate.")
     parser.add_argument("--skip-tests", action="store_true", help="skip the full unit suite")
     parser.add_argument(
         "--allow-dirty", action="store_true",

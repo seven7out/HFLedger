@@ -1,10 +1,10 @@
-# Ledger
+# HFLedger
 
-Ledger rate-limits and audits the interrupt channel between AI agents and the person running them.
+HFLedger rate-limits and audits the interrupt channel between AI agents and the person running them.
 
-Most agent tools make it easy to start work. Ledger focuses on the opposite boundary: when may an agent interrupt a human, what must it provide, and how does a reported outcome become durable? It combines a local JSON board, an append-only event ledger, strict admission and completion gates, a phone-sized decision deck, and optional read-only collectors.
+Most agent tools make it easy to start work. HFLedger focuses on the opposite boundary: when may an agent interrupt a human, what must it provide, and how does a reported outcome become durable? It combines a local JSON board, an append-only event ledger, strict admission and completion gates, a phone-sized decision deck, and optional read-only collectors.
 
-Ledger is agent-agnostic. Any runtime that can read files and run a command can use the protocol. The reference implementation is Python standard library, local-first, and MIT licensed.
+HFLedger is agent-agnostic. Any runtime that can read files and run a command can use the protocol. The reference implementation is Python standard library, local-first, and MIT licensed.
 
 ## The contract
 
@@ -21,7 +21,7 @@ This is not another agent runner or a general kanban board. The core product is 
 Requirements: Python 3.9+ and Git on a POSIX system. Clone this repository, then:
 
 ```sh
-cd ledger
+cd hfledger
 DEMO_HOME="$(mktemp -d)"
 ./scripts/ledger-demo "$DEMO_HOME"
 ./cli/ledger --home "$DEMO_HOME" serve
@@ -91,7 +91,7 @@ It binds only to `127.0.0.1`, rejects non-loopback Host headers, has no CORS opt
 - Schedules are generated for inspection but never installed or activated automatically.
 - Production writes are unsupported by the automation policy.
 
-This project shares a name with the ledger-cli accounting program. If both are installed, use an alias such as `alias agent-ledger=/path/to/ledger/cli/ledger`.
+The CLI command remains `ledger`, which can collide with the ledger-cli accounting program. If both are installed, use an alias such as `alias hfledger=/path/to/hfledger/cli/ledger`.
 
 ## Development and release checks
 
@@ -104,4 +104,4 @@ The release check compiles the code, validates local documentation links, runs t
 
 Contributions are described in [`CONTRIBUTING.md`](CONTRIBUTING.md). Please report vulnerabilities using [`SECURITY.md`](SECURITY.md). Release history is in [`CHANGELOG.md`](CHANGELOG.md).
 
-MIT License. Copyright Ledger contributors.
+MIT License. Copyright HFLedger contributors.

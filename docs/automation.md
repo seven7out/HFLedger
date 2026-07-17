@@ -1,6 +1,6 @@
 # Instruction packs, collectors, and installation
 
-Phase 3 adds a read-only observation layer and generated operating instructions around the Ledger protocol. Collectors never edit the board or append events. Packs explain how an agent should interpret observations and use existing Ledger commands; they are not executable policy engines.
+Phase 3 adds a read-only observation layer and generated operating instructions around the HFLedger protocol. Collectors never edit the board or append events. Packs explain how an agent should interpret observations and use existing HFLedger commands; they are not executable policy engines.
 
 ## Automation configuration
 
@@ -41,7 +41,7 @@ The GitHub adapter calls an already authenticated `gh` executable with argument 
 
 Titles and workflow names become bounded single-line fields prefixed with `[untrusted]`. Other external strings are control-stripped and length-bounded. Counts and identifiers remain typed. A failure in one configured repository degrades the GitHub source even when other repository observations succeed.
 
-Authenticate and inspect access separately with `gh auth status`. Ledger does not store a GitHub token.
+Authenticate and inspect access separately with `gh auth status`. HFLedger does not store a GitHub token.
 
 ### Local files
 
@@ -81,7 +81,7 @@ Repository values use `ID,OWNER/REPOSITORY,STAGE,PRODUCTION`; local roots use `I
 
 Schedule definitions appear under `generated/schedules/launchd/` and `generated/schedules/systemd/`. They capture absolute paths to the current Python interpreter, CLI checkout, and private data directory. Inspect them before copying or enabling them; regenerate after moving Python, the checkout, or the data directory. The installer does not copy, load, enable, or start a schedule.
 
-On macOS, activation is a deliberate administrator/user step: copy the reviewed plist into `~/Library/LaunchAgents/`, then use `launchctl bootstrap` for the current GUI domain. On a systemd user session, copy the reviewed service and timer into `~/.config/systemd/user/`, run `systemctl --user daemon-reload`, then enable the generated timer. These commands change machine state and are intentionally not run by Ledger.
+On macOS, activation is a deliberate administrator/user step: copy the reviewed plist into `~/Library/LaunchAgents/`, then use `launchctl bootstrap` for the current GUI domain. On a systemd user session, copy the reviewed service and timer into `~/.config/systemd/user/`, run `systemctl --user daemon-reload`, then enable the generated timer. These commands change machine state and are intentionally not run by HFLedger.
 
 ## Security boundary
 

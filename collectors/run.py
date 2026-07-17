@@ -17,7 +17,7 @@ class CollectorBusyError(RuntimeError):
 
 def _markdown(report):
     lines = [
-        "# Ledger collector report",
+        "# HFLedger collector report",
         "",
         "- Collection: `%s`" % report["collectionId"],
         "- Status: **%s**" % report["status"],

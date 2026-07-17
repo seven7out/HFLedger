@@ -29,7 +29,7 @@ def _safe_text(value, label, limit=240):
 def _safe_home(home):
     path = os.path.abspath(home)
     if any(char in path for char in "\r\n\x00`") or "{{" in path or "}}" in path:
-        raise ValueError("Ledger home is unsafe for an instruction pack")
+        raise ValueError("HFLedger home is unsafe for an instruction pack")
     return path
 
 
@@ -103,7 +103,7 @@ def render_packs(home, output_root=None, runtimes=None, force=False):
         raise ValueError("runtimes must be a unique list of generic/claude-code")
     output_root = os.path.abspath(output_root or os.path.join(home, "generated", "packs"))
     if os.path.commonpath((home, output_root)) != home:
-        raise ValueError("pack output must remain inside the Ledger data directory")
+        raise ValueError("pack output must remain inside the HFLedger data directory")
     variables = _variables(home, config)
     planned = []
     for runtime in selected:

@@ -1,4 +1,4 @@
-"""Create a Ledger home, runtime packs, and inactive scheduler definitions."""
+"""Create an HFLedger home, runtime packs, and inactive scheduler definitions."""
 
 import hashlib
 import json
@@ -84,12 +84,12 @@ def generate_schedules(home, mode="none", hour=7, minute=0, force=False):
         service_name = "ledger-collect-%s.service" % digest
         timer_name = "ledger-collect-%s.timer" % digest
         service = (
-            "[Unit]\nDescription=Collect read-only Ledger observations\n\n"
+            "[Unit]\nDescription=Collect read-only HFLedger observations\n\n"
             "[Service]\nType=oneshot\nUMask=0077\n%sExecStart=%s %s --home %s collect\n" % (
                 "Environment=%s\n" % _systemd_quote("PATH=" + schedule_path),
                 _systemd_quote(PYTHON), _systemd_quote(CLI), _systemd_quote(home)))
         timer = (
-            "[Unit]\nDescription=Schedule read-only Ledger collection\n\n"
+            "[Unit]\nDescription=Schedule read-only HFLedger collection\n\n"
             "[Timer]\nOnCalendar=*-*-* %02d:%02d:00\nPersistent=true\nUnit=%s\n\n"
             "[Install]\nWantedBy=timers.target\n" % (hour, minute, service_name))
         planned.extend((

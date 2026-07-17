@@ -1,2 +1,1 @@
-"""Local reference interface for Ledger data directories."""
-
+"""Local reference interface for HFLedger data directories."""
