@@ -46,6 +46,7 @@ INBOX_FIELDS = frozenset((
 ))
 OWNER_TASK_FIELDS = frozenset((
     "id", "title", "instruction", "status", "done", "dedupeKey", "source",
+    "snoozedUntil", "snoozeReason",
     "completionDisposition", "completionEvidence", "completionSource",
     "completionActor", "completionLedgerProvenance", "tombstone",
 ))
@@ -68,6 +69,15 @@ def default_config(project="Ledger workspace"):
         "project": project,
         "backupRetention": 20,
         "quarantineLimit": 100,
+        "ui": {
+            "title": project,
+            "subtitle": "Govern the agent-to-owner interrupt channel.",
+            "accent": "#6956e8",
+            "port": 7171,
+            "contexts": [
+                {"id": "main", "label": project, "home": "."},
+            ],
+        },
         "writerRegistry": {
             "agent": {"actions": {
                 "built": "audit-only",

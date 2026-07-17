@@ -1,0 +1,14 @@
+{
+  "name": "Ledger Decision Deck",
+  "short_name": "Ledger",
+  "description": "A local owner interface for admitted agent asks.",
+  "start_url": "/deck",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#171828",
+  "theme_color": "#171828",
+  "icons": [
+    {"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+  ]
+}
+

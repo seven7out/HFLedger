@@ -3,6 +3,19 @@
   "project": "Your project",
   "backupRetention": 20,
   "quarantineLimit": 100,
+  "ui": {
+    "title": "Ledger",
+    "subtitle": "A calm control room for owner-facing asks.",
+    "accent": "#6956e8",
+    "port": 7171,
+    "contexts": [
+      {
+        "id": "main",
+        "label": "Your project",
+        "home": "."
+      }
+    ]
+  },
   "writerRegistry": {
     "agent": {
       "actions": {

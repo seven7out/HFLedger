@@ -5,6 +5,7 @@ import datetime
 import fcntl
 import json
 import os
+import re
 import shutil
 import tempfile
 import threading
@@ -65,6 +66,51 @@ def config_errors(config):
     limit = config.get("quarantineLimit")
     if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
         errors.append("quarantineLimit must be a positive integer")
+    ui = config.get("ui")
+    if ui is not None:
+        if not isinstance(ui, dict):
+            errors.append("ui must be an object")
+        else:
+            for name in ("title", "subtitle", "accent"):
+                value = ui.get(name)
+                if not isinstance(value, str) or not value.strip():
+                    errors.append("ui.%s must be non-empty text" % name)
+            accent = ui.get("accent")
+            if (isinstance(accent, str) and
+                    not re.fullmatch(r"#[0-9A-Fa-f]{6}", accent)):
+                errors.append("ui.accent must be a six-digit hex color")
+            port = ui.get("port")
+            if (not isinstance(port, int) or isinstance(port, bool) or
+                    not 1 <= port <= 65535):
+                errors.append("ui.port must be an integer from 1 through 65535")
+            contexts = ui.get("contexts")
+            if not isinstance(contexts, list) or not contexts:
+                errors.append("ui.contexts must be a non-empty list")
+            else:
+                seen = set()
+                for index, context in enumerate(contexts):
+                    prefix = "ui.contexts[%d]" % index
+                    if not isinstance(context, dict):
+                        errors.append("%s must be an object" % prefix)
+                        continue
+                    unknown = sorted(set(context) - {"id", "label", "home"})
+                    if unknown:
+                        errors.append("%s has unsupported field(s): %s" % (
+                            prefix, ", ".join(unknown)))
+                    context_id = context.get("id")
+                    if (not isinstance(context_id, str) or
+                            not re.fullmatch(r"[a-z][a-z0-9-]{0,31}", context_id)):
+                        errors.append("%s.id must be a lowercase context id" % prefix)
+                    elif context_id in seen:
+                        errors.append("duplicate ui context id %r" % context_id)
+                    else:
+                        seen.add(context_id)
+                    if (not isinstance(context.get("label"), str) or
+                            not context.get("label", "").strip()):
+                        errors.append("%s.label must be non-empty text" % prefix)
+                    if (not isinstance(context.get("home"), str) or
+                            not context.get("home", "").strip()):
+                        errors.append("%s.home must be non-empty text" % prefix)
     registry = config.get("writerRegistry")
     if not isinstance(registry, dict) or not registry:
         errors.append("writerRegistry must be a non-empty object")

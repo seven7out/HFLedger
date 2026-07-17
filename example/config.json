@@ -3,6 +3,19 @@
   "project": "Ovenlight Bakery Tools",
   "backupRetention": 12,
   "quarantineLimit": 40,
+  "ui": {
+    "title": "Ovenlight Control Room",
+    "subtitle": "Fictional bakery agents, with a quieter human lane.",
+    "accent": "#c65f3d",
+    "port": 7171,
+    "contexts": [
+      {
+        "id": "main",
+        "label": "Bakery tools",
+        "home": "."
+      }
+    ]
+  },
   "writerRegistry": {
     "agent": {
       "actions": {

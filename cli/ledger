@@ -121,6 +121,8 @@ def build_parser():
 
     sub.add_parser("validate", help="validate config, board, cursor, provenance, and generated counts")
     sub.add_parser("reconcile", help="atomically fold all unprocessed ledger events into the board")
+    serve = sub.add_parser("serve", help="run the loopback-only board and decision deck")
+    serve.add_argument("--port", type=int, help="port; defaults to config ui.port")
     return parser
 
 
@@ -185,6 +187,10 @@ def main(argv=None):
         if args.command == "reconcile":
             result = reconciler.reconcile(home, config=config)
             _print_json(result)
+            return 0
+        if args.command == "serve":
+            from app.server import serve
+            serve(home, port=args.port)
             return 0
         parser.error("unknown command")
     except (ValueError, OSError) as exc:

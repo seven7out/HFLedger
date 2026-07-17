@@ -4,7 +4,7 @@
 
 Ledger is a file protocol for agents, an owner, and deterministic reconcilers sharing an operational board. It regulates agent-to-owner interruptions. It does not define an agent runtime, network API, user interface, scheduler, or source collector.
 
-An integration needs only filesystem access and the ability to execute the `ledger` CLI. The CLI is the supported Phase 1 write surface for asks and completion reports. Core Python functions also expose the event writer for later trusted integrations.
+An integration needs only filesystem access and the ability to execute the `ledger` CLI. The CLI is the supported write surface for asks and completion reports. Core Python functions expose the event writer to the trusted local reference interface and later integrations.
 
 Protocol version 1 has four durable concepts:
 
@@ -277,7 +277,7 @@ An open or pending duplicate returns success with `status: already_open` and app
 
 ### 6.5 Owner decision events
 
-Phase 2 interfaces can resolve or snooze a folded card by appending registered `owner-ui` events through the core ledger writer. These are event-first operations: reconciliation applies the board change and its provenance atomically. Phase 1 supplies the event contract and handlers but no interface.
+Interfaces resolve or snooze a folded card by appending registered `owner-ui` events through the core ledger writer. These are event-first operations: reconciliation applies the board change and its provenance atomically. The Phase 2 reference client implements this contract; see `docs/ui.md`.
 
 Both actions use actor `owner-ui`, null `task_id` and `pr`, authorization `owner-ui-v1`, and `extra.schemaVersion: 1`.
 

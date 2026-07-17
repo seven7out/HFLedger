@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f2ea">
+  <title>Ledger</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body class="board-page">
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Ledger board">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span><strong id="brand-title">Ledger</strong><small>owner control room</small></span>
+    </a>
+    <nav class="view-nav" aria-label="Views">
+      <a class="active" href="/">Board</a>
+      <a href="/deck">Decision deck</a>
+    </nav>
+    <label class="context-control">
+      <span>Context</span>
+      <select id="context-select" aria-label="Active context"></select>
+    </label>
+  </header>
+
+  <main class="board-shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Live, local, accountable</p>
+        <h1 id="project-title">Loading your board…</h1>
+        <p id="project-subtitle" class="hero-copy">The owner lane stays small because only admitted asks get through.</p>
+      </div>
+      <div class="hero-actions">
+        <span id="updated-at" class="updated-at"></span>
+        <button id="refresh-button" class="button secondary" type="button">Refresh</button>
+        <a class="button primary" href="/deck">Open deck <span aria-hidden="true">→</span></a>
+      </div>
+    </section>
+
+    <section id="stats" class="stats" aria-label="Board totals"></section>
+
+    <div id="loading" class="loading-card" role="status">
+      <span class="spinner" aria-hidden="true"></span>
+      Reading the validated board…
+    </div>
+    <div id="error" class="error-card" role="alert" hidden></div>
+
+    <div id="board" class="board-grid" hidden>
+      <section class="panel attention-panel">
+        <header class="panel-heading">
+          <div>
+            <p class="eyebrow">Human lane</p>
+            <h2>Decisions & manual actions</h2>
+          </div>
+          <span id="decision-count" class="count-pill"></span>
+        </header>
+        <div id="decision-list" class="card-list"></div>
+      </section>
+
+      <section class="panel owner-panel">
+        <header class="panel-heading">
+          <div>
+            <p class="eyebrow">Owner checklist</p>
+            <h2>Direct tasks</h2>
+          </div>
+          <span id="task-count" class="count-pill"></span>
+        </header>
+        <div id="task-list" class="task-list"></div>
+      </section>
+
+      <section class="panel queue-panel">
+        <header class="panel-heading">
+          <div>
+            <p class="eyebrow">Agent work</p>
+            <h2>Queue</h2>
+          </div>
+          <span id="queue-count" class="count-pill"></span>
+        </header>
+        <div id="queue-list" class="queue-list"></div>
+      </section>
+
+      <section class="panel history-panel">
+        <header class="panel-heading">
+          <div>
+            <p class="eyebrow">Recent outcomes</p>
+            <h2>Resolved</h2>
+          </div>
+        </header>
+        <div id="resolved-list" class="resolved-list"></div>
+      </section>
+    </div>
+  </main>
+
+  <dialog id="resolve-dialog" class="modal">
+    <form id="resolve-form" method="dialog">
+      <div class="modal-head">
+        <div><p class="eyebrow">Record an outcome</p><h2 id="resolve-title">Resolve ask</h2></div>
+        <button class="icon-button" value="cancel" aria-label="Close">×</button>
+      </div>
+      <input id="resolve-id" type="hidden">
+      <input id="resolve-hash" type="hidden">
+      <input id="resolve-type" type="hidden">
+      <label id="option-field" class="field" hidden>
+        <span>Selected option</span>
+        <select id="resolve-option"></select>
+      </label>
+      <label id="resolution-field" class="field">
+        <span>Outcome</span>
+        <textarea id="resolve-text" rows="3" maxlength="4000" required></textarea>
+      </label>
+      <label id="evidence-field" class="field">
+        <span>Evidence</span>
+        <textarea id="resolve-evidence" rows="2" maxlength="4000" required>Recorded in the Ledger owner interface.</textarea>
+      </label>
+      <div class="modal-actions">
+        <button class="button secondary" value="cancel">Cancel</button>
+        <button id="resolve-submit" class="button primary" value="default">Record outcome</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="snooze-dialog" class="modal compact-modal">
+    <form id="snooze-form" method="dialog">
+      <div class="modal-head">
+        <div><p class="eyebrow">Keep it open</p><h2 id="snooze-title">Snooze ask</h2></div>
+        <button class="icon-button" value="cancel" aria-label="Close">×</button>
+      </div>
+      <input id="snooze-id" type="hidden">
+      <input id="snooze-hash" type="hidden">
+      <label class="field"><span>Bring it back on</span><input id="snooze-until" type="date" required></label>
+      <label class="field"><span>Reason</span><input id="snooze-reason" maxlength="1000" value="Not ready to decide yet." required></label>
+      <div class="modal-actions">
+        <button class="button secondary" value="cancel">Cancel</button>
+        <button id="snooze-submit" class="button primary" value="default">Snooze</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

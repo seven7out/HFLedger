@@ -2,12 +2,12 @@
 
 Ledger is a local-first protocol and core engine for governing the interrupt channel between AI agents and the person who runs them. It gives agents an append-only output log, admits only well-formed decisions and owner-only manual actions into the human lane, captures completion reports durably, and reconciles those events into one validated JSON board.
 
-This repository is Phase 1: the protocol, standard-library Python engine, CLI, fictional example, and tests. It intentionally has no web interface, runtime-specific agent pack, background collector, server, SDK, or package installer yet.
+The repository now includes the Phase 1 protocol engine and the Phase 2 reference interface: a responsive board, a mobile decision deck, a loopback-only standard-library server, config-driven branding and contexts, fictional examples, and tests. Runtime-specific agent packs, collectors, remote serving, an SDK, and package installation remain future work.
 
 ## Requirements and safety model
 
 - Python 3.9 or newer and Git; no third-party Python packages.
-- POSIX file locking through `fcntl`; Phase 1 does not support native Windows writers.
+- POSIX file locking through `fcntl`; the current engine does not support native Windows writers.
 - The engine repository never contains live state. Each installation uses a separate data directory.
 - Board writes use one locked load/mutate/validate/atomic-replace path with backups.
 - Ledger writes use `O_APPEND`, an exclusive file lock, and `fsync`.
@@ -57,6 +57,14 @@ The command appends an event; it does not edit the board. Fold it and inspect th
 python3 -m json.tool "$LEDGER_HOME/board.json"
 ```
 
+Open the local board and decision deck:
+
+```sh
+./cli/ledger serve
+```
+
+Visit `http://127.0.0.1:7171/` for the board or `http://127.0.0.1:7171/deck` for the mobile deck. The service binds only to loopback. Decisions, snoozes, and action completions use the same registered event and reconciliation paths as the CLI; the interface does not write around the protocol.
+
 Capture a completion report, then reconcile again:
 
 ```sh
@@ -84,6 +92,8 @@ reports/
 
 Path resolution is explicit `--home`, then `LEDGER_HOME`, then `$XDG_DATA_HOME/ledger`, then `~/.ledger`. To synchronize state across trusted machines, initialize a separate private Git repository inside the data directory. Commit only after writers are stopped, pull before work, and never publish a data repository that may contain operational or private text.
 
+The optional `ui` object in `config.json` controls the interface title, subtitle, six-digit accent color, port, and an allowlist of contexts. Each context names an independent initialized Ledger data directory. Relative context homes are resolved from the primary data directory; HTTP requests select only configured context ids and cannot supply paths. See [`docs/ui.md`](docs/ui.md) for the complete configuration and API contract.
+
 The fictional [`example/`](example/) directory is a valid data directory and can be checked with:
 
 ```sh
@@ -96,4 +106,4 @@ LEDGER_HOME="$PWD/example" ./cli/ledger validate
 python3 tests/run_all.py
 ```
 
-The formal integration contract is [`docs/protocol.md`](docs/protocol.md). License: MIT.
+The formal engine contract is [`docs/protocol.md`](docs/protocol.md); the reference-interface contract is [`docs/ui.md`](docs/ui.md). License: MIT.

@@ -1,3 +1,3 @@
-"""Ledger Phase 1 core engine."""
+"""Ledger protocol engine and local reference interface."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
