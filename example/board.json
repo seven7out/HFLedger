@@ -1,14 +1,14 @@
 {
   "meta": {
     "project": "Ovenlight Bakery Tools",
-    "updated": "2026-07-16T18:00:00+00:00",
+    "updated": "2026-07-17T07:00:00+00:00",
     "lastSession": {
       "kind": "planning",
-      "summary": "Prepared fictional release work for a bakery scheduling product."
+      "summary": "Prepared fictional release work and one demo decision for a bakery scheduling product."
     },
     "ledgerCursor": {
-      "line": 0,
-      "entrySha256": null
+      "line": 1,
+      "entrySha256": "5e1cb472499a493dec8c8be689bdf7ee1da75099400a5ddc96835ef1cadbb1be"
     }
   },
   "queue": [
@@ -45,7 +45,59 @@
   ],
   "decisions": {
     "note": "Owner-facing asks admitted by the protocol.",
-    "items": [],
+    "items": [
+      {
+        "schemaVersion": 1,
+        "id": "ask-2c01acd32b2b8b82",
+        "dedupeKey": "demo:timer-alert",
+        "type": "decision",
+        "title": "Choose the morning timer alert",
+        "detail": "",
+        "blocks": [
+          "task:ovenlight:proofing-timer"
+        ],
+        "priority": "P2",
+        "humanRequiredReason": "Two safe interface choices remain after the fictional prototype review.",
+        "humanGate": {
+          "class": "judgment",
+          "reason": "Two safe interface choices remain after the fictional prototype review."
+        },
+        "blockedOutcome": "The timer demo needs one alert style before the fictional release can proceed.",
+        "riskIfWrong": "A distracting default could make the bakery display harder to use during a busy shift.",
+        "riskLevel": "low",
+        "reversibility": "reversible",
+        "rollback": "Change the alert preference back in the local configuration.",
+        "workDone": "Both choices were prototyped with fictional batch data and checked for keyboard access.",
+        "source": "fictional Ovenlight release review",
+        "admission": {
+          "status": "admitted",
+          "policyVersion": "ask-policy-v1"
+        },
+        "question": "How should the shared timer announce that a batch is ready?",
+        "options": [
+          {
+            "id": "banner",
+            "label": "Quiet banner",
+            "tradeoff": "Visible and calm, but someone must be looking at the display"
+          },
+          {
+            "id": "bell",
+            "label": "Short bell",
+            "tradeoff": "Noticeable across the room, but it may interrupt a quiet task"
+          }
+        ],
+        "recommendedOption": "banner",
+        "recommendationReason": "The quiet banner is the least disruptive default and remains easy to change.",
+        "ask": "How should the shared timer announce that a batch is ready? Options: banner: Quiet banner — Visible and calm, but someone must be looking at the display; bell: Short bell — Noticeable across the room, but it may interrupt a quiet task Recommendation: banner — The quiet banner is the least disruptive default and remains easy to change.",
+        "state": "open",
+        "added": "2026-07-17",
+        "addedEstimated": false,
+        "ledgerProvenance": {
+          "line": 1,
+          "entrySha256": "5e1cb472499a493dec8c8be689bdf7ee1da75099400a5ddc96835ef1cadbb1be"
+        }
+      }
+    ],
     "resolved": []
   },
   "ownerTasks": [],
@@ -57,7 +109,7 @@
       "Ready for Build": 1
     },
     "decisions": {
-      "open": 0,
+      "open": 1,
       "snoozed": 0,
       "deferred": 0,
       "resolved": 0

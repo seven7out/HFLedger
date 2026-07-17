@@ -1,0 +1,170 @@
+#!/usr/bin/env python3
+"""Run the deterministic local release-readiness contract."""
+
+import argparse
+import http.client
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import threading
+from urllib.parse import unquote
+
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+from app import server  # noqa: E402
+from core import __version__  # noqa: E402
+
+
+EXPECTED_VERSION = "0.4.0"
+REQUIRED_FILES = (
+    "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md", "LICENSE",
+    "docs/protocol.md", "docs/quickstart.md", "docs/release.md", "docs/launch.md",
+    "scripts/ledger-demo", "scripts/release-check",
+)
+MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
+
+
+def _run(argv, env=None):
+    print("+ " + " ".join(argv), flush=True)
+    completed = subprocess.run(argv, cwd=ROOT, env=env, check=False)
+    if completed.returncode:
+        raise RuntimeError("command failed with exit status %d" % completed.returncode)
+
+
+def _markdown_files():
+    for directory, names, files in os.walk(ROOT):
+        names[:] = sorted(name for name in names if name not in (".git", "__pycache__"))
+        for name in sorted(files):
+            if name.endswith(".md"):
+                yield os.path.join(directory, name)
+
+
+def _check_links():
+    errors = []
+    for path in _markdown_files():
+        with open(path, encoding="utf-8") as handle:
+            content = handle.read()
+        for raw in MARKDOWN_LINK.findall(content):
+            target = raw.strip().strip("<>")
+            if (not target or target.startswith(("#", "http://", "https://", "mailto:"))):
+                continue
+            relative = unquote(target.split("#", 1)[0])
+            destination = os.path.normpath(os.path.join(os.path.dirname(path), relative))
+            if not os.path.exists(destination):
+                errors.append("%s -> %s" % (os.path.relpath(path, ROOT), target))
+    if errors:
+        raise RuntimeError("broken local Markdown link(s):\n- " + "\n- ".join(errors))
+    print("OK: local Markdown links")
+
+
+def _check_demo():
+    with tempfile.TemporaryDirectory(prefix="ledger-release-demo-") as temporary:
+        home = os.path.join(temporary, "data")
+        _run([sys.executable, os.path.join(ROOT, "scripts", "ledger-demo"), home])
+        httpd = server.make_server(home, port=0)
+        port = httpd.server_address[1]
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        try:
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=4)
+            connection.request("GET", "/api/cards")
+            response = connection.getresponse()
+            cards = json.loads(response.read().decode("utf-8"))["cards"]
+            connection.close()
+            if response.status != 200 or len(cards) != 1 or cards[0].get("type") != "decision":
+                raise RuntimeError("demo did not serve exactly one decision card")
+            body = json.dumps({
+                "id": cards[0]["id"], "srcHash": cards[0]["srcHash"], "action": "accept",
+            })
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=4)
+            connection.request(
+                "POST", "/api/cards/answer", body=body,
+                headers={"Content-Type": "application/json"})
+            response = connection.getresponse()
+            result = json.loads(response.read().decode("utf-8"))
+            connection.close()
+            if response.status != 200 or not result.get("ok"):
+                raise RuntimeError("demo first-swipe API request failed")
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=4)
+            connection.request("GET", "/api/cards")
+            response = connection.getresponse()
+            remaining = json.loads(response.read().decode("utf-8"))["cards"]
+            connection.close()
+            if response.status != 200 or remaining:
+                raise RuntimeError("demo first-swipe acceptance did not resolve the card")
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+            thread.join(timeout=2)
+    print("OK: disposable demo reaches and resolves its first card")
+
+
+def check(skip_tests=False, allow_dirty=False):
+    if sys.version_info < (3, 9):
+        raise RuntimeError("Python 3.9 or newer is required")
+    if __version__ != EXPECTED_VERSION:
+        raise RuntimeError("version mismatch: expected %s, found %s" % (
+            EXPECTED_VERSION, __version__))
+    missing = [name for name in REQUIRED_FILES if not os.path.isfile(os.path.join(ROOT, name))]
+    if missing:
+        raise RuntimeError("required release file(s) missing: %s" % ", ".join(missing))
+    _check_links()
+    _run(["git", "diff", "--check"])
+    _run(["git", "diff", "--cached", "--check"])
+    if not allow_dirty:
+        completed = subprocess.run(
+            ["git", "status", "--porcelain"], cwd=ROOT,
+            capture_output=True, text=True, check=False)
+        if completed.returncode or completed.stdout.strip():
+            raise RuntimeError("release check requires a clean Git worktree")
+    _run([
+        sys.executable, "-m", "compileall", "-q", "core", "app", "collectors",
+        "install", "packs", "scripts",
+    ])
+    node = shutil.which("node")
+    if node:
+        for name in ("app/static/app.js", "app/static/deck.js", "app/static/service-worker.js"):
+            _run([node, "--check", name])
+    else:
+        print("SKIP: Node.js not available; JavaScript syntax check omitted")
+    if not skip_tests:
+        _run([sys.executable, "tests/run_all.py"])
+    environment = os.environ.copy()
+    environment["LEDGER_HOME"] = os.path.join(ROOT, "example")
+    _run([os.path.join(ROOT, "cli", "ledger"), "validate"], env=environment)
+    _check_demo()
+    publish_gate = os.environ.get("LEDGER_PUBLISH_GATE")
+    if publish_gate:
+        if not os.path.isfile(publish_gate):
+            raise RuntimeError("LEDGER_PUBLISH_GATE is not a file")
+        _run(["bash", publish_gate, ROOT])
+    else:
+        print("NOTICE: LEDGER_PUBLISH_GATE not set; external privacy gate was not run")
+    print("RELEASE READY: Ledger %s" % __version__)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        prog="release-check", description="Verify the local Ledger release candidate.")
+    parser.add_argument("--skip-tests", action="store_true", help="skip the full unit suite")
+    parser.add_argument(
+        "--allow-dirty", action="store_true",
+        help="allow tracked or untracked changes while developing the release")
+    args = parser.parse_args(argv)
+    try:
+        check(skip_tests=args.skip_tests, allow_dirty=args.allow_dirty)
+        return 0
+    except (OSError, RuntimeError, ValueError) as exc:
+        print("release-check: %s" % exc, file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+"""Copy the fictional Ledger example into a disposable private data directory."""
+
+import argparse
+import json
+import os
+import shlex
+import shutil
+import sys
+
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+from app import server  # noqa: E402
+from core import store  # noqa: E402
+
+
+SOURCE = os.path.join(ROOT, "example")
+DATA_FILES = ("config.json", "board.json", "ledger.jsonl")
+DATA_DIRS = ("locks", "backups", "reports")
+
+
+def _target(directory):
+    target = store.resolve_home(directory)
+    if os.path.commonpath((ROOT, target)) == ROOT:
+        raise ValueError("demo data must live outside the public engine repository")
+    if os.path.islink(target):
+        raise ValueError("refusing a symlink demo target")
+    if os.path.exists(target) and os.listdir(target):
+        raise ValueError("refusing non-empty demo target: %s" % target)
+    return target
+
+
+def create_demo(directory):
+    target = _target(directory)
+    os.makedirs(target, mode=0o700, exist_ok=True)
+    os.chmod(target, 0o700)
+    for name in DATA_DIRS:
+        os.makedirs(os.path.join(target, name), mode=0o700, exist_ok=True)
+    for name in DATA_FILES:
+        destination = os.path.join(target, name)
+        shutil.copyfile(os.path.join(SOURCE, name), destination)
+        os.chmod(destination, 0o600)
+    config = store.load_config(target)
+    errors, warnings = store.BoardStore(target, config=config).validate_current()
+    if errors:
+        raise ValueError("copied demo failed validation:\n- " + "\n- ".join(errors))
+    cards = server.build_cards_view(server.Runtime(target))["cards"]
+    if not cards:
+        raise ValueError("copied demo has no decision cards")
+    return {
+        "status": "ready",
+        "home": target,
+        "cards": len(cards),
+        "deckUrl": "http://127.0.0.1:7171/deck",
+        "serveCommand": "%s %s --home %s serve" % (
+            shlex.quote(sys.executable), shlex.quote(os.path.join(ROOT, "cli", "ledger")),
+            shlex.quote(target)),
+        "warnings": warnings,
+    }
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        prog="ledger-demo",
+        description="Copy the fictional swipeable demo into an empty private directory.")
+    parser.add_argument("directory", help="empty destination outside the engine repository")
+    args = parser.parse_args(argv)
+    try:
+        print(json.dumps(create_demo(args.directory), indent=2, sort_keys=True))
+        return 0
+    except (OSError, ValueError) as exc:
+        print("ledger-demo: %s" % exc, file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

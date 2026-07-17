@@ -1,121 +1,107 @@
 # Ledger
 
-Ledger is a local-first protocol and core engine for governing the interrupt channel between AI agents and the person who runs them. It gives agents an append-only output log, admits only well-formed decisions and owner-only manual actions into the human lane, captures completion reports durably, and reconciles those events into one validated JSON board.
+Ledger rate-limits and audits the interrupt channel between AI agents and the person running them.
 
-The repository now includes the Phase 1 protocol engine, the Phase 2 reference interface, and the Phase 3 automation boundary: generic and Claude Code instruction packs, read-only GitHub and local-file collectors, and an installer that generates inactive launchd/systemd schedules. Remote serving, additional runtime/source adapters, an SDK, and package distribution remain future work.
+Most agent tools make it easy to start work. Ledger focuses on the opposite boundary: when may an agent interrupt a human, what must it provide, and how does a reported outcome become durable? It combines a local JSON board, an append-only event ledger, strict admission and completion gates, a phone-sized decision deck, and optional read-only collectors.
 
-## Requirements and safety model
+Ledger is agent-agnostic. Any runtime that can read files and run a command can use the protocol. The reference implementation is Python standard library, local-first, and MIT licensed.
 
-- Python 3.9 or newer and Git; no third-party Python packages.
-- The authenticated `gh` CLI is optional and required only when the GitHub collector is enabled.
-- POSIX file locking through `fcntl`; the current engine does not support native Windows writers.
-- The engine repository never contains live state. Each installation uses a separate data directory.
-- Board writes use one locked load/mutate/validate/atomic-replace path with backups.
-- Ledger writes use `O_APPEND`, an exclusive file lock, and `fsync`.
-- This project shares a name with the ledger-cli accounting program. If both are installed, use a shell alias such as `alias agent-ledger=/path/to/ledger/cli/ledger`.
+## The contract
 
-## Quickstart
+- An agent cannot file a vague escalation. A decision needs two or three options, a reasoned recommendation, risk, reversibility, rollback, completed analysis, and a stable deduplication key.
+- A manual action must identify one exact owner-only step and observable completion proof.
+- “I already did that” and “skip it” become provenance-bearing completion events instead of disappearing into chat history.
+- Board mutation is locked, validated, backed up, and atomically replaced. Agent events are append-only and reconciled through a fail-closed cursor.
+- Collected repository and file metadata is explicitly untrusted observation data. It grants no work, merge, or deployment authority.
 
-Clone the repository, then run the entrypoint directly:
+This is not another agent runner or a general kanban board. The core product is the protocol governing the agent-to-human handoff.
+
+## Two-minute demo
+
+Requirements: Python 3.9+ and Git on a POSIX system. Clone this repository, then:
 
 ```sh
-git clone <repository-url> ledger
 cd ledger
-./cli/ledger init /tmp/ovenlight --project "Ovenlight Bakery Tools"
-export LEDGER_HOME=/tmp/ovenlight
-./cli/ledger validate
+DEMO_HOME="$(mktemp -d)"
+./scripts/ledger-demo "$DEMO_HOME"
+./cli/ledger --home "$DEMO_HOME" serve
 ```
 
-File a decision with two options:
+Open [http://127.0.0.1:7171/deck](http://127.0.0.1:7171/deck). The copied fictional bakery workspace contains one admitted decision. Choose an option or swipe right to accept the recommendation; the outcome is written only to the disposable directory printed by `ledger-demo`.
+
+The board is at [http://127.0.0.1:7171/](http://127.0.0.1:7171/). Stop the server with `Ctrl-C`. The committed `example/` remains untouched.
+
+## Start a real workspace
 
 ```sh
-./cli/ledger ask decision \
-  --key release:timer-mode \
-  --title "Choose the proofing timer mode" \
-  --blocks task:timer:release \
-  --gate judgment \
-  --human-reason "Two valid product behaviors remain after agent analysis." \
-  --blocked-outcome "The timer release cannot proceed until one behavior is selected." \
-  --risk "The wrong default could confuse bakers during a busy shift." \
-  --risk-level medium \
-  --reversibility reversible \
-  --rollback "Restore the previous timer default and release a patch." \
-  --work-done "Both modes were implemented in a local prototype and reviewed." \
-  --source "fictional release planning session" \
-  --priority P1 \
-  --question "Which timer behavior should be the default for new batches?" \
-  --option manual "Manual start" "Predictable but requires a baker to start every timer" \
-  --option automatic "Automatic start" "Faster but depends on accurate batch status updates" \
-  --recommend manual \
-  --recommend-why "Manual start is clearer for the first release and easy to revise."
+./cli/ledger init ~/.ledger --project "My project"
+./cli/ledger --home ~/.ledger validate
+./cli/ledger --home ~/.ledger serve
 ```
 
-The command appends an event; it does not edit the board. Fold it and inspect the result:
-
-```sh
-./cli/ledger reconcile
-./cli/ledger validate
-python3 -m json.tool "$LEDGER_HOME/board.json"
-```
-
-Open the local board and decision deck:
-
-```sh
-./cli/ledger serve
-```
-
-Visit `http://127.0.0.1:7171/` for the board or `http://127.0.0.1:7171/deck` for the mobile deck. The service binds only to loopback. Decisions, snoozes, and action completions use the same registered event and reconciliation paths as the CLI; the interface does not write around the protocol.
-
-Capture a completion report, then reconcile again:
-
-```sh
-./cli/ledger done \
-  --id ask-bdec785b342795e8 \
-  --evidence "The owner confirmed the selected timer mode is complete." \
-  --source "release review"
-./cli/ledger reconcile
-```
-
-Run `./cli/ledger --help` and each subcommand's `--help` for all flags. The deterministic ask id shown above is derived from the stable key; use the id printed by your own command.
-
-## Data directory
-
-`ledger init [DIR]` creates:
+Mutable state lives in the selected data directory, never in the public engine checkout:
 
 ```text
-config.json
-board.json
-ledger.jsonl
-locks/
-backups/
-reports/
+config.json       local policy, writers, UI, collectors, and pack settings
+board.json        validated human/agent coordination state
+ledger.jsonl      append-only events
+locks/            process-coordination locks
+backups/          retained board snapshots
+reports/          private collector output
+generated/        rendered instruction packs and inactive schedules
 ```
 
-Path resolution is explicit `--home`, then `LEDGER_HOME`, then `$XDG_DATA_HOME/ledger`, then `~/.ledger`. To synchronize state across trusted machines, initialize a separate private Git repository inside the data directory. Commit only after writers are stopped, pull before work, and never publish a data repository that may contain operational or private text.
+The first path is [`docs/quickstart.md`](docs/quickstart.md): file a real decision, reconcile it, open the deck, and capture completion. The complete data and event contract is [`docs/protocol.md`](docs/protocol.md).
 
-The optional `ui` object in `config.json` controls the interface title, subtitle, six-digit accent color, port, and an allowlist of contexts. Each context names an independent initialized Ledger data directory. Relative context homes are resolved from the primary data directory; HTTP requests select only configured context ids and cannot supply paths. See [`docs/ui.md`](docs/ui.md) for the complete configuration and API contract.
+## Agent integration
 
-For a fresh automation-ready directory, the Phase 3 installer can configure sources, render agent packs, and generate schedules in one step:
+Agents use one CLI surface:
 
-```sh
-./install/ledger-install /tmp/ovenlight-automation \
-  --project "Ovenlight Bakery Tools" \
-  --runtime generic \
-  --runtime claude-code
+```text
+ledger init
+ledger ask decision|action
+ledger done|skip
+ledger validate
+ledger reconcile
+ledger serve
+ledger collect
+ledger render-packs
 ```
 
-Generated assets remain under the private data directory. The installer does not copy prompts into a project or activate OS schedules. Configure optional sources, collector behavior, layouts, and deliberate schedule activation using [`docs/automation.md`](docs/automation.md). The runtime-neutral routing and verification contract is in [`docs/discipline.md`](docs/discipline.md).
+`ledger ask` is intentionally demanding. Agent-executable work stays in the queue; raw ideas stay in the inbox; only an irreducible human choice or exact owner-only action should pass admission. See [`docs/discipline.md`](docs/discipline.md).
 
-The fictional [`example/`](example/) directory is a valid data directory and can be checked with:
+The generic and Claude Code instruction adapters inject the same policy into runtime-specific layouts. The optional GitHub collector reads PR, CI, issue, and branch-comparison facts through an authenticated `gh` CLI. The local-files collector records metadata without reading contents. Details and inactive launchd/systemd schedule generation are in [`docs/automation.md`](docs/automation.md).
 
-```sh
-LEDGER_HOME="$PWD/example" ./cli/ledger validate
-```
+## Reference interface
 
-## Development
+The standard-library HTTP service provides:
+
+- a responsive board for queue, inbox, owner tasks, admitted asks, and outcomes;
+- a mobile decision deck with option selection, recommendation acceptance, snooze, need-more-info, completion, skip, and digest-bound undo where safe;
+- config-driven branding and allowlisted independent contexts.
+
+It binds only to `127.0.0.1`, rejects non-loopback Host headers, has no CORS opt-in, and is not an authenticated remote service. Do not put an unauthenticated proxy in front of it. See [`docs/ui.md`](docs/ui.md).
+
+## Current limits
+
+- POSIX `fcntl` locking; native Windows writers are unsupported.
+- Clone-based execution; there is no package-manager release yet.
+- The reference UI is loopback-only.
+- GitHub collection requires a separately installed and authenticated `gh` CLI.
+- Schedules are generated for inspection but never installed or activated automatically.
+- Production writes are unsupported by the automation policy.
+
+This project shares a name with the ledger-cli accounting program. If both are installed, use an alias such as `alias agent-ledger=/path/to/ledger/cli/ledger`.
+
+## Development and release checks
 
 ```sh
 python3 tests/run_all.py
+./scripts/release-check --allow-dirty
 ```
 
-The formal engine contract is [`docs/protocol.md`](docs/protocol.md); the reference-interface contract is [`docs/ui.md`](docs/ui.md); automation is specified in [`docs/automation.md`](docs/automation.md). License: MIT.
+The release check compiles the code, validates local documentation links, runs the full suite, validates the fictional example, and simulates the demo's first swipe. Maintainers can supply the deliberately external privacy gate with `LEDGER_PUBLISH_GATE=/path/to/publish-gate.sh`.
+
+Contributions are described in [`CONTRIBUTING.md`](CONTRIBUTING.md). Please report vulnerabilities using [`SECURITY.md`](SECURITY.md). Release history is in [`CHANGELOG.md`](CHANGELOG.md).
+
+MIT License. Copyright Ledger contributors.
