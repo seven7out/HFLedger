@@ -1,16 +1,166 @@
+import copy
 import datetime
 import http.client
 import json
 import os
+import sys
+import tempfile
 import threading
+import types
 import unittest
 from unittest import mock
+
+
+# Prompts 7, 8, and 11 intentionally start from the same contract commit. These
+# narrow transport doubles keep this branch testable before Prompt 7/8 are
+# integrated; the real modules win automatically once their branches land.
+try:
+    from core import local_state as _local_state_dependency
+except ImportError:  # pragma: no cover - removed by Prompt 8 integration
+    _local_state_dependency = types.ModuleType("core.local_state")
+
+    class _LocalStateError(ValueError):
+        def __init__(self, code, status, current_revision=None):
+            self.code = code
+            self.status = status
+            self.current_revision = current_revision
+            super().__init__(code)
+
+    class _LocalStateBackend:
+        _VIEWS = ("today", "changes", "all-work", "shipped-log", "watched")
+        _COMMANDS = {
+            "record-successful-visit", "mark-changes-seen",
+            "acknowledge-attention", "snooze-attention",
+            "clear-attention-triage", "set-watch", "set-navigation",
+            "set-pane-widths", "set-disclosure",
+        }
+
+        def __init__(self, durable, context_ids):
+            self._mode = "durable" if durable else "session"
+            self._revision = 0
+            self._contexts = {context_id: self._default_context(context_id)
+                              for context_id in context_ids}
+
+        @classmethod
+        def _default_context(cls, context_id):
+            return {
+                "contextId": context_id,
+                "lastSuccessfulVisitAt": None,
+                "viewCursors": [
+                    {"view": view, "cursor": None, "seenAt": None}
+                    for view in cls._VIEWS
+                ],
+                "seenChanges": [],
+                "attention": [],
+                "watched": [],
+                "navigation": {
+                    "selectedView": "today", "selectedProjectId": None,
+                    "selectedItemId": None,
+                },
+                "layout": {
+                    "sidebarWidth": 210, "inspectorWidth": 360,
+                    "disclosures": [],
+                },
+            }
+
+        def capability(self):
+            return {
+                "mode": self._mode, "available": True,
+                "schemaVersion": 1, "reason": None,
+            }
+
+        def get(self, context_id):
+            if context_id not in self._contexts:
+                raise _LocalStateError("unknown-context", 400)
+            return {
+                "schemaVersion": 1,
+                "revision": self._revision,
+                "context": copy.deepcopy(self._contexts[context_id]),
+                "warning": None,
+            }
+
+        def command(self, context_id, expected_revision, command, arguments):
+            if expected_revision != self._revision:
+                raise _LocalStateError(
+                    "revision-conflict", 409, current_revision=self._revision)
+            if command not in self._COMMANDS:
+                raise _LocalStateError("invalid-command", 400)
+            if not isinstance(arguments, dict):
+                raise _LocalStateError("invalid-arguments", 400)
+            for key in arguments:
+                if key in {"path", "root", "resolution", "evidence", "ledgerAction"}:
+                    raise _LocalStateError("invalid-arguments", 400)
+            item_id = arguments.get("itemId")
+            if item_id is not None and (not isinstance(item_id, str) or not item_id.startswith("item-")):
+                raise _LocalStateError("invalid-arguments", 400)
+            if command == "snooze-attention":
+                try:
+                    parsed = datetime.datetime.fromisoformat(
+                        arguments.get("snoozedUntil", "").replace("Z", "+00:00"))
+                    if parsed.tzinfo is None:
+                        raise ValueError
+                except (AttributeError, ValueError):
+                    raise _LocalStateError("invalid-arguments", 400)
+            if command == "set-watch":
+                context = self._contexts[context_id]
+                context["watched"] = [
+                    record for record in context["watched"]
+                    if record["itemId"] != arguments["itemId"]
+                ]
+                if arguments.get("watched") is True:
+                    context["watched"].append({
+                        "itemId": arguments["itemId"],
+                        "watchedAt": "2026-07-19T06:00:00Z",
+                    })
+            self._revision += 1
+            return self.get(context_id)
+
+    def _create_backend(root, workspace_id, allowed_context_ids, now_fn):
+        del workspace_id, now_fn
+        return _LocalStateBackend(root is not None, allowed_context_ids)
+
+    _local_state_dependency.LocalStateError = _LocalStateError
+    _local_state_dependency.create_backend = _create_backend
+    sys.modules["core.local_state"] = _local_state_dependency
 
 from app import server
 from core import ledger, reconcile, schema, store
 from tests.helpers import (
     action_package, decision_package, load_board, new_home, read_ledger,
 )
+
+
+TEST_ITEM_ID = "item-0123456789abcdef01234567"
+TEST_ATTENTION_KEY = "attention-0123456789abcdef01234567"
+TEST_CHANGE_ID = "change-0123456789abcdef01234567"
+
+
+if not hasattr(server.orientation, "build_v2"):  # pragma: no cover - Prompt 7 seam
+    def _build_v2(_board, _entries, _config, now_utc,
+                  normalized_adapter_bundle=None, local_view_state=None,
+                  collector_report=None):
+        del normalized_adapter_bundle, local_view_state, collector_report
+        return {
+            "version": 2,
+            "generatedAt": now_utc.isoformat(),
+            "nextCursor": "ov2:fictional-cursor",
+            "attention": {
+                "items": [], "eligibleTotal": 0, "total": 0,
+                "acknowledgedTotal": 0, "snoozedTotal": 0,
+                "cap": 7, "truncated": False,
+            },
+            "changes": {"groups": [], "unseenTotal": 0},
+            "changesById": [{"id": TEST_CHANGE_ID}],
+            "items": [{
+                "id": TEST_ITEM_ID,
+                "title": "Inspect the fictional timer dossier",
+                "primaryHome": "needs-you",
+                "provenance": "verified",
+                "attentionKey": TEST_ATTENTION_KEY,
+            }],
+        }
+
+    server.orientation.build_v2 = _build_v2
 
 
 class ServerCase(unittest.TestCase):
@@ -87,7 +237,10 @@ class ViewAndStaticTests(ServerCase):
         self.assertIn("ownerTasks", body)
         self.assertIn("resolved", body)
         self.assertEqual(body["orientation"]["version"], 1)
+        self.assertEqual(body["orientationV2"]["version"], 2)
         self.assertIn("coverage", body["orientation"])
+        self.assertEqual(body["ui"]["localState"]["mode"], "session")
+        self.assertTrue(body["ui"]["localState"]["available"])
 
     def test_cards_are_compiled_from_live_admitted_packages(self):
         decision = decision_package(self.config)
@@ -149,6 +302,278 @@ class ViewAndStaticTests(ServerCase):
         self.assertEqual(response.getheader("Cache-Control"), "no-store")
         self.assertIsNone(response.getheader("Access-Control-Allow-Origin"))
         self.assertIn("default-src 'self'", response.getheader("Content-Security-Policy"))
+
+    def test_normalized_item_lookup_is_projection_bounded(self):
+        self.decision()
+        _response, board, _connection = self.get("/api/board")
+        item_id = board["orientationV2"]["items"][0]["id"]
+        response, body, _connection = self.get("/api/items/%s" % item_id)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(body["version"], 2)
+        self.assertEqual(body["context"], "main")
+        self.assertEqual(body["item"]["id"], item_id)
+        self.assertEqual(response.getheader("Cache-Control"), "no-store")
+
+        response, _body, _connection = self.get("/api/items/not-an-item")
+        self.assertEqual(response.status, 400)
+        response, _body, _connection = self.get(
+            "/api/items/item-ffffffffffffffffffffffff")
+        self.assertEqual(response.status, 404)
+
+
+class LocalStateRouteTests(ServerCase):
+    def command(self, command, arguments, revision, **extra):
+        body = {
+            "schemaVersion": 1,
+            "context": "main",
+            "expectedRevision": revision,
+            "command": command,
+            "arguments": arguments,
+        }
+        body.update(extra)
+        return self.post("/api/local-state/command", body)
+
+    def test_get_returns_context_revision_capability_and_no_store(self):
+        response, body, _connection = self.get("/api/local-state?context=main")
+        self.assertEqual(response.status, 200)
+        self.assertEqual(body["schemaVersion"], 1)
+        self.assertEqual(body["revision"], 0)
+        self.assertEqual(body["context"]["contextId"], "main")
+        self.assertEqual(body["capability"]["mode"], "session")
+        self.assertEqual(response.getheader("Cache-Control"), "no-store")
+        self.assertIsNone(response.getheader("Access-Control-Allow-Origin"))
+
+        response, _body, _connection = self.get(
+            "/api/local-state?context=main&context=main")
+        self.assertEqual(response.status, 400)
+        response, body, _connection = self.get(
+            "/api/local-state?context=main&path=/tmp/private")
+        self.assertEqual(response.status, 400)
+        self.assertNotIn("/tmp/private", json.dumps(body))
+
+    def test_every_local_command_bypasses_read_only_and_preserves_authority(self):
+        self.decision()
+        self.httpd.runtime.read_only = True
+        self.httpd.runtime.ui["readOnly"] = True
+        before_board = self.board_bytes()
+        before_ledger = list(read_ledger(self.home))
+        _response, board, _connection = self.get("/api/board")
+        projection = board["orientationV2"]
+        current_cursor = projection["nextCursor"]
+        attention_item = next(
+            item for item in projection["items"] if item.get("attentionKey"))
+        item_id = attention_item["id"]
+        attention_key = attention_item["attentionKey"]
+        change_id = projection["changesById"][0]["id"]
+        tomorrow = (datetime.datetime.now(datetime.timezone.utc) +
+                    datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        commands = [
+            ("record-successful-visit", {
+                "view": "today", "cursor": current_cursor,
+                "seenChangeIds": [],
+            }),
+            ("mark-changes-seen", {
+                "changeIds": [change_id],
+            }),
+            ("acknowledge-attention", {
+                "itemId": item_id,
+                "attentionKey": attention_key,
+            }),
+            ("snooze-attention", {
+                "itemId": item_id,
+                "attentionKey": attention_key,
+                "snoozedUntil": tomorrow,
+            }),
+            ("clear-attention-triage", {"itemId": item_id}),
+            ("set-watch", {"itemId": item_id, "watched": True}),
+            ("set-navigation", {
+                "selectedView": "today", "selectedProjectId": None,
+                "selectedItemId": item_id,
+            }),
+            ("set-pane-widths", {"sidebarWidth": 220, "inspectorWidth": 360}),
+            ("set-disclosure", {"key": "inspector.evidence", "expanded": True}),
+        ]
+        revision = 0
+        for command, arguments in commands:
+            response, body, _connection = self.command(command, arguments, revision)
+            self.assertEqual(response.status, 200, command)
+            revision += 1
+            self.assertEqual(body["revision"], revision, command)
+            self.assertEqual(body["context"]["contextId"], "main", command)
+        self.assertEqual(self.board_bytes(), before_board)
+        self.assertEqual(read_ledger(self.home), before_ledger)
+
+        response, body, _connection = self.post(
+            "/api/decisions/reorder", {"ids": []})
+        self.assertEqual(response.status, 403)
+        self.assertEqual(body, {"error": "workspace is read-only"})
+
+    def test_closed_envelope_and_command_arguments_reject_smuggling(self):
+        self.decision()
+        _response, board, _connection = self.get("/api/board")
+        item_id = board["orientationV2"]["items"][0]["id"]
+        before_board = self.board_bytes()
+        before_ledger = list(read_ledger(self.home))
+        response, _body, _connection = self.command(
+            "set-watch", {"itemId": item_id, "watched": True}, 0,
+            path="/tmp/private")
+        self.assertEqual(response.status, 400)
+
+        response, body, _connection = self.command(
+            "set-watch", {"itemId": item_id, "watched": True,
+                          "path": "/tmp/private"}, 0)
+        self.assertEqual(response.status, 400)
+        self.assertNotIn("/tmp/private", json.dumps(body))
+        self.assertEqual(self.board_bytes(), before_board)
+        self.assertEqual(read_ledger(self.home), before_ledger)
+
+    def test_invalid_item_date_and_revision_have_closed_errors(self):
+        self.decision()
+        _response, board, _connection = self.get("/api/board")
+        attention_item = next(
+            item for item in board["orientationV2"]["items"]
+            if item.get("attentionKey"))
+        item_id = attention_item["id"]
+        attention_key = attention_item["attentionKey"]
+        response, body, _connection = self.command(
+            "record-successful-visit", {
+                "view": "today", "cursor": "ov2:stale-cursor",
+                "seenChangeIds": [],
+            }, 0)
+        self.assertEqual(response.status, 409)
+        self.assertEqual(body["code"], "stale-cursor")
+        self.assertEqual(body["currentRevision"], 0)
+
+        response, body, _connection = self.command(
+            "set-watch", {"itemId": "../board.json", "watched": True}, 0)
+        self.assertEqual(response.status, 400)
+        self.assertEqual(body["code"], "invalid-arguments")
+        self.assertNotIn("board.json", json.dumps(body))
+
+        response, body, _connection = self.command(
+            "set-watch", {
+                "itemId": "item-ffffffffffffffffffffffff", "watched": True,
+            }, 0)
+        self.assertEqual(response.status, 404)
+        self.assertEqual(body["code"], "unknown-item")
+
+        response, body, _connection = self.command(
+            "mark-changes-seen", {
+                "changeIds": ["change-ffffffffffffffffffffffff"],
+            }, 0)
+        self.assertEqual(response.status, 404)
+        self.assertEqual(body["code"], "unknown-change")
+
+        response, body, _connection = self.command(
+            "snooze-attention", {
+                "itemId": item_id,
+                "attentionKey": attention_key,
+                "snoozedUntil": "not-a-date",
+            }, 0)
+        self.assertEqual(response.status, 400)
+        self.assertEqual(body["code"], "invalid-arguments")
+
+        response, body, _connection = self.command(
+            "set-watch", {"itemId": item_id, "watched": True}, 9)
+        self.assertEqual(response.status, 409)
+        self.assertEqual(body["code"], "revision-conflict")
+        self.assertEqual(body["currentRevision"], 0)
+
+    def test_local_state_failure_does_not_take_down_validated_board(self):
+        class InjectedLocalStateError(ValueError):
+            def __init__(self):
+                self.code = "corrupt-unrecovered"
+                self.status = 503
+                super().__init__(self.code)
+
+        backend = self.httpd.runtime.local_state
+        unavailable = {
+            "mode": "unavailable", "available": False,
+            "schemaVersion": 1, "reason": "corrupt-unrecovered",
+        }
+        with (mock.patch.object(server.local_state, "LocalStateError",
+                                InjectedLocalStateError),
+              mock.patch.object(backend, "get", side_effect=InjectedLocalStateError()),
+              mock.patch.object(backend, "capability", return_value=unavailable)):
+            response, body, _connection = self.get("/api/local-state?context=main")
+            self.assertEqual(response.status, 503)
+            self.assertEqual(body["code"], "corrupt-unrecovered")
+            self.assertNotIn(self.home, json.dumps(body))
+
+            response, body, _connection = self.get("/api/board")
+            self.assertEqual(response.status, 200)
+            self.assertEqual(body["orientationV2"]["version"], 2)
+            self.assertFalse(body["ui"]["localState"]["available"])
+
+    def test_local_route_uses_32k_limit_and_loopback_host_defense(self):
+        connection = self.connection()
+        connection.putrequest("POST", "/api/local-state/command")
+        connection.putheader("Content-Type", "application/json")
+        connection.putheader(
+            "Content-Length", str(server.LOCAL_STATE_MAX_BODY_BYTES + 1))
+        connection.endheaders()
+        response = connection.getresponse()
+        body = json.loads(response.read().decode("utf-8"))
+        self.assertEqual(response.status, 413)
+        self.assertIn("too large", body["error"])
+        connection.close()
+
+        response, body, _connection = self.post(
+            "/api/local-state/command", {}, headers={"Host": "attacker.example"})
+        self.assertEqual(response.status, 403)
+        self.assertIn("non-loopback", body["error"])
+
+    def test_local_routes_are_separate_from_authoritative_registry(self):
+        self.assertNotIn("/api/local-state/command", server.POST_ROUTES)
+        self.assertIn("/api/local-state/command", server.LOCAL_POST_ROUTES)
+
+    def test_startup_requires_paired_trusted_native_arguments(self):
+        with self.assertRaisesRegex(ValueError, "required together"):
+            server.Runtime(self.home, local_state_root=self.temp.name)
+        with self.assertRaisesRegex(ValueError, "absolute path"):
+            server.Runtime(
+                self.home, local_state_root="relative/UIState",
+                local_state_workspace_id="workspace-fictional")
+        runtime = server.Runtime(
+            self.home, local_state_root=os.path.realpath(self.temp.name),
+            local_state_workspace_id="workspace-fictional")
+        self.assertEqual(runtime.local_state.capability()["mode"], "durable")
+
+        root = os.path.realpath(self.temp.name)
+        with mock.patch.object(server, "serve") as launch:
+            server.main([
+                "--home", self.home,
+                "--port", "17173",
+                "--local-state-root", root,
+                "--local-state-workspace-id", "workspace-fictional",
+            ])
+        launch.assert_called_once_with(
+            os.path.abspath(self.home), 17173, server.HOST,
+            local_state_root=root,
+            local_state_workspace_id="workspace-fictional",
+        )
+
+    def test_durable_workspace_ids_do_not_share_local_state(self):
+        with tempfile.TemporaryDirectory() as state_root:
+            state_root = os.path.realpath(state_root)
+            first = server.Runtime(
+                self.home, local_state_root=state_root,
+                local_state_workspace_id="workspace-first")
+            second = server.Runtime(
+                self.home, local_state_root=state_root,
+                local_state_workspace_id="workspace-second")
+            result = server.local_state_command(
+                first.local_state, frozenset(first.contexts), {
+                    "schemaVersion": 1,
+                    "context": "main",
+                    "expectedRevision": 0,
+                    "command": "set-watch",
+                    "arguments": {"itemId": TEST_ITEM_ID, "watched": True},
+                })
+            self.assertEqual(result["revision"], 1)
+            isolated = server.build_local_state_view(second, "main")
+            self.assertEqual(isolated["revision"], 0)
+            self.assertEqual(isolated["context"]["watched"], [])
 
 
 class BoardMutationTests(ServerCase):
@@ -568,6 +993,22 @@ class ContextTests(unittest.TestCase):
         with open(os.path.join(self.home, "board.json"), "rb") as handle:
             self.assertEqual(handle.read(), primary_before)
         self.assertEqual(len(load_board(self.secondary)["decisions"]["resolved"]), 1)
+
+    def test_local_state_is_context_scoped(self):
+        item_id = "item-0123456789abcdef01234567"
+        result = server.local_state_command(
+            self.runtime.local_state, frozenset(self.runtime.contexts), {
+            "schemaVersion": 1,
+            "context": "main",
+            "expectedRevision": 0,
+            "command": "set-watch",
+            "arguments": {"itemId": item_id, "watched": True},
+        })
+        self.assertEqual(result["context"]["contextId"], "main")
+        self.assertEqual(result["context"]["watched"][0]["itemId"], item_id)
+        studio = server.build_local_state_view(self.runtime, "studio")
+        self.assertEqual(studio["context"]["contextId"], "studio")
+        self.assertEqual(studio["context"]["watched"], [])
 
     def test_ui_config_validation_rejects_duplicate_contexts_and_bad_accent(self):
         config = schema.default_config("Fictional project")
