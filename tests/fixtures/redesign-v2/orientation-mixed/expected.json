@@ -1,0 +1,67 @@
+{
+  "contractVersion": 2,
+  "totals": {
+    "items": 15,
+    "attentionEligible": 9,
+    "attentionVisible": 7,
+    "byHome": {
+      "needs-you": 3,
+      "disputed": 2,
+      "silent-while-observed": 1,
+      "shipped-unverified": 4,
+      "in-motion": 1,
+      "queued": 1,
+      "shipped-verified": 1,
+      "parked": 1,
+      "unobserved": 1
+    }
+  },
+  "attention": {
+    "cap": 7,
+    "truncated": true,
+    "sourceRefsInOrder": [
+      "task:ovenlight:approval",
+      "task:ovenlight:owner-copy",
+      "task:ovenlight:owner-followup",
+      "task:ovenlight:conflict",
+      "task:ovenlight:second-conflict",
+      "task:ovenlight:reported",
+      "task:ovenlight:reported-last"
+    ]
+  },
+  "homes": {
+    "task:ovenlight:approval": "needs-you",
+    "task:ovenlight:owner-followup": "needs-you",
+    "task:ovenlight:owner-copy": "needs-you",
+    "task:ovenlight:conflict": "disputed",
+    "task:ovenlight:second-conflict": "disputed",
+    "task:ovenlight:quiet": "silent-while-observed",
+    "task:ovenlight:reported": "shipped-unverified",
+    "task:ovenlight:inferred": "shipped-unverified",
+    "task:ovenlight:reported-copy": "shipped-unverified",
+    "task:ovenlight:reported-last": "shipped-unverified",
+    "task:ovenlight:active": "in-motion",
+    "task:ovenlight:ready": "queued",
+    "task:ovenlight:deployed": "shipped-verified",
+    "task:ovenlight:parked": "parked",
+    "task:ovenlight:unseen-source": "unobserved"
+  },
+  "provenanceExamples": {
+    "verified": "task:ovenlight:deployed",
+    "agent-reported": "task:ovenlight:reported",
+    "inferred": "task:ovenlight:inferred",
+    "unobserved": "task:ovenlight:unseen-source",
+    "disputed": "task:ovenlight:conflict"
+  },
+  "twoClockAssertion": {
+    "sourceItemRef": "task:ovenlight:active",
+    "itemChangedAt": "2026-07-18T14:10:00Z",
+    "relevantSourcesObservedAt": "2026-07-18T17:55:00Z"
+  },
+  "quietSourceRefs": [
+    "task:ovenlight:quiet"
+  ],
+  "unobservedSourceRefs": [
+    "task:ovenlight:unseen-source"
+  ]
+}

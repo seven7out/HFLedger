@@ -1,0 +1,11 @@
+{
+  "fixtureId": "coverage-lifecycle",
+  "contractVersion": 2,
+  "nowUtc": "2026-07-18T18:00:00Z",
+  "purpose": "Follow one silence candidate through every source-health state and a bounded recovery.",
+  "files": [
+    "sources/lifecycle.json",
+    "expected.json"
+  ],
+  "privacy": "fictional-only"
+}

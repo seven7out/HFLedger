@@ -1,6 +1,8 @@
 # Launch kit
 
-These drafts lead with HFLedger's protocol wedge, state current limits plainly, and avoid positioning it as another general agent runner.
+These drafts lead with HFLedger's protocol wedge and its attention/changes
+orientation job, state current limits plainly, and avoid positioning it as
+another general agent runner.
 
 Replace `REPOSITORY_URL` only after the public repository exists. Re-run the public-clone demo before posting.
 
@@ -16,7 +18,9 @@ Body:
 >
 > HFLedger is a local-first, agent-agnostic protocol for that boundary. An agent cannot escalate a decision unless it supplies 2–3 options, a reasoned recommendation, the risk, reversibility, rollback, stable-key dedupe, and the analysis already completed. Owner-only actions need exact instructions and completion proof. “Already done” and “skip it” are durable events too.
 >
-> Underneath is a validated JSON board, append-only JSONL ledger, locked atomic writer, fail-closed reconciler, and a phone-sized decision deck. Optional collectors read GitHub facts and local-file metadata, but their output is explicitly untrusted and grants no authority.
+> The Mac-oriented Today browser ranks what needs attention, groups changes by the run that produced them, and separates the item-change clock from the source-observation clock. Every claim is labeled verified, agent-reported, inferred, unobserved, or disputed. Quiet is shown only when every required source actually observed the silence window.
+>
+> Underneath is a validated JSON board, append-only JSONL ledger, locked atomic writer, fail-closed reconciler, and a separate phone-sized Decision Deck for owner outcomes. Local seen/snooze/watch state never edits the authoritative files. Optional collectors read GitHub facts and local-file metadata, but their output is explicitly untrusted and grants no authority.
 >
 > It is Python 3.9+ standard library, MIT, POSIX, clone-based, and loopback-only by default. It does not run your agents or deploy code. Any runtime that can read files and call a CLI can use it; generic and Claude Code instruction packs are included.
 >
@@ -38,7 +42,7 @@ Body:
 >
 > The state is plain JSON + append-only JSONL. The board writer is locked/atomic, reconciliation is cursor- and provenance-checked, and the phone deck is loopback-only. There are generic and Claude Code prompt packs; any shell-capable runtime can integrate. Optional `gh` and local-file collectors are read-only and marked untrusted.
 >
-> Current limits are intentional: POSIX, clone-based install, no remote UI auth, no Windows writer, and no production automation. The repository includes a fictional two-minute swipe demo and 100+ standard-library tests.
+> Current limits are intentional: POSIX, clone-based install, no remote UI auth, no Windows writer, no production automation, and session-only triage state outside the native Mac host. Notifications beyond the existing owner-ask opt-in, rich menu-bar UI, Quick Look, analytics, global search, multi-machine skew, and deep links are not shipped. The repository includes a fictional two-minute orientation-and-swipe demo and 100+ standard-library tests.
 >
 > I am looking for feedback from people running multiple local agents: does a strict admission gate reduce approval fatigue, or would you prefer a smaller contract?
 >
@@ -46,11 +50,11 @@ Body:
 
 ## Agent-tooling roundup blurb
 
-> HFLedger is a local-first, agent-agnostic protocol for governing the AI-agent-to-human interrupt channel. It admits only structured decisions or exact owner-only actions, captures “done” and “skip” reports durably, and reconciles everything through a validated JSON board and append-only ledger. The MIT, standard-library reference includes a loopback decision deck, generic and Claude Code instruction packs, and read-only GitHub/local metadata collectors. A fictional first swipe takes about two minutes. REPOSITORY_URL
+> HFLedger is a local-first, agent-agnostic protocol and quiet ledger browser for work across agents. It ranks what needs attention, groups changes by exact runs, distinguishes verified/reported/inferred/disputed/unobserved evidence, and admits only structured decisions or exact owner-only actions. The MIT reference uses validated JSON plus an append-only ledger, a separate loopback Decision Deck, generic runtime packs, and explicit read-only collectors. A fictional first orientation and swipe takes about two minutes. REPOSITORY_URL
 
 ## Short social post
 
-> Agents need a rate limit on human attention. HFLedger is a local protocol that rejects vague escalations, requires options + recommendation + risk/rollback, and durably captures “already done.” Plain JSON/JSONL, locked writes, phone decision deck, agent-agnostic, MIT. Two-minute demo: REPOSITORY_URL
+> Agents need a rate limit on human attention—and owners need one quiet place to see what changed. HFLedger ranks attention, groups exact runs, labels evidence provenance, rejects vague escalations, and durably captures “already done.” Plain JSON/JSONL, local-first, agent-agnostic, MIT. Two-minute demo: REPOSITORY_URL
 
 ## Likely questions
 

@@ -1,0 +1,38 @@
+{
+  "contractVersion": 2,
+  "homePrecedence": [
+    "needs-you",
+    "disputed",
+    "silent-while-observed",
+    "shipped-unverified",
+    "in-motion",
+    "queued",
+    "shipped-verified",
+    "parked",
+    "unobserved"
+  ],
+  "attentionSortBands": [
+    "primaryHome",
+    "deadline",
+    "priority",
+    "impact",
+    "homeSince",
+    "itemId"
+  ],
+  "permutationCountRequired": 100,
+  "tiedSourceRefsInStableItemIdOrder": [
+    "task:ovenlight:tie-alpha",
+    "task:ovenlight:tie-charlie",
+    "task:ovenlight:tie-bravo",
+    "task:ovenlight:tie-delta"
+  ],
+  "tiedStableItemIdsInOrder": [
+    "item-32d71822bf1871c9237ab712",
+    "item-a4353f960b97e51cfec2ffd6",
+    "item-cecf72458285d2b3eed1c913",
+    "item-d7b90d263c7cce951a234e90"
+  ],
+  "allDeclaredOrdersMustMatch": true,
+  "weightedScoreAllowed": false,
+  "onePrimaryHomePerItem": true
+}

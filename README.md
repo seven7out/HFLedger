@@ -1,16 +1,18 @@
 # HFLedger
 
-HFLedger is a local control tower for work spread across AI coding agents. It
-shows what shipped, what is moving, where an owner is needed, what has gone
-quiet, and which operating habits would make the agents more effective.
+HFLedger is a quiet local ledger browser for work spread across AI coding
+agents. It answers two questions first: what needs attention now, and what
+changed since the last successful visit. Ranked attention, run-grouped changes,
+source health, and evidence dossiers replace a metric dashboard or a second
+task database.
 
 Most agent tools make it easy to start work inside one task. HFLedger provides
 the missing orientation across tasks and runtimes while retaining its strict
 boundary for human interruptions: when may an agent interrupt a person, what
 must it provide, and how does a reported outcome become durable? It combines a
-Today view, local JSON board, append-only evidence ledger, strict admission and
-completion gates, a phone-sized decision deck, and optional read-only
-collectors.
+read-only Today browser, local JSON board, append-only evidence ledger, strict
+admission and completion gates, a phone-sized Decision Deck, app-private local
+triage state, and optional read-only collectors.
 
 HFLedger is agent-agnostic. Any runtime that can read files and run a command can use the protocol. The reference implementation is Python standard library, local-first, and MIT licensed.
 
@@ -122,26 +124,43 @@ generation are in [`docs/automation.md`](docs/automation.md).
 
 The standard-library HTTP service provides:
 
-- a Today view for shipped, in-motion, owner-needed, and stalled work, plus
-  deterministic agent-effectiveness suggestions and coverage notices;
+- a Today view with capped ranked attention, changes grouped by an exact run,
+  and quiet concerns only when the required sources were actually observed;
+- Changes, All Work, Shipped Log, Watched, Projects, and an evidence inspector
+  with explicit provenance and separate item-change/source-observation clocks;
 - a responsive board for queue, inbox, owner tasks, admitted asks, and outcomes;
 - a mobile decision deck with option selection, recommendation acceptance, snooze, need-more-info, completion, skip, and digest-bound undo where safe;
 - config-driven branding and allowlisted independent contexts.
 
+Today can acknowledge, snooze, watch, and mark changes seen only in private
+presentation state. It never answers a decision, completes work, edits the
+board, appends evidence, changes collector configuration, merges, or deploys.
+Those actions remain in the Decision Deck or the named authoritative source.
+See [`docs/ui.md`](docs/ui.md) for the nine one-home states, evidence vocabulary,
+coverage model, keyboard/menu behavior, and first-run/degraded limitations.
+
 It binds only to `127.0.0.1`, rejects non-loopback Host headers, has no CORS opt-in, and is not an authenticated remote service. Do not put an unauthenticated proxy in front of it. See [`docs/ui.md`](docs/ui.md).
 
 Observer workspaces can set `ui.readOnly: true`; the service then exposes the
-same validated views while refusing every mutation request with `403` and
-disabling write controls in both reference clients.
+same validated views while refusing authoritative mutation requests with `403`.
+Private seen, acknowledgement, snooze, watch, navigation, and pane state remain
+presentation-only and leave `board.json` and `ledger.jsonl` byte-identical.
 
 ## Current limits
 
 - POSIX `fcntl` locking; native Windows writers are unsupported.
 - The CLI is clone-based; the Mac app is source-buildable but has no notarized public release yet.
 - The reference UI is loopback-only.
+- Browser-only serving keeps triage state for the current process only; durable
+  state across process restarts requires the native Mac host.
 - GitHub collection requires a separately installed and authenticated `gh` CLI.
+- Collectors are explicit and off by default. Disabled or never-observed
+  sources are shown as unobserved, never as quiet or all clear.
 - Schedules are generated for inspection but never installed or activated automatically.
 - Production writes are unsupported by the automation policy.
+- Transition notifications, a rich menu-bar popover, Quick Look, analytics,
+  advanced disputes, multi-machine skew, global search, and deep links are
+  deferred; the interface does not present them as available controls.
 
 The CLI command remains `ledger`, which can collide with the ledger-cli accounting program. If both are installed, use an alias such as `alias hfledger=/path/to/hfledger/cli/ledger`.
 

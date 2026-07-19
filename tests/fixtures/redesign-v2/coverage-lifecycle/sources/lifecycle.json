@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "sourceItemRef": "task:ovenlight:quiet-candidate",
+  "expectedActivity": true,
+  "silenceWindowSeconds": 172800,
+  "itemChangedAt": "2026-07-14T17:00:00Z",
+  "requiredSourceId": "forge:ovenlight",
+  "snapshots": [
+    {
+      "id": "disabled",
+      "nowUtc": "2026-07-18T18:00:00Z",
+      "state": "disabled",
+      "configured": false,
+      "lastAttemptAt": null,
+      "lastSuccessfulObservationAt": null,
+      "freshUntil": null,
+      "windowFrom": null,
+      "windowThrough": null,
+      "reasonCodes": ["collector-disabled"]
+    },
+    {
+      "id": "never-observed",
+      "nowUtc": "2026-07-18T18:00:00Z",
+      "state": "never-observed",
+      "configured": true,
+      "lastAttemptAt": null,
+      "lastSuccessfulObservationAt": null,
+      "freshUntil": null,
+      "windowFrom": null,
+      "windowThrough": null,
+      "reasonCodes": ["no-completed-attempt"]
+    },
+    {
+      "id": "unavailable",
+      "nowUtc": "2026-07-18T18:00:00Z",
+      "state": "unavailable",
+      "configured": true,
+      "lastAttemptAt": "2026-07-18T17:55:00Z",
+      "lastSuccessfulObservationAt": "2026-07-18T15:00:00Z",
+      "freshUntil": "2026-07-18T15:10:00Z",
+      "windowFrom": null,
+      "windowThrough": null,
+      "reasonCodes": ["latest-attempt-failed"]
+    },
+    {
+      "id": "degraded",
+      "nowUtc": "2026-07-18T18:00:00Z",
+      "state": "degraded",
+      "configured": true,
+      "lastAttemptAt": "2026-07-18T17:55:00Z",
+      "lastSuccessfulObservationAt": "2026-07-18T17:55:00Z",
+      "freshUntil": "2026-07-18T18:05:00Z",
+      "windowFrom": "2026-07-16T17:55:00Z",
+      "windowThrough": "2026-07-18T17:55:00Z",
+      "reasonCodes": ["result-truncated"]
+    },
+    {
+      "id": "stale",
+      "nowUtc": "2026-07-18T18:00:00Z",
+      "state": "stale",
+      "configured": true,
+      "lastAttemptAt": "2026-07-18T15:00:00Z",
+      "lastSuccessfulObservationAt": "2026-07-18T15:00:00Z",
+      "freshUntil": "2026-07-18T15:10:00Z",
+      "windowFrom": "2026-07-16T15:00:00Z",
+      "windowThrough": "2026-07-18T15:00:00Z",
+      "reasonCodes": ["freshness-window-expired"]
+    },
+    {
+      "id": "idle",
+      "nowUtc": "2026-07-18T18:00:00Z",
+      "state": "idle",
+      "configured": true,
+      "lastAttemptAt": "2026-07-18T17:55:00Z",
+      "lastSuccessfulObservationAt": "2026-07-18T17:55:00Z",
+      "freshUntil": "2026-07-18T18:05:00Z",
+      "windowFrom": "2026-07-16T17:55:00Z",
+      "windowThrough": "2026-07-18T17:55:00Z",
+      "reasonCodes": []
+    },
+    {
+      "id": "healthy",
+      "nowUtc": "2026-07-18T18:00:00Z",
+      "state": "healthy",
+      "configured": true,
+      "lastAttemptAt": "2026-07-18T17:55:00Z",
+      "lastSuccessfulObservationAt": "2026-07-18T17:55:00Z",
+      "freshUntil": "2026-07-18T18:05:00Z",
+      "windowFrom": "2026-07-16T17:55:00Z",
+      "windowThrough": "2026-07-18T17:55:00Z",
+      "reasonCodes": []
+    },
+    {
+      "id": "recovered",
+      "nowUtc": "2026-07-18T18:10:00Z",
+      "state": "healthy",
+      "configured": true,
+      "lastAttemptAt": "2026-07-18T18:08:00Z",
+      "lastSuccessfulObservationAt": "2026-07-18T18:08:00Z",
+      "freshUntil": "2026-07-18T18:18:00Z",
+      "windowFrom": "2026-07-16T18:08:00Z",
+      "windowThrough": "2026-07-18T18:08:00Z",
+      "reasonCodes": [],
+      "recoveredAt": "2026-07-18T18:08:00Z",
+      "changeKind": "source-recovered"
+    }
+  ]
+}

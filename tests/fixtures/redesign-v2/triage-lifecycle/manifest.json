@@ -1,0 +1,16 @@
+{
+  "fixtureId": "triage-lifecycle",
+  "contractVersion": 2,
+  "nowUtc": "2026-07-18T18:00:00Z",
+  "purpose": "Exercise closed private seen, attention, watch, navigation, layout, migration, corruption, expiry, orphan, restart, and port-independent state.",
+  "files": [
+    "triage-state.json",
+    "legacy-v0.json",
+    "expired-snooze.json",
+    "orphaned-ids.json",
+    "corrupt-state.txt",
+    "expected.json"
+  ],
+  "declaredCorruptionInput": "corrupt-state.txt",
+  "privacy": "fictional-only"
+}

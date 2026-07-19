@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "runs": [
+    {
+      "sourceId": "board:main",
+      "sourceRunRef": "run:ovenlight:adapter:0718-0900",
+      "kind": "adapter-run",
+      "label": "Morning reconciliation",
+      "startedAt": "2026-07-18T09:00:00Z",
+      "completedAt": "2026-07-18T09:04:00Z",
+      "status": "completed",
+      "provenance": "verified"
+    },
+    {
+      "sourceId": "ledger:main",
+      "sourceRunRef": "run:ovenlight:agent:0718-1200",
+      "kind": "agent-session",
+      "label": "Fictional build session",
+      "startedAt": "2026-07-18T12:00:00Z",
+      "completedAt": "2026-07-18T12:35:00Z",
+      "status": "completed",
+      "provenance": "agent-reported"
+    },
+    {
+      "sourceId": "forge:ovenlight",
+      "sourceRunRef": "run:ovenlight:collector:0718-1500",
+      "kind": "collector",
+      "label": "Fictional review observation",
+      "startedAt": "2026-07-18T15:00:00Z",
+      "completedAt": "2026-07-18T15:02:00Z",
+      "status": "completed",
+      "provenance": "verified"
+    }
+  ],
+  "changes": [
+    {"sourceChangeRef": "change:timer-created", "sourceRunRef": "run:ovenlight:adapter:0718-0900", "sourceItemRef": "task:ovenlight:timer", "kind": "created", "summary": "The fictional timer task was created.", "itemChangedAt": "2026-07-18T09:03:00Z", "timestampEstimated": false, "provenance": "verified"},
+    {"sourceChangeRef": "change:timer-checkpoint", "sourceRunRef": "run:ovenlight:agent:0718-1200", "sourceItemRef": "task:ovenlight:timer", "kind": "progress-reported", "summary": "The fictional timer checkpoint was reported.", "itemChangedAt": "2026-07-18T12:20:00Z", "timestampEstimated": false, "provenance": "agent-reported"},
+    {"sourceChangeRef": "change:labels-review", "sourceRunRef": "run:ovenlight:collector:0718-1500", "sourceItemRef": "task:ovenlight:labels", "kind": "review-requested", "summary": "The fictional label change entered review.", "itemChangedAt": "2026-07-18T15:01:00Z", "timestampEstimated": false, "provenance": "verified"}
+  ],
+  "replay": {
+    "sourceRunRef": "run:ovenlight:agent:0718-1200",
+    "sourceChangeRefs": ["change:timer-checkpoint"]
+  }
+}

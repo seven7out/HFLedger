@@ -1,0 +1,11 @@
+{
+  "fixtureId": "orientation-mixed",
+  "contractVersion": 2,
+  "nowUtc": "2026-07-18T18:00:00Z",
+  "purpose": "Cover every primary home and provenance word with capped ranked attention and separate freshness clocks.",
+  "files": [
+    "sources/adapter-bundle.json",
+    "expected.json"
+  ],
+  "privacy": "fictional-only"
+}

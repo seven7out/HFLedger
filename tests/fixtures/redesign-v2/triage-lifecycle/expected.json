@@ -1,0 +1,25 @@
+{
+  "contractVersion": 2,
+  "durableStateMode": "durable",
+  "browserFallbackMode": "session",
+  "authoritativeFilesRemainByteIdentical": true,
+  "dynamicPorts": [53111, 61907],
+  "workspaceIdentity": "workspace-ovenlight-fixture",
+  "commandsCovered": [
+    "record-successful-visit",
+    "mark-changes-seen",
+    "acknowledge-attention",
+    "snooze-attention",
+    "clear-attention-triage",
+    "set-watch",
+    "set-navigation",
+    "set-pane-widths",
+    "set-disclosure"
+  ],
+  "expiredSnooze": {"activeImmediatelyBefore": true, "activeAtBoundary": false, "activeImmediatelyAfter": false},
+  "orphanedWatch": {"retained": true, "rendersBoundedTombstone": true, "cachedTitleOrEvidenceAllowed": false},
+  "legacyMigration": {"targetSchemaVersion": 1, "atomic": true, "idempotent": true, "preserveBeforeImage": true},
+  "corruption": {"preserveRecoveryCopy": true, "defaultStateAllowedAfterRecovery": true, "boardRenderingBlocked": false},
+  "localNoteExcludedFromProjection": true,
+  "portIsWorkspaceIdentity": false
+}

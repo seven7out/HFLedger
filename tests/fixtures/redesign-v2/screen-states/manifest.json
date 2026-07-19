@@ -1,0 +1,11 @@
+{
+  "fixtureId": "screen-states",
+  "contractVersion": 2,
+  "nowUtc": "2026-07-18T18:00:00Z",
+  "purpose": "Provide literal copy and semantic expectations for first-run, empty, no-board, stale, recovered, loading, error, and mixed-evidence screens.",
+  "files": [
+    "sources/states.json",
+    "expected.json"
+  ],
+  "privacy": "fictional-only"
+}

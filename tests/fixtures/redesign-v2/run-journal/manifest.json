@@ -1,0 +1,11 @@
+{
+  "fixtureId": "run-journal",
+  "contractVersion": 2,
+  "nowUtc": "2026-07-18T18:00:00Z",
+  "purpose": "Prove exact run grouping, first-visit behavior, opaque cursor boundaries, replay, and multiple changes on one item.",
+  "files": [
+    "sources/journal.json",
+    "expected.json"
+  ],
+  "privacy": "fictional-only"
+}

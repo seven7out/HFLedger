@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "workspaceId": "workspace-ovenlight-fixture",
+  "revision": 5,
+  "createdAt": "2026-07-17T10:00:00Z",
+  "updatedAt": "2026-07-18T17:00:00Z",
+  "contexts": [
+    {
+      "contextId": "main",
+      "lastSuccessfulVisitAt": null,
+      "viewCursors": [
+        {"view": "today", "cursor": null, "seenAt": null},
+        {"view": "changes", "cursor": null, "seenAt": null},
+        {"view": "all-work", "cursor": null, "seenAt": null},
+        {"view": "shipped-log", "cursor": null, "seenAt": null},
+        {"view": "watched", "cursor": null, "seenAt": null}
+      ],
+      "seenChanges": [],
+      "attention": [
+        {"itemId": "item-444444444444444444444444", "attentionKey": "attention-444444444444444444444444", "state": "snoozed", "changedAt": "2026-07-17T10:00:00Z", "snoozedUntil": "2026-07-18T17:59:59Z", "localNote": null}
+      ],
+      "watched": [],
+      "navigation": {"selectedView": "today", "selectedProjectId": null, "selectedItemId": null},
+      "layout": {"sidebarWidth": 210, "inspectorWidth": 360, "disclosures": []}
+    }
+  ]
+}

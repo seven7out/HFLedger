@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "sourceId": "board:ranking-fixture",
+  "commonObservationAt": "2026-07-18T17:55:00Z",
+  "candidates": [
+    {"sourceItemRef": "task:ovenlight:rank-needs", "entityKind": "decision", "expectedHome": "needs-you", "deadlineBand": "none", "priority": "P2", "impact": "normal", "homeSince": "2026-07-18T12:00:00Z"},
+    {"sourceItemRef": "task:ovenlight:rank-disputed", "entityKind": "queue-task", "expectedHome": "disputed", "deadlineBand": "none", "priority": "P2", "impact": "normal", "homeSince": "2026-07-18T12:00:00Z"},
+    {"sourceItemRef": "task:ovenlight:rank-quiet", "entityKind": "queue-task", "expectedHome": "silent-while-observed", "deadlineBand": "none", "priority": "P2", "impact": "normal", "homeSince": "2026-07-18T12:00:00Z"},
+    {"sourceItemRef": "task:ovenlight:rank-unverified", "entityKind": "queue-task", "expectedHome": "shipped-unverified", "deadlineBand": "none", "priority": "P2", "impact": "normal", "homeSince": "2026-07-18T12:00:00Z"},
+    {"sourceItemRef": "task:ovenlight:rank-motion", "entityKind": "queue-task", "expectedHome": "in-motion", "deadlineBand": "none", "priority": "P2", "impact": "normal", "homeSince": "2026-07-18T12:00:00Z"},
+    {"sourceItemRef": "task:ovenlight:rank-queued", "entityKind": "queue-task", "expectedHome": "queued", "deadlineBand": "none", "priority": "P2", "impact": "normal", "homeSince": "2026-07-18T12:00:00Z"},
+    {"sourceItemRef": "task:ovenlight:rank-verified", "entityKind": "queue-task", "expectedHome": "shipped-verified", "deadlineBand": "none", "priority": "P2", "impact": "normal", "homeSince": "2026-07-18T12:00:00Z"},
+    {"sourceItemRef": "task:ovenlight:rank-parked", "entityKind": "queue-task", "expectedHome": "parked", "deadlineBand": "none", "priority": "P2", "impact": "normal", "homeSince": "2026-07-18T12:00:00Z"},
+    {"sourceItemRef": "task:ovenlight:rank-unobserved", "entityKind": "queue-task", "expectedHome": "unobserved", "deadlineBand": "none", "priority": "P2", "impact": "normal", "homeSince": "2026-07-18T12:00:00Z"},
+    {"sourceItemRef": "task:ovenlight:tie-alpha", "entityKind": "decision", "expectedHome": "needs-you", "deadlineBand": "none", "priority": "P2", "impact": "normal", "homeSince": "2026-07-18T12:00:00Z"},
+    {"sourceItemRef": "task:ovenlight:tie-bravo", "entityKind": "decision", "expectedHome": "needs-you", "deadlineBand": "none", "priority": "P2", "impact": "normal", "homeSince": "2026-07-18T12:00:00Z"},
+    {"sourceItemRef": "task:ovenlight:tie-charlie", "entityKind": "decision", "expectedHome": "needs-you", "deadlineBand": "none", "priority": "P2", "impact": "normal", "homeSince": "2026-07-18T12:00:00Z"},
+    {"sourceItemRef": "task:ovenlight:tie-delta", "entityKind": "decision", "expectedHome": "needs-you", "deadlineBand": "none", "priority": "P2", "impact": "normal", "homeSince": "2026-07-18T12:00:00Z"}
+  ],
+  "declaredInputOrders": [
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0],
+    [4, 9, 1, 12, 6, 2, 10, 0, 8, 3, 11, 5, 7]
+  ]
+}

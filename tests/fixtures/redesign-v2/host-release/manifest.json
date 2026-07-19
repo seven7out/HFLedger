@@ -1,0 +1,10 @@
+{
+  "fixtureId": "host-release",
+  "contractVersion": 2,
+  "nowUtc": "2026-07-18T18:00:00Z",
+  "purpose": "Define fictional native-host lifecycle and privacy acceptance without committing a machine path or generated app state.",
+  "files": [
+    "expected.json"
+  ],
+  "privacy": "fictional-only"
+}

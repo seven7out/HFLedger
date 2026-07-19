@@ -1,0 +1,11 @@
+{
+  "fixtureId": "ranking-ties",
+  "contractVersion": 2,
+  "nowUtc": "2026-07-18T18:00:00Z",
+  "purpose": "Prove primary-home precedence, stable-id tie breaking, and input-order independence without weighted scores.",
+  "files": [
+    "sources/candidates.json",
+    "expected.json"
+  ],
+  "privacy": "fictional-only"
+}

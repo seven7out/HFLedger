@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "states": [
+    {
+      "id": "loading",
+      "hasLastSuccessfulProjection": true,
+      "requestInFlight": true,
+      "projectionValid": true,
+      "coverageState": "complete"
+    },
+    {
+      "id": "first-run",
+      "hasWorkspace": true,
+      "hasSuccessfulVisit": false,
+      "validRecentChanges": 3,
+      "projectionValid": true,
+      "coverageState": "complete"
+    },
+    {
+      "id": "empty-success",
+      "hasWorkspace": true,
+      "hasSuccessfulVisit": true,
+      "attentionTotal": 0,
+      "screenAsOf": "2026-07-18T17:55:00Z",
+      "projectionValid": true,
+      "coverageState": "complete"
+    },
+    {
+      "id": "no-board",
+      "hasWorkspace": false,
+      "projectionValid": false,
+      "coverageState": "invalid"
+    },
+    {
+      "id": "stale-observer",
+      "hasWorkspace": true,
+      "hasSuccessfulVisit": true,
+      "lastSuccessfulProjectionAt": "2026-07-18T15:00:00Z",
+      "projectionValid": false,
+      "coverageState": "invalid",
+      "sourceState": "stale"
+    },
+    {
+      "id": "source-recovered",
+      "hasWorkspace": true,
+      "recoveredAt": "2026-07-18T17:58:00Z",
+      "projectionValid": true,
+      "coverageState": "complete",
+      "sourceState": "healthy",
+      "changeKind": "source-recovered"
+    },
+    {
+      "id": "mixed-evidence",
+      "hasWorkspace": true,
+      "projectionValid": true,
+      "coverageState": "complete",
+      "selectedSourceItemRef": "task:ovenlight:approval",
+      "provenanceWords": ["verified", "agent-reported", "inferred", "unobserved", "disputed"],
+      "linkedFixture": "../orientation-mixed"
+    },
+    {
+      "id": "request-error",
+      "hasWorkspace": true,
+      "hasLastSuccessfulProjection": true,
+      "requestInFlight": false,
+      "projectionValid": false,
+      "coverageState": "invalid",
+      "failureCode": "projection-unavailable"
+    }
+  ]
+}

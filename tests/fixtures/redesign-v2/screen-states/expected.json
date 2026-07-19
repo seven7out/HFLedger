@@ -1,0 +1,65 @@
+{
+  "contractVersion": 2,
+  "states": {
+    "loading": {
+      "keepsLastSuccessfulContent": true,
+      "ariaBusy": true,
+      "fabricatedSkeletonCounts": false
+    },
+    "first-run": {
+      "heading": "Recent activity",
+      "description": "This is your first visit on this Mac. Showing the latest observed changes.",
+      "fabricatedLastVisit": false
+    },
+    "empty-success": {
+      "message": "Nothing needs your attention in the sources observed through 5:55 PM.",
+      "coverageQualified": true,
+      "allClearAllowed": false
+    },
+    "no-board": {
+      "message": "No ledger is open",
+      "routeToLauncher": true,
+      "quietClaimAllowed": false
+    },
+    "stale-observer": {
+      "alertTitle": "Observation is out of date",
+      "lastSuccessfulContentLabeledHistorical": true,
+      "reassuringZeroAllowed": false
+    },
+    "source-recovered": {
+      "metaAlertPresent": false,
+      "changeKind": "source-recovered",
+      "deduplicatedRecoveryChange": true
+    },
+    "mixed-evidence": {
+      "selectedSourceItemRef": "task:ovenlight:approval",
+      "inspectorOrder": [
+        "identity-and-local-overlays",
+        "why-it-is-here",
+        "duration",
+        "next-action",
+        "copy-context",
+        "evidence",
+        "missing-observations",
+        "two-clocks",
+        "history",
+        "safe-source-links",
+        "collapsed-internals"
+      ],
+      "topNeedIdentifiable": true,
+      "newestRunIdentifiable": true
+    },
+    "request-error": {
+      "rawExceptionVisible": false,
+      "lastSuccessfulContentLabeledHistorical": true,
+      "authoritativeMutationOffered": false
+    }
+  },
+  "browserOnlyLimitations": [
+    "session-state-resets-on-process-exit",
+    "no-native-menus",
+    "no-file-watching",
+    "no-dock-badge",
+    "no-native-window-restore"
+  ]
+}
