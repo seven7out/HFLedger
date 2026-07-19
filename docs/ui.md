@@ -187,7 +187,7 @@ Window, and Help menus.
 | `S` | Open the local snooze surface. |
 | `W` | Set watch/unwatch through private local state. |
 | Command-F | Filter the current destination only. |
-| Command-K | Open the command reference/palette. |
+| Command-K | Search bounded projected metadata and the command reference. |
 | Command-1…5 | Today, Changes, All Work, Shipped Log, Watched. |
 | Escape | Close the topmost transient surface and restore its originating focus. |
 
@@ -253,9 +253,14 @@ authority. Open Source requires the existing server-owned read-only link
 resolver; unsupported evidence uses a fixed unavailable state, while the
 existing inspector remains the deeper dossier.
 
+Bounded local search and navigation-only installed-app item links operate only
+over projected metadata and do not change those authority boundaries; see
+[`redesign-v2/search-links.md`](redesign-v2/search-links.md).
+
 V1 does not ship transition-based attention notifications, a rich menu-bar
 status UI, effectiveness analytics, broader dispute analytics,
-multi-machine skew detection, global search, custom deep links, cloud triage
-sync, authoritative Today write-back, notarized publication, updater delivery,
-remote serving, collector auto-enable, or private authoritative cutover. The UI
-contains no permanent empty controls that imply these are available.
+multi-machine skew detection, search beyond that bounded local surface, cloud
+triage sync, authoritative Today write-back, notarized publication, updater
+delivery, remote serving, collector auto-enable, or private authoritative
+cutover. The UI contains no permanent empty controls that imply these are
+available.

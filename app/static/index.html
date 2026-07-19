@@ -31,7 +31,7 @@
         <button id="filter-toggle" class="toolbar-button" type="button" aria-keyshortcuts="Meta+F"
                 aria-controls="filter-panel" aria-expanded="false">Filter</button>
         <button id="commands-button" class="toolbar-button" type="button" aria-keyshortcuts="Meta+K"
-                aria-haspopup="dialog" aria-controls="command-dialog">Commands</button>
+                aria-haspopup="dialog" aria-controls="command-dialog">Search</button>
         <button id="inspector-toggle" class="toolbar-button pane-button" type="button"
                 aria-label="Show inspector" aria-controls="ledger-inspector" aria-expanded="false">Details</button>
       </div>
@@ -205,12 +205,12 @@
   <dialog id="command-dialog" class="ui-dialog command-dialog">
     <form method="dialog">
       <header>
-        <div><p class="dialog-label">Command reference</p><h2>HFLedger commands</h2></div>
+        <div><p class="dialog-label">Local metadata only</p><h2>Search HFLedger</h2></div>
         <button class="dialog-close" value="cancel" aria-label="Close">×</button>
       </header>
       <label class="command-search">
-        <span class="visually-hidden">Filter commands</span>
-        <input id="command-filter" type="search" maxlength="80" placeholder="Filter commands…" autocomplete="off">
+        <span class="visually-hidden">Search commands and ledger items</span>
+        <input id="command-filter" type="search" maxlength="80" placeholder="Search commands and ledger items…" autocomplete="off">
       </label>
       <div id="command-list" class="command-list"></div>
     </form>

@@ -58,6 +58,7 @@ const WORK_TYPE_LABELS = Object.freeze({
 });
 const METADATA_EDITABLE_KINDS = new Set(["queue-task", "inbox-item"]);
 const PRIORITY_RANK = Object.freeze({ P0: 0, P1: 1, P2: 2 });
+const ITEM_ID_PATTERN = /^item-[0-9a-f]{24}$/;
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -87,6 +88,7 @@ const state = {
   quickLookOpen: false,
   loading: false,
   toastUndo: null,
+  pendingItemNavigation: null,
 };
 
 function safeText(value, maximum = 500) {
@@ -300,6 +302,16 @@ function buildQuickLookModel(item, orientation = {}, resolvedLinks = new Map(), 
     truncated: evidenceIds.length > QUICK_LOOK_MAX_EVIDENCE,
     sourceLink,
   };
+}
+
+function parseItemNavigation(value) {
+  const text = typeof value === "string" ? value : value?.itemId;
+  return ITEM_ID_PATTERN.test(text || "") ? text : null;
+}
+
+function parseItemNavigationHash(hash) {
+  const match = /^#item=(item-[0-9a-f]{24})$/.exec(String(hash || ""));
+  return match ? match[1] : null;
 }
 
 function buildCopyContext(item, orientation = state.orientation) {
@@ -1869,6 +1881,8 @@ async function loadBoard({ preserve = false } = {}) {
     restoreLocalPreferences();
     renderShell();
     renderCenter();
+    const consumedLocation = consumeLocationNavigation();
+    if (!consumedLocation && state.pendingItemNavigation) navigateToItem(state.pendingItemNavigation);
     $("#app-shell").classList.remove("has-error");
     $("#refresh-state").textContent = "";
     scheduleSuccessfulVisit();
@@ -1969,11 +1983,17 @@ const COMMANDS = [
   ["item.acknowledge", "Acknowledge Locally", "E"], ["item.snooze", "Snooze Locally", "S"],
   ["item.watch", "Watch or Unwatch", "W"], ["item.copy-context", "Copy Context", "⇧⌘C"],
 ];
+let commandSearchGeneration = 0;
+let commandSearchTimer = null;
 
-function renderCommands(filter = "") {
+async function renderCommands(filter = "") {
+  const generation = ++commandSearchGeneration;
   const target = $("#command-list");
   const needle = safeText(filter, 80).toLocaleLowerCase();
-  target.replaceChildren(...COMMANDS.filter(([, label]) => label.toLocaleLowerCase().includes(needle)).map(([id, label, shortcut]) => {
+  target.replaceChildren();
+  const commands = COMMANDS.filter(([, label]) => label.toLocaleLowerCase().includes(needle));
+  if (commands.length) target.append(node("p", "command-section-label", "Commands"));
+  target.append(...commands.map(([id, label, shortcut]) => {
     const row = button("command-row", "", () => {
       $("#command-dialog").close();
       dispatchCommand(id);
@@ -1981,7 +2001,46 @@ function renderCommands(filter = "") {
     row.append(node("span", "", label), node("kbd", "", shortcut));
     return row;
   }));
-  if (!target.childElementCount) target.append(node("p", "inline-empty", "No commands match."));
+  if (!needle) {
+    target.append(node("p", "command-hint", "Type a title, stable item ID, reason, project, runtime, provenance, or safe source reference."));
+    return;
+  }
+  const pending = node("p", "command-hint", "Searching projected metadata…");
+  target.append(pending);
+  let results = [];
+  try {
+    const context = state.context ? `&context=${encodeURIComponent(state.context)}` : "";
+    const response = await request(`/api/search?q=${encodeURIComponent(filter)}${context}`);
+    if (generation !== commandSearchGeneration || !$("#command-dialog").open) return;
+    results = Array.isArray(response?.results) ? response.results : [];
+  } catch (error) {
+    if (generation !== commandSearchGeneration) return;
+    pending.textContent = safeText(error.message, 180) || "Search is temporarily unavailable.";
+    return;
+  }
+  pending.remove();
+  if (results.length) target.append(node("p", "command-section-label", "Ledger items"));
+  results.forEach((result) => {
+    const row = button("command-row search-result-row", "", () => {
+      $("#command-dialog").close();
+      navigateToItem(result.itemId, { source: "search" });
+    });
+    const copy = node("span", "search-result-copy");
+    const view = HOME_LABELS[result.primaryHome] || "All Work";
+    const provenance = provenanceLabel(result.provenance);
+    copy.append(node("strong", "", safeText(result.title, 180)));
+    copy.append(node("small", "", `${view} · ${safeText(result.contextId, 32)} · ${safeText(result.statusLabel, 180)} · ${provenance}`));
+    row.append(copy, node("span", "search-match", safeText(result.rankBand, 40).replaceAll("-", " ")));
+    row.setAttribute("aria-label", `${result.title}, ${view}, ${result.contextId}, ${result.statusLabel}, ${provenance}, ${result.rankBand}`);
+    target.append(row);
+  });
+  if (!target.childElementCount) target.append(node("p", "inline-empty", "No commands or ledger items match."));
+  if (!results.length && commands.length) target.append(node("p", "command-hint", "No ledger items match this query."));
+}
+
+function scheduleCommandSearch(value) {
+  window.clearTimeout(commandSearchTimer);
+  commandSearchTimer = window.setTimeout(() => renderCommands(value), 140);
 }
 
 function openCommands() {
@@ -2015,6 +2074,53 @@ function dispatchCommand(id) {
   };
   if (routes[id]) routes[id]();
   else announce("That command is unavailable in this version.");
+}
+
+function navigateToItem(value, { source = "link" } = {}) {
+  const itemId = parseItemNavigation(value);
+  if (!itemId) {
+    state.pendingItemNavigation = null;
+    announce("This HFLedger item link is malformed or unsupported.");
+    return false;
+  }
+  if (!state.orientation) {
+    state.pendingItemNavigation = itemId;
+    return true;
+  }
+  if (!itemMap().has(itemId)) {
+    state.pendingItemNavigation = null;
+    announce("This item is unavailable in the current workspace. It may have moved or been deleted.");
+    return false;
+  }
+  state.pendingItemNavigation = null;
+  state.view = "all-work";
+  state.selectedProject = null;
+  state.homeFilter = null;
+  state.filter = "";
+  $("#view-filter").value = "";
+  closeTransientPanes();
+  renderCenter();
+  updateNavigationSelection();
+  selectDescriptor({ kind: "item", id: itemId }, { focus: false });
+  if (source === "link") announce("Opened a navigation-only HFLedger item link. No action was performed.");
+  return true;
+}
+
+function consumeLocationNavigation() {
+  if (typeof location === "undefined" || !location.hash) return false;
+  if (!location.hash.startsWith("#item=")) return false;
+  const hash = location.hash;
+  state.pendingItemNavigation = null;
+  if (typeof history !== "undefined" && history.replaceState) {
+    history.replaceState(null, "", `${location.pathname}${location.search}`);
+  }
+  const itemId = parseItemNavigationHash(hash);
+  if (!itemId) {
+    announce("This HFLedger item link is malformed or unsupported.");
+    return true;
+  }
+  navigateToItem(itemId);
+  return true;
 }
 
 function isEditingTarget(target) {
@@ -2109,7 +2215,7 @@ function boot() {
     renderCenter();
   });
   $("#commands-button").addEventListener("click", openCommands);
-  $("#command-filter").addEventListener("input", (event) => renderCommands(event.target.value));
+  $("#command-filter").addEventListener("input", (event) => scheduleCommandSearch(event.target.value));
   $("#retry-button").addEventListener("click", () => loadBoard());
   $("#diagnostics-button").addEventListener("click", () => selectDescriptor({ kind: "coverage", id: "screen" }));
   $("#open-workspace-button").addEventListener("click", () => announce("Open Workspace is available from the File menu."));
@@ -2139,6 +2245,10 @@ function boot() {
     const detail = event.detail || {};
     if (detail.announce) announce(`Text size ${detail.label}, ${detail.percent} percent.`);
   });
+  window.addEventListener("hfledger:navigate-item", (event) => {
+    navigateToItem(event.detail, { source: "link" });
+  });
+  window.addEventListener("hashchange", consumeLocationNavigation);
   window.addEventListener("focus", () => { if (state.pendingVisit) recordSuccessfulVisit(false); });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && state.pendingVisit) recordSuccessfulVisit(false);
@@ -2163,6 +2273,8 @@ globalThis.HFLedgerUI = Object.freeze({
   buildQuickLookModel,
   QUICK_LOOK_EVIDENCE_KINDS,
   QUICK_LOOK_MAX_EVIDENCE,
+  parseItemNavigation,
+  parseItemNavigationHash,
   HOME_ORDER: Object.freeze([...HOME_ORDER]),
   PRIMARY_VIEWS: Object.freeze([...PRIMARY_VIEWS]),
   PRIORITY_LABELS,

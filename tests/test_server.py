@@ -242,6 +242,36 @@ class ViewAndStaticTests(ServerCase):
         self.assertEqual(body["ui"]["localState"]["mode"], "session")
         self.assertTrue(body["ui"]["localState"]["available"])
 
+    def test_search_route_uses_the_closed_projection_search_contract(self):
+        self.decision()
+        _response, board, _connection = self.get("/api/board")
+        item = board["orientationV2"]["items"][0]
+        response, body, _connection = self.get("/api/search?q=%s" % item["id"])
+        self.assertEqual(response.status, 200)
+        self.assertEqual(body["version"], 1)
+        self.assertEqual(body["results"][0]["itemId"], item["id"])
+        self.assertEqual(body["results"][0]["contextId"], "main")
+        self.assertEqual(body["results"][0]["workspaceId"], "active")
+        self.assertEqual(set(body["results"][0]), {
+            "workspaceId", "contextId", "itemId", "title", "viewId",
+            "primaryHome", "project", "statusLabel", "provenance", "rankBand",
+        })
+
+    def test_search_route_rejects_unknown_fields_and_overlong_queries(self):
+        response, _body, _connection = self.get("/api/search?q=timer&extra=1")
+        self.assertEqual(response.status, 400)
+        response, _body, _connection = self.get("/api/search?q=%s" % ("a" * 129))
+        self.assertEqual(response.status, 400)
+
+    def test_search_request_log_redacts_the_raw_query(self):
+        private_query = "PRIVATE_FICTIONAL_SEARCH_TERM"
+        with mock.patch.object(server.Handler, "log_message") as log_message:
+            response, _body, _connection = self.get("/api/search?q=%s" % private_query)
+        self.assertEqual(response.status, 200)
+        rendered = repr(log_message.call_args_list)
+        self.assertNotIn(private_query, rendered)
+        self.assertIn("redacted", rendered)
+
     def test_cards_are_compiled_from_live_admitted_packages(self):
         decision = decision_package(self.config)
         action = action_package(self.config)

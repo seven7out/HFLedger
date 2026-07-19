@@ -16,7 +16,8 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from core import admission, item_metadata, ledger, local_state, orientation, reconcile  # noqa: E402
+from core import (admission, item_metadata, ledger, local_state, orientation,
+                  reconcile, search_links)  # noqa: E402
 from core.link_safety import resolve_projected_link  # noqa: E402
 from core.store import BoardStore, BoardValidationError, load_config, resolve_home  # noqa: E402
 
@@ -114,6 +115,23 @@ def _context_from_query(parsed):
     return values[0] if values else None
 
 
+def _search_from_query(parsed):
+    query = parse_qs(parsed.query, keep_blank_values=True)
+    unknown = sorted(set(query) - {"context", "q"})
+    if unknown:
+        raise ApiError(400, "unsupported query field(s): %s" % ", ".join(unknown))
+    for field in ("context", "q"):
+        if len(query.get(field, [])) > 1:
+            raise ApiError(400, "%s must appear at most once" % field)
+    values = query.get("q", [])
+    if not values or not values[0]:
+        raise ApiError(400, "q must be non-empty text")
+    context = query.get("context", [None])[0]
+    if context == "":
+        raise ApiError(400, "context must be non-empty text")
+    return context, values[0]
+
+
 class Context:
     def __init__(self, context_id, label, home):
         self.context_id = context_id
@@ -169,6 +187,7 @@ class Runtime:
             "accent": ui["accent"],
             "readOnly": bool(ui.get("readOnly", False)),
         }
+        self.workspace_id = local_state_workspace_id or "active"
         self.port = ui["port"]
         contexts = []
         for item in ui["contexts"]:
@@ -314,6 +333,18 @@ def build_resolved_links_view(runtime, context_id=None):
         "context": selected_context,
         "links": records,
     }
+
+
+def build_search_view(runtime, query, context_id=None):
+    board = build_board_view(runtime, context_id)
+    try:
+        return search_links.search_projected_metadata([{
+            "workspaceId": runtime.workspace_id,
+            "contextId": board["activeContext"],
+            "projection": board["orientationV2"],
+        }], query)
+    except search_links.SearchInputError as exc:
+        raise ApiError(400, "search request is outside the bounded contract") from exc
 
 
 def build_local_state_view(runtime, context_id=None):
@@ -824,6 +855,10 @@ class Handler(BaseHTTPRequestHandler):
                 context_id = _context_from_query(parsed)
                 self._send_json(build_board_view(self.runtime, context_id))
                 return
+            if parsed.path == "/api/search":
+                context_id, query = _search_from_query(parsed)
+                self._send_json(build_search_view(self.runtime, query, context_id))
+                return
             if parsed.path == "/api/cards":
                 context_id = _context_from_query(parsed)
                 self._send_json(build_cards_view(self.runtime, context_id))
@@ -902,6 +937,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self._send_json({"error": "method not allowed"}, status=405)
+
+    def log_request(self, code="-", size="-"):
+        # Search terms can be private even though the searchable projection is
+        # deliberately public metadata. Never copy a raw query into engine.log.
+        request_line = self.requestline
+        if urlparse(self.path).path == "/api/search":
+            request_line = "%s /api/search?<redacted> %s" % (
+                self.command, self.request_version)
+        self.log_message('"%s" %s %s', request_line, str(code), str(size))
 
     def log_message(self, format_string, *args):
         sys.stderr.write("[ledger-ui] %s - %s\n" % (

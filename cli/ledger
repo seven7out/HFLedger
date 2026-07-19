@@ -8,6 +8,7 @@ import sys
 
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MAX_SEARCH_QUERY_UTF8_BYTES = 512
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
@@ -149,6 +150,19 @@ def build_parser():
     serve.add_argument(
         "--local-state-workspace-id",
         help="trusted native-only stable workspace registration identity")
+    search = sub.add_parser(
+        "search",
+        help="search bounded projected metadata across registered workspaces")
+    search.add_argument(
+        "--workspace", action="append", nargs=2, required=True,
+        metavar=("ID", "PATH"),
+        help="trusted native registration and absolute workspace path; repeat as needed")
+    search_query = search.add_mutually_exclusive_group(required=True)
+    search_query.add_argument("--query", help="bounded local metadata query")
+    search_query.add_argument(
+        "--query-stdin", action="store_true",
+        help="read the bounded query from stdin so it never enters process arguments")
+    search.add_argument("--limit", type=int, default=20, help="result limit from 1 through 50")
     return parser
 
 
@@ -160,6 +174,36 @@ def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command == "search":
+            from app.server import Runtime, build_board_view
+            from core.search_links import search_projected_metadata
+            query = args.query
+            if args.query_stdin:
+                raw_query = sys.stdin.buffer.read(MAX_SEARCH_QUERY_UTF8_BYTES + 1)
+                if len(raw_query) > MAX_SEARCH_QUERY_UTF8_BYTES:
+                    raise ValueError("search query is outside the bounded contract")
+                try:
+                    query = raw_query.decode("utf-8")
+                except UnicodeDecodeError as exc:
+                    raise ValueError("search query is outside the bounded contract") from exc
+            workspace_ids = set()
+            registrations = []
+            for workspace_id, workspace_path in args.workspace:
+                if workspace_id in workspace_ids:
+                    raise ValueError("search workspace ids must be unique")
+                workspace_ids.add(workspace_id)
+                runtime = Runtime(workspace_path)
+                for context_id in runtime.contexts:
+                    board = build_board_view(runtime, context_id)
+                    registrations.append({
+                        "workspaceId": workspace_id,
+                        "contextId": context_id,
+                        "projection": board["orientationV2"],
+                    })
+            _print_json(search_projected_metadata(
+                registrations, query, limit=args.limit))
+            return 0
+
         if args.command == "init":
             target = store.resolve_home(args.directory or args.home)
             created = store.initialize(target, project=args.project)

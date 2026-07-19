@@ -27,6 +27,13 @@
       "csp": "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'"
     }
   },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["hfledger"]
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": ["app", "dmg"],

@@ -130,6 +130,8 @@ The standard-library HTTP service provides:
   with explicit provenance and separate item-change/source-observation clocks;
 - a responsive board for queue, inbox, owner tasks, admitted asks, and outcomes;
 - a mobile decision deck with option selection, recommendation acceptance, snooze, need-more-info, completion, skip, and digest-bound undo where safe;
+- bounded deterministic Command-K search over projected metadata plus
+  navigation-only installed-app `hfledger://item/<workspace-id>/<item-id>` links;
 - config-driven branding and allowlisted independent contexts.
 
 Today can acknowledge, snooze, watch, and mark changes seen only in private
@@ -159,8 +161,7 @@ presentation-only and leave `board.json` and `ledger.jsonl` byte-identical.
 - Schedules are generated for inspection but never installed or activated automatically.
 - Production writes are unsupported by the automation policy.
 - Transition notifications, a rich menu-bar popover, Quick Look, analytics,
-  advanced disputes, multi-machine skew, global search, and deep links are
-  deferred; the interface does not present them as available controls.
+  advanced disputes, and multi-machine skew remain deferred.
 
 The CLI command remains `ledger`, which can collide with the ledger-cli accounting program. If both are installed, use an alias such as `alias hfledger=/path/to/hfledger/cli/ledger`.
 

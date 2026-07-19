@@ -6,12 +6,14 @@ const elements = Object.fromEntries([
   "preferences-panel", "pref-text-size", "text-size-status",
   "onboarding-panel", "recovery-panel", "recovery-message", "workspaces-panel",
   "diagnostics-dialog", "diagnostics-output",
-  "commands-dialog", "command-search", "command-empty", "command-grid",
+  "commands-dialog", "command-search", "command-empty", "command-grid", "ledger-search-results",
 ].map((id) => [id, document.getElementById(id)]));
 
 let snapshot = null;
 let busy = false;
 let settingsMode = null;
+let searchGeneration = 0;
+let searchTimer = null;
 
 function setBusy(value) {
   busy = value;
@@ -150,6 +152,7 @@ function renderHost(host) {
   elements.backup.disabled = busy || !host.ready;
   elements["reveal-workspace"].disabled = busy || !available;
   if (host.error) showError(host.error);
+  else if (host.navigationNotice) showError(host.navigationNotice);
 }
 
 function renderPreferences() {
@@ -224,7 +227,10 @@ async function saveTextSize() {
   }
 }
 
-document.getElementById("dismiss-error").addEventListener("click", () => { elements["error-banner"].hidden = true; });
+document.getElementById("dismiss-error").addEventListener("click", () => {
+  elements["error-banner"].hidden = true;
+  invoke("dismiss_navigation_notice").catch(() => {});
+});
 document.getElementById("repair-settings").addEventListener("click", () => action(
   async () => {
     await invoke("repair_settings");
@@ -337,15 +343,94 @@ function filterCommands() {
   elements["command-grid"].classList.toggle("single-result", matches === 1);
 }
 
+function searchGuidance(message) {
+  const paragraph = document.createElement("p");
+  paragraph.className = "search-guidance";
+  paragraph.textContent = message;
+  elements["ledger-search-results"].replaceChildren(paragraph);
+}
+
+function searchResultRow(result) {
+  const row = document.createElement("button");
+  row.className = "ledger-search-result";
+  row.type = "button";
+  const title = document.createElement("strong");
+  title.textContent = result.title;
+  const context = document.createElement("small");
+  const home = String(result.primaryHome).replaceAll("-", " ");
+  context.textContent = `${result.project} · ${result.contextId} · ${home} · ${result.statusLabel} · ${result.provenance} · ${result.workspaceId}`;
+  const rank = document.createElement("span");
+  rank.className = "rank";
+  rank.textContent = String(result.rankBand).replaceAll("-", " ");
+  row.append(title, context, rank);
+  row.addEventListener("click", async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await invoke("open_search_result", {
+        workspaceId: result.workspaceId,
+        contextId: result.contextId,
+        itemId: result.itemId,
+      });
+      elements["commands-dialog"].close();
+      await refresh();
+    } catch (error) {
+      showError(error);
+    } finally {
+      setBusy(false);
+    }
+  });
+  return row;
+}
+
+async function runGlobalSearch(rawQuery, generation = ++searchGeneration, attempt = 0) {
+  const query = rawQuery.trim();
+  if (!query) {
+    searchGuidance("Type to search bounded metadata. File contents, secret logs, excerpts, remote pages, paths, and private workspace names are excluded.");
+    return;
+  }
+  searchGuidance("Searching validated local projections…");
+  try {
+    const response = await invoke("search_workspaces", { query });
+    if (generation !== searchGeneration || !elements["commands-dialog"].open) return;
+    if (!response.results.length) {
+      searchGuidance("No projected metadata matched.");
+      return;
+    }
+    elements["ledger-search-results"].replaceChildren(...response.results.map(searchResultRow));
+  } catch (error) {
+    if (generation === searchGeneration
+        && String(error).includes("another workspace search") && attempt < 30) {
+      window.setTimeout(() => runGlobalSearch(rawQuery, generation, attempt + 1), 160);
+      return;
+    }
+    if (generation === searchGeneration) {
+      searchGuidance("Search could not read the currently registered validated projections.");
+    }
+  }
+}
+
+function scheduleGlobalSearch() {
+  window.clearTimeout(searchTimer);
+  searchTimer = window.setTimeout(() => runGlobalSearch(elements["command-search"].value), 180);
+}
+
 document.getElementById("show-commands").addEventListener("click", () => {
   elements["command-search"].value = "";
   filterCommands();
+  runGlobalSearch("");
   elements["commands-dialog"].showModal();
   window.setTimeout(() => elements["command-search"].focus(), 0);
 });
-document.getElementById("close-commands").addEventListener("click", () => elements["commands-dialog"].close());
+document.getElementById("close-commands").addEventListener("click", () => {
+  searchGeneration += 1;
+  elements["commands-dialog"].close();
+});
 document.getElementById("done-commands").addEventListener("click", () => elements["commands-dialog"].close());
-elements["command-search"].addEventListener("input", filterCommands);
+elements["command-search"].addEventListener("input", () => {
+  filterCommands();
+  scheduleGlobalSearch();
+});
 
 document.getElementById("quit").addEventListener("click", () => invoke("quit_app"));
 

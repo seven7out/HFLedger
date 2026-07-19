@@ -15,7 +15,7 @@ use std::process::{Child, Command, Output, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::menu::{
     AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID,
 };
@@ -23,6 +23,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_notification::NotificationExt;
 
 const HOST: &str = "127.0.0.1";
@@ -37,6 +38,11 @@ const WATCHED_WORKSPACE_FILES: [&str; 2] = ["board.json", "ledger.jsonl"];
 const WATCHED_REPORT_FILES: [&str; 1] = ["collector-latest.json"];
 const WATCH_DEBOUNCE: Duration = Duration::from_millis(350);
 const NATIVE_CHROME_POLL: Duration = Duration::from_secs(3);
+const DEEP_LINK_PREFIX: &str = "hfledger://item/";
+const DEEP_LINK_MAX_BYTES: usize = 256;
+const WORKSPACE_ID_MAX_BYTES: usize = 160;
+const SEARCH_OUTPUT_MAX_BYTES: usize = 256 * 1024;
+const DEEP_LINK_REJECTION_MESSAGE: &str = "HFLedger could not open that item link.";
 
 macro_rules! native_event_script {
     ($id:literal) => {
@@ -63,10 +69,14 @@ struct HostRuntime {
     child: Mutex<Option<Child>>,
     startup_error: Mutex<Option<String>>,
     observer_error: Mutex<Option<String>>,
+    navigation_notice: Mutex<Option<String>>,
     port: Mutex<Option<u16>>,
     active_workspace: Mutex<Option<Workspace>>,
     paths: Mutex<Option<AppPaths>>,
     config_guard: Mutex<()>,
+    transition_guard: Mutex<()>,
+    search_guard: Arc<Mutex<()>>,
+    deep_link_sender: Mutex<Option<mpsc::SyncSender<QueuedDeepLink>>>,
     notification_baseline: Mutex<Option<usize>>,
     workspace_watcher: Mutex<Option<WorkspaceWatch>>,
     watch_generation: AtomicU64,
@@ -79,10 +89,14 @@ impl Default for HostRuntime {
             child: Mutex::new(None),
             startup_error: Mutex::new(None),
             observer_error: Mutex::new(None),
+            navigation_notice: Mutex::new(None),
             port: Mutex::new(None),
             active_workspace: Mutex::new(None),
             paths: Mutex::new(None),
             config_guard: Mutex::new(()),
+            transition_guard: Mutex::new(()),
+            search_guard: Arc::new(Mutex::new(())),
+            deep_link_sender: Mutex::new(None),
             notification_baseline: Mutex::new(None),
             workspace_watcher: Mutex::new(None),
             watch_generation: AtomicU64::new(0),
@@ -285,6 +299,35 @@ fn text_size_after(current: TextSize, action: TextSizeAction) -> TextSize {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct DeepLinkIntent {
+    workspace_id: String,
+    item_id: String,
+}
+
+#[derive(Clone, Debug)]
+struct QueuedDeepLink {
+    intent: DeepLinkIntent,
+    received_at: Instant,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DeepLinkRejection {
+    Malformed,
+    TooLong,
+    NonCanonicalEncoding,
+    InvalidWorkspace,
+    InvalidItem,
+    WorkspaceNotAllowed,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DeepLinkWindowPlan {
+    UseActiveBoard,
+    ShowActiveBoard,
+    StartWorkspace,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Preferences {
@@ -380,9 +423,47 @@ struct HostStatus {
     ready: bool,
     error: Option<String>,
     observer_error: Option<String>,
+    navigation_notice: Option<String>,
     url: Option<String>,
     port: Option<u16>,
     workspace: Option<Workspace>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SearchResult {
+    workspace_id: String,
+    context_id: String,
+    item_id: String,
+    title: String,
+    view_id: String,
+    primary_home: String,
+    project: String,
+    status_label: String,
+    provenance: String,
+    rank_band: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SearchScanned {
+    workspaces: usize,
+    items: usize,
+    ignored_items: usize,
+    runs: usize,
+    changes: usize,
+    evidence: usize,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SearchResponse {
+    version: u32,
+    results: Vec<SearchResult>,
+    total: usize,
+    limit: usize,
+    truncated: bool,
+    scanned: SearchScanned,
 }
 
 #[derive(Serialize)]
@@ -538,6 +619,137 @@ fn validate_stored_config(config: &StoredConfig) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn is_deep_link_id_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~')
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn canonical_deep_link_segment(raw: &str, maximum: usize) -> Result<String, DeepLinkRejection> {
+    if raw.is_empty() || raw.len() > maximum.saturating_mul(3) || !raw.is_ascii() {
+        return Err(DeepLinkRejection::Malformed);
+    }
+    let bytes = raw.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len().min(maximum));
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if byte == b'%' {
+            let high = bytes.get(index + 1).and_then(|value| hex_value(*value));
+            let low = bytes.get(index + 2).and_then(|value| hex_value(*value));
+            let value = high
+                .zip(low)
+                .map(|(left, right)| (left << 4) | right)
+                .ok_or(DeepLinkRejection::Malformed)?;
+            // Both accepted identifier grammars are wholly RFC 3986 unreserved.
+            // Encoding an unreserved byte is not canonical; decoding any other
+            // byte cannot produce a valid identifier. This also blocks encoded
+            // separators, double decoding, and ambiguous path normalization.
+            if is_deep_link_id_byte(value) {
+                return Err(DeepLinkRejection::NonCanonicalEncoding);
+            }
+            decoded.push(value);
+            index += 3;
+        } else {
+            decoded.push(byte);
+            index += 1;
+        }
+        if decoded.len() > maximum {
+            return Err(DeepLinkRejection::TooLong);
+        }
+    }
+    if !decoded.iter().copied().all(is_deep_link_id_byte) {
+        return Err(DeepLinkRejection::Malformed);
+    }
+    String::from_utf8(decoded).map_err(|_| DeepLinkRejection::Malformed)
+}
+
+fn parse_deep_link(raw: &str) -> Result<DeepLinkIntent, DeepLinkRejection> {
+    if raw.len() > DEEP_LINK_MAX_BYTES {
+        return Err(DeepLinkRejection::TooLong);
+    }
+    let path = raw
+        .strip_prefix(DEEP_LINK_PREFIX)
+        .ok_or(DeepLinkRejection::Malformed)?;
+    if path.bytes().any(|byte| matches!(byte, b'?' | b'#' | b'\\')) {
+        return Err(DeepLinkRejection::Malformed);
+    }
+    let mut segments = path.split('/');
+    let workspace = segments.next().ok_or(DeepLinkRejection::Malformed)?;
+    let item = segments.next().ok_or(DeepLinkRejection::Malformed)?;
+    if segments.next().is_some() {
+        return Err(DeepLinkRejection::Malformed);
+    }
+    let workspace_id = canonical_deep_link_segment(workspace, WORKSPACE_ID_MAX_BYTES).map_err(
+        |error| match error {
+            DeepLinkRejection::TooLong => error,
+            DeepLinkRejection::NonCanonicalEncoding => error,
+            _ => DeepLinkRejection::InvalidWorkspace,
+        },
+    )?;
+    if workspace_id.is_empty() {
+        return Err(DeepLinkRejection::InvalidWorkspace);
+    }
+    let item_id = canonical_deep_link_segment(item, 29).map_err(|error| match error {
+        DeepLinkRejection::TooLong => error,
+        DeepLinkRejection::NonCanonicalEncoding => error,
+        _ => DeepLinkRejection::InvalidItem,
+    })?;
+    let valid_item = item_id.len() == 29
+        && item_id.starts_with("item-")
+        && item_id[5..]
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'));
+    if !valid_item {
+        return Err(DeepLinkRejection::InvalidItem);
+    }
+    Ok(DeepLinkIntent {
+        workspace_id,
+        item_id,
+    })
+}
+
+fn allowlisted_deep_link(
+    config: &StoredConfig,
+    raw: &str,
+) -> Result<DeepLinkIntent, DeepLinkRejection> {
+    let intent = parse_deep_link(raw)?;
+    if !config
+        .workspaces
+        .iter()
+        .any(|workspace| workspace.id == intent.workspace_id)
+    {
+        return Err(DeepLinkRejection::WorkspaceNotAllowed);
+    }
+    Ok(intent)
+}
+
+fn deep_link_window_plan(
+    intent: &DeepLinkIntent,
+    active_workspace: Option<&Workspace>,
+    port: Option<u16>,
+    board_open: bool,
+) -> DeepLinkWindowPlan {
+    if active_workspace.is_some_and(|workspace| workspace.id == intent.workspace_id)
+        && port.is_some()
+    {
+        if board_open {
+            DeepLinkWindowPlan::UseActiveBoard
+        } else {
+            DeepLinkWindowPlan::ShowActiveBoard
+        }
+    } else {
+        DeepLinkWindowPlan::StartWorkspace
+    }
 }
 
 fn decode_stored_config(bytes: &[u8]) -> Result<(StoredConfig, bool), String> {
@@ -1103,6 +1315,11 @@ fn current_host_status(state: &HostRuntime) -> HostStatus {
         .lock()
         .ok()
         .and_then(|value| value.clone());
+    let navigation_notice = state
+        .navigation_notice
+        .lock()
+        .ok()
+        .and_then(|value| value.clone());
     if error.is_none() {
         if let Ok(mut child) = state.child.lock() {
             if let Some(process) = child.as_mut() {
@@ -1137,6 +1354,7 @@ fn current_host_status(state: &HostRuntime) -> HostStatus {
         ready,
         error,
         observer_error,
+        navigation_notice,
         url: port.map(|value| format!("http://{HOST}:{value}/")),
         port,
         workspace,
@@ -1342,6 +1560,154 @@ fn start_workspace_inner(
     Err("the local engine did not become healthy within 7.5 seconds".into())
 }
 
+fn deep_link_board_url(port: u16, item_id: &str) -> String {
+    // Item ids have already passed the fixed lowercase ASCII grammar. A URL
+    // fragment keeps the navigation target out of HTTP requests and engine
+    // logs while surviving a cold board load.
+    format!("http://{HOST}:{port}/#item={item_id}")
+}
+
+fn navigate_deep_link(app: &AppHandle, intent: &DeepLinkIntent) -> Result<(), String> {
+    let state = app.state::<HostRuntime>();
+    let active = state
+        .active_workspace
+        .lock()
+        .map_err(|_| "active workspace lock was poisoned")?
+        .clone();
+    let port = state
+        .port
+        .lock()
+        .map_err(|_| "engine port lock was poisoned")?
+        .to_owned();
+    let board_open = app.get_webview_window("board").is_some();
+    match deep_link_window_plan(intent, active.as_ref(), port, board_open) {
+        DeepLinkWindowPlan::UseActiveBoard => {}
+        DeepLinkWindowPlan::ShowActiveBoard => {
+            let workspace = active
+                .as_ref()
+                .ok_or_else(|| "the selected workspace is unavailable".to_string())?;
+            let active_port = port.ok_or_else(|| "the local engine is unavailable".to_string())?;
+            show_board_window(app, workspace, active_port)?;
+        }
+        DeepLinkWindowPlan::StartWorkspace => {
+            start_workspace_inner(app, &state, &intent.workspace_id)?;
+        }
+    }
+    let active_port = state
+        .port
+        .lock()
+        .map_err(|_| "engine port lock was poisoned")?
+        .to_owned()
+        .ok_or_else(|| "the local engine is unavailable".to_string())?;
+    let target = deep_link_board_url(active_port, &intent.item_id)
+        .parse()
+        .map_err(|_| "could not build the item navigation URL".to_string())?;
+    let board = app
+        .get_webview_window("board")
+        .ok_or_else(|| "no ledger window is open".to_string())?;
+    board
+        .navigate(target)
+        .map_err(|_| "could not navigate to the requested item".to_string())?;
+    let _ = board.show();
+    let _ = board.unminimize();
+    let _ = board.set_focus();
+    Ok(())
+}
+
+fn reject_deep_link(app: &AppHandle) {
+    if let Ok(mut notice) = app.state::<HostRuntime>().navigation_notice.lock() {
+        *notice = Some(DEEP_LINK_REJECTION_MESSAGE.into());
+    }
+    show_settings(app);
+}
+
+fn handle_deep_link_intent(app: &AppHandle, intent: &DeepLinkIntent) {
+    let state = app.state::<HostRuntime>();
+    let Ok(_transition) = state.transition_guard.lock() else {
+        reject_deep_link(app);
+        return;
+    };
+    let allowed = read_config(&state).is_ok_and(|config| {
+        config
+            .workspaces
+            .iter()
+            .any(|workspace| workspace.id == intent.workspace_id)
+    });
+    if !allowed || navigate_deep_link(app, intent).is_err() {
+        reject_deep_link(app);
+    } else if let Ok(mut notice) = state.navigation_notice.lock() {
+        *notice = None;
+    }
+}
+
+fn start_deep_link_worker(app: AppHandle, state: &HostRuntime) -> Result<(), String> {
+    let (sender, receiver) = mpsc::sync_channel::<QueuedDeepLink>(16);
+    *state
+        .deep_link_sender
+        .lock()
+        .map_err(|_| "deep-link queue lock was poisoned".to_string())? = Some(sender);
+    thread::spawn(move || {
+        let mut previous: Option<(DeepLinkIntent, Instant)> = None;
+        while let Ok(queued) = receiver.recv() {
+            if recent_duplicate(previous.as_ref(), &queued.intent, queued.received_at) {
+                continue;
+            }
+            previous = Some((queued.intent.clone(), queued.received_at));
+            handle_deep_link_intent(&app, &queued.intent);
+        }
+    });
+    Ok(())
+}
+
+fn recent_duplicate(
+    previous: Option<&(DeepLinkIntent, Instant)>,
+    intent: &DeepLinkIntent,
+    now: Instant,
+) -> bool {
+    previous.is_some_and(|(last, at)| {
+        last == intent && now.duration_since(*at) < Duration::from_secs(2)
+    })
+}
+
+fn consume_deep_link_urls<I, S>(app: &AppHandle, urls: I)
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    // One OS activation navigates at most once. Additional URLs are ignored;
+    // they never become a batch of implicit actions.
+    if let Some(url) = urls
+        .into_iter()
+        .map(|value| value.as_ref().to_string())
+        .find(|value| value.starts_with("hfledger:"))
+    {
+        let intent = read_config(&app.state::<HostRuntime>())
+            .ok()
+            .and_then(|config| allowlisted_deep_link(&config, &url).ok());
+        let Some(intent) = intent else {
+            reject_deep_link(app);
+            return;
+        };
+        let queued = app
+            .state::<HostRuntime>()
+            .deep_link_sender
+            .lock()
+            .ok()
+            .and_then(|sender| sender.clone())
+            .is_some_and(|sender| {
+                sender
+                    .try_send(QueuedDeepLink {
+                        intent,
+                        received_at: Instant::now(),
+                    })
+                    .is_ok()
+            });
+        if !queued {
+            reject_deep_link(app);
+        }
+    }
+}
+
 fn sync_autostart(app: &AppHandle, enabled: bool) -> Result<(), String> {
     let manager = app.autolaunch();
     if enabled {
@@ -1420,6 +1786,346 @@ fn app_snapshot(state: State<'_, HostRuntime>) -> Result<AppSnapshot, String> {
         host: current_host_status(&state),
         app_data: app_paths.app_data.display().to_string(),
     })
+}
+
+fn search_context_ids(path: &Path) -> Result<HashSet<String>, String> {
+    let bytes = fs::read(path.join("config.json"))
+        .map_err(|_| "workspace search metadata is unavailable".to_string())?;
+    if bytes.len() > 256 * 1024 {
+        return Err("workspace search metadata is unavailable".into());
+    }
+    let value: Value = serde_json::from_slice(&bytes)
+        .map_err(|_| "workspace search metadata is unavailable".to_string())?;
+    let mut ids = HashSet::new();
+    match value.pointer("/ui/contexts").and_then(Value::as_array) {
+        Some(contexts) => {
+            if contexts.is_empty() || contexts.len() > 32 {
+                return Err("workspace search metadata is unavailable".into());
+            }
+            for context in contexts {
+                let id = context
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .filter(|id| valid_context_id(id))
+                    .ok_or_else(|| "workspace search metadata is unavailable".to_string())?;
+                if !ids.insert(id.to_string()) {
+                    return Err("workspace search metadata is unavailable".into());
+                }
+            }
+        }
+        None => {
+            ids.insert("main".into());
+        }
+    }
+    Ok(ids)
+}
+
+fn valid_context_id(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    !bytes.is_empty()
+        && bytes.len() <= 32
+        && bytes[0].is_ascii_lowercase()
+        && bytes[1..]
+            .iter()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-')
+}
+
+fn valid_search_workspace_id(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    !bytes.is_empty()
+        && bytes.len() <= 80
+        && (bytes[0].is_ascii_lowercase() || bytes[0].is_ascii_digit())
+        && bytes[1..].iter().all(|byte| {
+            byte.is_ascii_lowercase()
+                || byte.is_ascii_digit()
+                || matches!(*byte, b'.' | b'_' | b'-')
+        })
+}
+
+fn valid_search_item_id(value: &str) -> bool {
+    value.len() == 29
+        && value.starts_with("item-")
+        && value[5..]
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+}
+
+fn bounded_public_text(value: &str, maximum: usize) -> bool {
+    !value.is_empty() && value.chars().count() <= maximum && !value.chars().any(char::is_control)
+}
+
+fn validate_search_response(
+    response: &SearchResponse,
+    scopes: &HashSet<(String, String)>,
+) -> Result<(), String> {
+    if response.version != 1
+        || response.limit != 50
+        || response.results.len() > 50
+        || response.total < response.results.len()
+        || response.truncated != (response.total > response.results.len())
+        || response.scanned.workspaces > 32
+        || response
+            .scanned
+            .items
+            .saturating_add(response.scanned.ignored_items)
+            > 10_000
+        || response.scanned.runs > 4_000
+        || response.scanned.changes > 16_000
+        || response.scanned.evidence > 32_000
+    {
+        return Err("workspace search returned an invalid bounded response".into());
+    }
+    let homes = [
+        "needs-you",
+        "disputed",
+        "silent-while-observed",
+        "shipped-unverified",
+        "in-motion",
+        "queued",
+        "shipped-verified",
+        "parked",
+        "unobserved",
+    ];
+    let provenance = [
+        "verified",
+        "agent-reported",
+        "inferred",
+        "unobserved",
+        "disputed",
+    ];
+    let ranks = [
+        "exact-id",
+        "exact-title-or-id-prefix",
+        "title-token",
+        "metadata",
+    ];
+    let mut identities = HashSet::new();
+    for result in &response.results {
+        if !scopes.contains(&(result.workspace_id.clone(), result.context_id.clone()))
+            || !valid_search_item_id(&result.item_id)
+            || result.view_id != "all-work"
+            || !homes.contains(&result.primary_home.as_str())
+            || !provenance.contains(&result.provenance.as_str())
+            || !ranks.contains(&result.rank_band.as_str())
+            || !bounded_public_text(&result.title, 180)
+            || !bounded_public_text(&result.project, 180)
+            || !bounded_public_text(&result.status_label, 180)
+            || !identities.insert((
+                result.workspace_id.clone(),
+                result.context_id.clone(),
+                result.item_id.clone(),
+            ))
+        {
+            return Err("workspace search returned an invalid bounded response".into());
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn search_workspaces(
+    query: String,
+    state: State<'_, HostRuntime>,
+) -> Result<SearchResponse, String> {
+    if query.is_empty() || query.chars().count() > 128 || query.chars().any(char::is_control) {
+        return Err("search query must be 1-128 characters of text".into());
+    }
+    let config = read_config(&state)?;
+    if config.workspaces.is_empty() || config.workspaces.len() > 32 {
+        return Err("no searchable workspace is registered".into());
+    }
+    let engine = paths(&state)?.engine;
+    let search_guard = Arc::clone(&state.search_guard);
+    let mut arguments = vec![OsString::from("search")];
+    let mut scopes = HashSet::new();
+    let mut seen_workspaces = HashSet::new();
+    for workspace in config.workspaces {
+        if !valid_search_workspace_id(&workspace.id)
+            || !seen_workspaces.insert(workspace.id.clone())
+        {
+            return Err("workspace search registration is invalid".into());
+        }
+        let path = PathBuf::from(&workspace.path);
+        reject_symlink_chain(&path)
+            .map_err(|_| "workspace search registration is invalid".to_string())?;
+        let canonical = path
+            .canonicalize()
+            .map_err(|_| "workspace search registration is unavailable".to_string())?;
+        if canonical != path {
+            return Err("workspace search registration is invalid".into());
+        }
+        for name in CORE_FILES {
+            let file = canonical.join(name);
+            reject_symlink(&file)
+                .map_err(|_| "workspace search registration is invalid".to_string())?;
+            if !file.is_file() {
+                return Err("workspace search registration is unavailable".into());
+            }
+        }
+        for context_id in search_context_ids(&canonical)? {
+            scopes.insert((workspace.id.clone(), context_id));
+        }
+        arguments.extend([
+            OsString::from("--workspace"),
+            OsString::from(&workspace.id),
+            canonical.as_os_str().to_os_string(),
+        ]);
+    }
+    arguments.extend([
+        OsString::from("--query-stdin"),
+        OsString::from("--limit"),
+        OsString::from("50"),
+    ]);
+    let (status, output) = tauri::async_runtime::spawn_blocking(move || {
+        let _one_flight = search_guard
+            .try_lock()
+            .map_err(|_| "another workspace search is already running".to_string())?;
+        let mut child = Command::new(engine)
+            .args(arguments)
+            .env("PYTHONDONTWRITEBYTECODE", "1")
+            .env("PYTHONNOUSERSITE", "1")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|_| "workspace search engine is unavailable".to_string())?;
+        child
+            .stdin
+            .take()
+            .ok_or_else(|| "workspace search input is unavailable".to_string())?
+            .write_all(query.as_bytes())
+            .map_err(|_| "workspace search input is unavailable".to_string())?;
+        let mut stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| "workspace search output is unavailable".to_string())?;
+        let mut collected = Vec::new();
+        let mut buffer = [0_u8; 8192];
+        loop {
+            let count = stdout
+                .read(&mut buffer)
+                .map_err(|_| "workspace search output is unavailable".to_string())?;
+            if count == 0 {
+                break;
+            }
+            if collected.len().saturating_add(count) > SEARCH_OUTPUT_MAX_BYTES {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("workspace search exceeded its output bound".to_string());
+            }
+            collected.extend_from_slice(&buffer[..count]);
+        }
+        let status = child
+            .wait()
+            .map_err(|_| "workspace search engine is unavailable".to_string())?;
+        Ok((status, collected))
+    })
+    .await
+    .map_err(|_| "workspace search worker stopped unexpectedly".to_string())??;
+    if !status.success() {
+        return Err("workspace search could not read validated projections".into());
+    }
+    let response: SearchResponse = serde_json::from_slice(&output)
+        .map_err(|_| "workspace search returned an invalid bounded response".to_string())?;
+    validate_search_response(&response, &scopes)?;
+    Ok(response)
+}
+
+fn search_result_board_url(port: u16, context_id: &str, item_id: &str) -> String {
+    format!("http://{HOST}:{port}/?context={context_id}#item={item_id}")
+}
+
+#[tauri::command]
+fn open_search_result(
+    app: AppHandle,
+    workspace_id: String,
+    context_id: String,
+    item_id: String,
+    state: State<'_, HostRuntime>,
+) -> Result<(), String> {
+    if !valid_search_workspace_id(&workspace_id)
+        || !valid_context_id(&context_id)
+        || !valid_search_item_id(&item_id)
+    {
+        return Err("search result navigation is invalid".into());
+    }
+    let _transition = state
+        .transition_guard
+        .lock()
+        .map_err(|_| "workspace transition lock was poisoned")?;
+    let config = read_config(&state)?;
+    let workspace = config
+        .workspaces
+        .iter()
+        .find(|workspace| workspace.id == workspace_id)
+        .ok_or_else(|| "search result workspace is no longer registered".to_string())?;
+    if !search_context_ids(Path::new(&workspace.path))?.contains(&context_id) {
+        return Err("search result context is no longer registered".into());
+    }
+    let active = state
+        .active_workspace
+        .lock()
+        .map_err(|_| "active workspace lock was poisoned")?
+        .clone();
+    let port = state
+        .port
+        .lock()
+        .map_err(|_| "engine port lock was poisoned")?
+        .to_owned();
+    let intent = DeepLinkIntent {
+        workspace_id: workspace_id.clone(),
+        item_id: item_id.clone(),
+    };
+    match deep_link_window_plan(
+        &intent,
+        active.as_ref(),
+        port,
+        app.get_webview_window("board").is_some(),
+    ) {
+        DeepLinkWindowPlan::UseActiveBoard => {}
+        DeepLinkWindowPlan::ShowActiveBoard => {
+            let workspace = active
+                .as_ref()
+                .ok_or_else(|| "workspace is unavailable".to_string())?;
+            show_board_window(
+                &app,
+                workspace,
+                port.ok_or_else(|| "local engine is unavailable".to_string())?,
+            )?;
+        }
+        DeepLinkWindowPlan::StartWorkspace => {
+            start_workspace_inner(&app, &state, &workspace_id)?;
+        }
+    }
+    let active_port = state
+        .port
+        .lock()
+        .map_err(|_| "engine port lock was poisoned")?
+        .to_owned()
+        .ok_or_else(|| "local engine is unavailable".to_string())?;
+    let target = search_result_board_url(active_port, &context_id, &item_id)
+        .parse()
+        .map_err(|_| "search result navigation is invalid".to_string())?;
+    let board = app
+        .get_webview_window("board")
+        .ok_or_else(|| "no ledger window is open".to_string())?;
+    board
+        .navigate(target)
+        .map_err(|_| "could not navigate to the search result".to_string())?;
+    let _ = board.show();
+    let _ = board.unminimize();
+    let _ = board.set_focus();
+    if let Ok(mut notice) = state.navigation_notice.lock() {
+        *notice = None;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn dismiss_navigation_notice(state: State<'_, HostRuntime>) {
+    if let Ok(mut notice) = state.navigation_notice.lock() {
+        *notice = None;
+    }
 }
 
 #[tauri::command]
@@ -1568,6 +2274,10 @@ fn remove_workspace(
     workspace_id: String,
     state: State<'_, HostRuntime>,
 ) -> Result<(), String> {
+    let _transition = state
+        .transition_guard
+        .lock()
+        .map_err(|_| "workspace transition lock was poisoned")?;
     let mut config = read_config(&state)?;
     let workspace = config
         .workspaces
@@ -1608,11 +2318,19 @@ fn start_workspace(
     workspace_id: String,
     state: State<'_, HostRuntime>,
 ) -> Result<HostStatus, String> {
+    let _transition = state
+        .transition_guard
+        .lock()
+        .map_err(|_| "workspace transition lock was poisoned")?;
     start_workspace_inner(&app, &state, &workspace_id)
 }
 
 #[tauri::command]
 fn restart_workspace(app: AppHandle, state: State<'_, HostRuntime>) -> Result<HostStatus, String> {
+    let _transition = state
+        .transition_guard
+        .lock()
+        .map_err(|_| "workspace transition lock was poisoned")?;
     let workspace_id = state
         .active_workspace
         .lock()
@@ -1626,6 +2344,9 @@ fn restart_workspace(app: AppHandle, state: State<'_, HostRuntime>) -> Result<Ho
 
 #[tauri::command]
 fn stop_workspace(app: AppHandle, state: State<'_, HostRuntime>) -> HostStatus {
+    let Ok(_transition) = state.transition_guard.lock() else {
+        return current_host_status(&state);
+    };
     stop_host(&state);
     set_board_menu_available(&state, false);
     if let Some(window) = app.get_webview_window("main") {
@@ -1655,6 +2376,10 @@ fn copy_backup_core(source: &Path, destination: &Path) -> Result<(), String> {
 
 #[tauri::command]
 fn create_backup(app: AppHandle, state: State<'_, HostRuntime>) -> Result<BackupResult, String> {
+    let _transition = state
+        .transition_guard
+        .lock()
+        .map_err(|_| "workspace transition lock was poisoned")?;
     let workspace = state
         .active_workspace
         .lock()
@@ -1904,7 +2629,13 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
         Some("CmdOrCtrl+4"),
     )?;
     let watched = custom_menu_item(app, "view.watched", "Watched", false, Some("CmdOrCtrl+5"))?;
-    let commands = custom_menu_item(app, "view.commands", "Command Guide", false, None)?;
+    let commands = custom_menu_item(
+        app,
+        "view.commands",
+        "Global Search…",
+        true,
+        Some("CmdOrCtrl+K"),
+    )?;
     let sidebar = custom_menu_item(
         app,
         "pane.toggle-sidebar",
@@ -2086,7 +2817,6 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
         all_work.clone(),
         shipped.clone(),
         watched.clone(),
-        commands.clone(),
         sidebar.clone(),
         inspector.clone(),
     ];
@@ -2377,7 +3107,7 @@ fn handle_native_menu(app: &AppHandle, id: &str) {
         "app.settings" => show_settings(app),
         "file.open-workspace" => show_workspace_settings(app),
         "help.diagnostics" => show_settings_dialog(app, "show-diagnostics"),
-        "help.commands" | "help.keyboard" | "help.privacy"
+        "view.commands" | "help.commands" | "help.keyboard" | "help.privacy"
             if app.get_webview_window("board").is_none() =>
         {
             show_settings_dialog(app, "show-commands")
@@ -2456,10 +3186,16 @@ fn build_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(
-            |app, _arguments, _cwd| {
-                restore_primary_surface(app);
+            |app, arguments, _cwd| {
+                if !arguments
+                    .iter()
+                    .any(|argument| argument.starts_with("hfledger:"))
+                {
+                    restore_primary_surface(app);
+                }
             },
         ))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
@@ -2485,6 +3221,14 @@ pub fn run() {
             match initialize_app(app, &state) {
                 Ok(config) => {
                     let _ = apply_text_size(app.handle(), config.preferences.text_size, false);
+                    // Plugin setup and private-path initialization are complete
+                    // before an OS callback can reach the strict parser.
+                    let deep_link_app = app.handle().clone();
+                    start_deep_link_worker(deep_link_app.clone(), &state)?;
+                    app.deep_link().on_open_url(move |event| {
+                        let urls = event.urls();
+                        consume_deep_link_urls(&deep_link_app, urls.iter().map(|url| url.as_str()));
+                    });
                     if let Err(error) =
                         sync_autostart(app.handle(), config.preferences.launch_at_login)
                     {
@@ -2494,7 +3238,12 @@ pub fn run() {
                     }
                     build_tray(app)?;
                     start_native_chrome_monitor(app.handle().clone());
-                    restore_primary_surface(app.handle());
+                    let startup_links = app.deep_link().get_current().ok().flatten();
+                    if let Some(urls) = startup_links {
+                        consume_deep_link_urls(app.handle(), urls.iter().map(|url| url.as_str()));
+                    } else {
+                        restore_primary_surface(app.handle());
+                    }
                 }
                 Err(error) => {
                     show_recovery(app.handle(), &error);
@@ -2519,6 +3268,9 @@ pub fn run() {
             repair_settings,
             open_fictional_demo,
             host_status,
+            search_workspaces,
+            open_search_result,
+            dismiss_navigation_notice,
             choose_workspace_folder,
             add_existing_workspace,
             create_workspace,
@@ -2552,19 +3304,25 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        active_context_id, attention_badge_count, decision_count, decode_stored_config,
+        active_context_id, allowlisted_deep_link, attention_badge_count, current_host_status,
+        decision_count, decode_stored_config, deep_link_board_url, deep_link_window_plan,
         engine_serve_arguments, event_is_relevant, guarded_item_menu_accelerator, menu_eligibility,
-        merge_watch_signal, native_command_for_menu_id, primary_surface_plan, project_slug,
-        text_size_after, validate_stored_config, watch_snapshot_is_safe, workspace_id,
-        workspace_watch_plan, write_config_unlocked, AppPaths, AppSnapshot, HostStatus,
-        NativeCommand, Preferences, PrimarySurfacePlan, StoredConfig, TextSize, TextSizeAction,
-        Workspace, WorkspaceKind, CONFIG_VERSION,
+        merge_watch_signal, native_command_for_menu_id, parse_deep_link, primary_surface_plan,
+        project_slug, recent_duplicate, text_size_after, validate_search_response,
+        validate_stored_config, watch_snapshot_is_safe, workspace_id, workspace_watch_plan,
+        write_config_unlocked, AppPaths, AppSnapshot, DeepLinkIntent, DeepLinkRejection,
+        DeepLinkWindowPlan, HostRuntime, HostStatus, NativeCommand, Preferences,
+        PrimarySurfacePlan, SearchResponse, StoredConfig, TextSize, TextSizeAction, Workspace,
+        WorkspaceKind, CONFIG_VERSION, DEEP_LINK_REJECTION_MESSAGE,
     };
     use notify::{Event, EventKind};
     use serde_json::json;
+    use std::collections::HashSet;
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::sync::{mpsc, Arc};
+    use std::thread;
+    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
     fn disposable_workspace(label: &str) -> (PathBuf, Workspace) {
         let nonce = SystemTime::now()
@@ -2592,6 +3350,223 @@ mod tests {
 
     fn remove_disposable(path: &Path) {
         fs::remove_dir_all(path).expect("remove disposable workspace");
+    }
+
+    fn deep_link_fixture() -> (StoredConfig, Workspace, String) {
+        let workspace = Workspace {
+            id: "workspace-0123456789abcdef0123456789abcdef".into(),
+            label: "Private Client Display Name".into(),
+            path: "/tmp/private-client-display-name".into(),
+            kind: WorkspaceKind::Existing,
+        };
+        let item_id = "item-0123456789abcdef01234567".to_string();
+        (
+            StoredConfig {
+                version: 1,
+                workspaces: vec![workspace.clone()],
+                selected_workspace_id: None,
+                preferences: Preferences::default(),
+            },
+            workspace,
+            item_id,
+        )
+    }
+
+    #[test]
+    fn deep_links_accept_only_the_exact_bounded_navigation_shape() {
+        let (config, workspace, item_id) = deep_link_fixture();
+        let raw = format!("hfledger://item/{}/{item_id}", workspace.id);
+        assert_eq!(
+            allowlisted_deep_link(&config, &raw),
+            Ok(DeepLinkIntent {
+                workspace_id: workspace.id.clone(),
+                item_id: item_id.clone(),
+            })
+        );
+
+        for rejected in [
+            format!("HFLedger://item/{}/{item_id}", workspace.id),
+            format!("hfledger://other/{}/{item_id}", workspace.id),
+            format!("hfledger://item/{}/{item_id}/extra", workspace.id),
+            format!("hfledger://item/{}/{item_id}?action=resolve", workspace.id),
+            format!("hfledger://item/{}/{item_id}#open", workspace.id),
+            format!("hfledger://item/user@{}/{item_id}", workspace.id),
+            format!("hfledger://item/{}:443/{item_id}", workspace.id),
+            "https://example.invalid/item/workspace/item-0123456789abcdef01234567".into(),
+        ] {
+            assert!(parse_deep_link(&rejected).is_err(), "accepted {rejected}");
+        }
+        assert_eq!(
+            parse_deep_link(&format!(
+                "hfledger://item/{}/item-{}",
+                workspace.id,
+                "a".repeat(300)
+            )),
+            Err(DeepLinkRejection::TooLong)
+        );
+    }
+
+    #[test]
+    fn deep_link_percent_encoding_is_single_pass_and_canonical() {
+        let (_config, workspace, item_id) = deep_link_fixture();
+        assert_eq!(
+            parse_deep_link(&format!(
+                "hfledger://item/{}/%69tem-0123456789abcdef01234567",
+                workspace.id
+            )),
+            Err(DeepLinkRejection::NonCanonicalEncoding)
+        );
+        for item in [
+            "item-0123456789abcdef0123456%37",
+            "item-0123456789abcdef012345%2f",
+            "item-0123456789abcdef012345%252f",
+            "item-0123456789abcdef012345%",
+        ] {
+            assert!(parse_deep_link(&format!("hfledger://item/{}/{item}", workspace.id)).is_err());
+        }
+        assert!(parse_deep_link(&format!(
+            "hfledger://item/{}/{item_id}",
+            workspace.id.replace('-', "%2D")
+        ))
+        .is_err());
+    }
+
+    #[test]
+    fn deep_links_are_workspace_allowlisted_without_private_labels() {
+        let (config, workspace, item_id) = deep_link_fixture();
+        let unregistered =
+            format!("hfledger://item/workspace-ffffffffffffffffffffffffffffffff/{item_id}");
+        assert_eq!(
+            allowlisted_deep_link(&config, &unregistered),
+            Err(DeepLinkRejection::WorkspaceNotAllowed)
+        );
+        let target = deep_link_board_url(17173, &item_id);
+        assert_eq!(target, format!("http://127.0.0.1:17173/#item={item_id}"));
+        assert!(!target.contains(&workspace.label));
+        assert!(!target.contains(&workspace.path));
+        assert_eq!(
+            DEEP_LINK_REJECTION_MESSAGE,
+            "HFLedger could not open that item link."
+        );
+        assert!(!DEEP_LINK_REJECTION_MESSAGE.contains(&workspace.id));
+        assert!(!DEEP_LINK_REJECTION_MESSAGE.contains(&workspace.label));
+        assert!(!DEEP_LINK_REJECTION_MESSAGE.contains(&workspace.path));
+        assert!(!DEEP_LINK_REJECTION_MESSAGE.contains("hfledger://"));
+    }
+
+    #[test]
+    fn deep_link_lifecycle_switches_only_registered_workspace_context() {
+        let (_config, workspace, item_id) = deep_link_fixture();
+        let intent = DeepLinkIntent {
+            workspace_id: workspace.id.clone(),
+            item_id,
+        };
+        assert_eq!(
+            deep_link_window_plan(&intent, Some(&workspace), Some(17173), true),
+            DeepLinkWindowPlan::UseActiveBoard
+        );
+        assert_eq!(
+            deep_link_window_plan(&intent, Some(&workspace), Some(17173), false),
+            DeepLinkWindowPlan::ShowActiveBoard
+        );
+        assert_eq!(
+            deep_link_window_plan(&intent, None, None, false),
+            DeepLinkWindowPlan::StartWorkspace
+        );
+        let other = Workspace {
+            id: "workspace-ffffffffffffffffffffffffffffffff".into(),
+            ..workspace
+        };
+        assert_eq!(
+            deep_link_window_plan(&intent, Some(&other), Some(17174), true),
+            DeepLinkWindowPlan::StartWorkspace
+        );
+    }
+
+    #[test]
+    fn deep_link_duplicate_and_transition_serialization_are_deterministic() {
+        let intent = DeepLinkIntent {
+            workspace_id: "workspace-fictional".into(),
+            item_id: "item-0123456789abcdef01234567".into(),
+        };
+        let now = Instant::now();
+        let previous = (intent.clone(), now);
+        assert!(recent_duplicate(
+            Some(&previous),
+            &intent,
+            now + Duration::from_millis(50)
+        ));
+        assert!(!recent_duplicate(
+            Some(&previous),
+            &intent,
+            now + Duration::from_secs(3)
+        ));
+
+        let runtime = Arc::new(HostRuntime::default());
+        let held = runtime.transition_guard.lock().expect("hold transition");
+        let worker_runtime = Arc::clone(&runtime);
+        let (sender, receiver) = mpsc::channel();
+        thread::spawn(move || {
+            let _serialized = worker_runtime
+                .transition_guard
+                .lock()
+                .expect("serialize transition");
+            sender.send(()).expect("signal transition");
+        });
+        assert!(receiver.recv_timeout(Duration::from_millis(40)).is_err());
+        drop(held);
+        receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("transition resumes after guard");
+    }
+
+    #[test]
+    fn navigation_notice_does_not_poison_engine_health() {
+        let runtime = HostRuntime::default();
+        *runtime.navigation_notice.lock().expect("navigation notice") =
+            Some(DEEP_LINK_REJECTION_MESSAGE.into());
+        let status = current_host_status(&runtime);
+        assert_eq!(status.phase, "stopped");
+        assert!(status.error.is_none());
+        assert_eq!(
+            status.navigation_notice.as_deref(),
+            Some(DEEP_LINK_REJECTION_MESSAGE)
+        );
+    }
+
+    #[test]
+    fn native_search_response_is_closed_bounded_and_scope_allowlisted() {
+        let value = json!({
+            "version": 1,
+            "results": [{
+                "workspaceId": "workspace-fictional",
+                "contextId": "main",
+                "itemId": "item-0123456789abcdef01234567",
+                "title": "Fictional proofing timer",
+                "viewId": "all-work",
+                "primaryHome": "queued",
+                "project": "Ovenlight",
+                "statusLabel": "Queued",
+                "provenance": "verified",
+                "rankBand": "title-token"
+            }],
+            "total": 1,
+            "limit": 50,
+            "truncated": false,
+            "scanned": {
+                "workspaces": 1, "items": 1, "ignoredItems": 0,
+                "runs": 0, "changes": 0, "evidence": 0
+            }
+        });
+        let response: SearchResponse =
+            serde_json::from_value(value.clone()).expect("closed search");
+        let scopes = HashSet::from([("workspace-fictional".into(), "main".into())]);
+        validate_search_response(&response, &scopes).expect("allowlisted response");
+
+        let mut leaked = value;
+        leaked["results"][0]["workspaceLabel"] = json!("PRIVATE_CLIENT_NAME");
+        assert!(serde_json::from_value::<SearchResponse>(leaked).is_err());
+        assert!(validate_search_response(&response, &HashSet::new()).is_err());
     }
 
     #[test]
@@ -3036,6 +4011,7 @@ mod tests {
                 url: None,
                 port: None,
                 workspace: None,
+                navigation_notice: None,
             },
             app_data: "/tmp/fictional-app-data".into(),
         };

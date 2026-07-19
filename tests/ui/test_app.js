@@ -222,3 +222,14 @@ test("Quick Look has an explicit evidence allowlist and no-selection fallback", 
   assert.equal(model.evidence[0].supported, false);
   assert.equal(model.evidence[1].provenance, "unobserved");
 });
+
+test("item navigation accepts only canonical bounded projection ids", () => {
+  const good = "item-0123456789abcdef01234567";
+  assert.equal(ui.parseItemNavigation(good), good);
+  assert.equal(ui.parseItemNavigation({ itemId: good, workspaceId: "workspace-fictional" }), good);
+  assert.equal(ui.parseItemNavigation("item-0123456789ABCDEF01234567"), null);
+  assert.equal(ui.parseItemNavigation("../item-0123456789abcdef01234567"), null);
+  assert.equal(ui.parseItemNavigationHash(`#item=${good}`), good);
+  assert.equal(ui.parseItemNavigationHash(`#item=${good}&action=resolve`), null);
+  assert.equal(ui.parseItemNavigationHash("#item=%69tem-0123456789abcdef01234567"), null);
+});

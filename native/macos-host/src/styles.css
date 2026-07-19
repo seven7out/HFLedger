@@ -158,6 +158,14 @@ dialog::backdrop { background: rgba(7, 8, 14, .65); backdrop-filter: blur(7px); 
 .command-search { display: block; width: 100%; margin-bottom: 14px; }
 .command-search > span { margin-bottom: 6px; }
 .command-search input { display: block; width: 100%; }
+.ledger-search-results { min-height: 54px; max-height: 250px; margin: 0 0 18px; overflow-y: auto; border: 1px solid rgba(168, 156, 255, .18); border-radius: 11px; background: rgba(17, 18, 29, .62); }
+.search-guidance { margin: 0; padding: 16px; color: rgba(248, 245, 237, .48); font-size: 10px; }
+.ledger-search-result { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; width: 100%; min-height: 58px; padding: 10px 13px; color: var(--ink); border: 0; border-bottom: 1px solid rgba(248, 245, 237, .07); background: transparent; text-align: left; cursor: pointer; }
+.ledger-search-result:last-child { border-bottom: 0; }
+.ledger-search-result:hover, .ledger-search-result:focus-visible { background: rgba(168, 156, 255, .08); }
+.ledger-search-result strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.ledger-search-result small { grid-column: 1; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.ledger-search-result .rank { grid-column: 2; grid-row: 1 / 3; align-self: center; color: var(--accent-strong); font-size: 8px; letter-spacing: .04em; text-transform: uppercase; }
 .command-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .command-grid.single-result .command-card:not([hidden]) { grid-column: 1 / -1; max-width: 610px; }
 .command-card { min-width: 0; padding: 15px; border: 1px solid var(--line); border-radius: 12px; background: rgba(17, 18, 29, .55); }

@@ -937,9 +937,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .command-dialog { width: min(520px, calc(100vw - 32px)); }
 .command-search { display: block; margin: 14px 0 8px; }
 .command-list { max-height: min(460px, 65vh); overflow-y: auto; border-top: 1px solid var(--line); }
+.command-section-label { margin: 0; padding: 9px 8px 5px; color: var(--subtle); font-size: 10px; font-weight: 700; letter-spacing: .055em; text-transform: uppercase; }
 .command-row { width: 100%; min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; border: 0; border-bottom: 1px solid var(--line); background: transparent; text-align: left; }
 .command-row:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
 .command-row kbd { color: var(--muted); font: 11px ui-monospace, "SFMono-Regular", Menlo, monospace; }
+.search-result-row { min-height: 52px; align-items: flex-start; }
+.search-result-copy { min-width: 0; display: grid; gap: 3px; }
+.search-result-copy strong { overflow: hidden; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.search-result-copy small { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.search-match { flex: 0 0 auto; padding-top: 2px; color: var(--subtle); font-size: 9px; }
+.command-hint { margin: 0; padding: 12px 8px 2px; color: var(--muted); font-size: 10px; line-height: 1.45; }
 
 .board-page .toast {
   z-index: 80;

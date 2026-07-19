@@ -80,12 +80,35 @@ class CliTests(unittest.TestCase):
             ["event", "--help"],
             ["validate", "--help"], ["reconcile", "--help"],
             ["collect", "--help"], ["render-packs", "--help"],
-            ["serve", "--help"],
+            ["serve", "--help"], ["search", "--help"],
         )
         for command in commands:
             result = self.run_cli(command)
             self.assertEqual(result.returncode, 0, (command, result.stderr))
             self.assertIn("usage:", result.stdout)
+
+    def test_search_command_projects_registered_workspaces_through_one_engine(self):
+        filed = self.run_cli(self.decision_args())
+        self.assertEqual(filed.returncode, 0, filed.stderr)
+        reconciled = self.run_cli(["reconcile"])
+        self.assertEqual(reconciled.returncode, 0, reconciled.stderr)
+        result = self.run_cli([
+            "search", "--workspace", "demo", self.temp.name,
+            "--query", "Choose the fictional timer behavior", "--limit", "50",
+        ], use_home=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        body = json.loads(result.stdout)
+        self.assertEqual(body["results"][0]["workspaceId"], "demo")
+        self.assertEqual(body["results"][0]["contextId"], "main")
+        self.assertEqual(body["results"][0]["rankBand"], "exact-title-or-id-prefix")
+        self.assertNotIn(self.temp.name, result.stdout)
+
+        stdin_result = subprocess.run([
+            CLI, "search", "--workspace", "demo", self.temp.name,
+            "--query-stdin", "--limit", "50",
+        ], input="fictional timer", capture_output=True, text=True)
+        self.assertEqual(stdin_result.returncode, 0, stdin_result.stderr)
+        self.assertTrue(json.loads(stdin_result.stdout)["results"])
 
     def test_native_serve_state_identity_reaches_server(self):
         namespace = runpy.run_path(CLI, run_name="ledger_cli_under_test")
