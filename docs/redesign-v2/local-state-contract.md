@@ -6,6 +6,12 @@ Base: `ca27e60a9bff1f15c4f553edae707df37c47b497`
 
 Scope: local UI state only; no production implementation in this branch
 
+> Synthesis note: [`contract.md`](contract.md) is normative for implementation.
+> Its public/private boundary is unchanged, but the final state/API spelling
+> uses projection `itemId` and `changeId` values directly instead of this
+> draft's `itemKey` and `changeKey` names. It also locks the module API and the
+> native-to-page command boundary.
+
 ## 1. Decision
 
 HFLedger for Mac shall keep triage state in one closed, revisioned JSON document

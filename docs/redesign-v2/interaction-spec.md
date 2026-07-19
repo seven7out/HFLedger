@@ -196,7 +196,7 @@ QUIET CONCERNS                                                    1 of 7
 ○ Storage follow-up is silent
   No activity for 3d while issue and agent sources were observed     3d  Verified
 
-12 parked or unobserved items are quiet in the library →
+12 parked or unobserved items in All Work →
 ```
 
 ### 3.1 Observer meta-alert
@@ -262,9 +262,9 @@ absence in the item inspector instead of escalating the whole screen.
 
 The final Today line is a low-emphasis library link, not a status card. It may
 summarize parked and unobserved totals, for example “12 parked or unobserved
-items are quiet in the library.” It opens All Work with the relevant smart
-lists in view. It never says “all clear” unless the coverage-qualified
-empty-success rules are satisfied.
+items in All Work.” It opens All Work with the relevant smart lists in view.
+It never describes unobserved work as quiet and never says “all clear” unless
+the coverage-qualified empty-success rules are satisfied.
 
 ## 4. Center-row contract
 

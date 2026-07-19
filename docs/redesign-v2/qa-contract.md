@@ -6,6 +6,10 @@ Baseline: `ca27e60a9bff1f15c4f553edae707df37c47b497`
 
 Status: Wave 1 contract; no production implementation is authorized by this document.
 
+> Synthesis note: [`contract.md`](contract.md) is normative for implementation,
+> including final field names, the distinct `queued` home, coverage enums,
+> cursor semantics, file ownership, and branch integration order.
+
 ## Purpose
 
 The redesign is accepted only when it is easier to orient in and at least as
@@ -41,8 +45,8 @@ implementation helpers merely to reproduce the implementation's answer.
 
 - Every item has exactly one `primaryHome` under the locked precedence:
   needs-you, disputed, silent-while-observed, shipped-unverified, in-motion,
-  shipped-verified, then parked/unobserved. A change-event reference is a
-  journal entry, not a second primary home.
+  queued, shipped-verified, parked, then unobserved. A change-event reference
+  is a journal entry, not a second primary home.
 - Ranking and tie-breaking are deterministic. Identical validated inputs, an
   explicit clock, and identical local state produce byte-equivalent projection
   JSON and the same visible order.
@@ -134,8 +138,8 @@ the application:
 | `task:ovenlight:active` | Recent checkpoint with a named test reference | in-motion; checkpoint is not shipment evidence |
 | `task:ovenlight:deployed` | Shipment claim plus independent successful deploy observation | shipped-verified with `verified` provenance |
 | `task:ovenlight:inferred` | Compatible state fields but no direct event | `inferred`, never silently upgraded to verified |
-| `task:ovenlight:unseen-source` | Relevant forge source disabled | parked/unobserved; never a quiet concern |
-| `task:ovenlight:parked` | Explicit parked state with healthy but irrelevant sources | parked/unobserved library home |
+| `task:ovenlight:unseen-source` | Relevant forge source disabled | `unobserved`; never a quiet concern |
+| `task:ovenlight:parked` | Explicit parked state with healthy but irrelevant sources | `parked` library home |
 
 The fixture also contains five lower-priority attention items, bringing
 `attention.total` to nine while the locked presentation cap exposes only the

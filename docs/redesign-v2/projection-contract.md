@@ -6,6 +6,12 @@ Projection version: 2
 
 Baseline: `ca27e60a9bff1f15c4f553edae707df37c47b497`
 
+> Synthesis note: [`contract.md`](contract.md) is normative for implementation.
+> It replaces this draft's competing coverage field names with
+> `coverage.screen.state` (`complete`/`partial`/`invalid`), uses
+> `complete`/`partial`/`unobserved` for item coverage, adds the material
+> `attentionKey` and opaque `viewCursor`, and keeps public run kinds generic.
+
 ## 1. Decision
 
 HFLedger v2 is one deterministic, read-only orientation projection over a
@@ -267,7 +273,7 @@ Every `items` element has exactly this shape:
     "observationBasis": "all-required-minimum"
   },
   "coverage": {
-    "state": "covered",
+    "state": "complete",
     "requiredSourceIds": ["ledger"],
     "missingSourceIds": [],
     "staleSourceIds": [],
@@ -305,7 +311,7 @@ Enums:
   receive a ranking band.
 - dossier `provenance` is the tier of the evidence that caused the current
   `primaryHome`; it is not an overall confidence rating.
-- `coverage.state`: `covered`, `partial`, or `unobserved`.
+- `coverage.state`: `complete`, `partial`, or `unobserved`.
 - `nextAction.kind`: `open-source`, `open-decision`, `copy-context`, or `none`.
   Version 2 exposes no answer, complete, merge, or deploy action.
 
