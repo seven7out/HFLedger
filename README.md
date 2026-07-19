@@ -1,8 +1,16 @@
 # HFLedger
 
-HFLedger rate-limits and audits the interrupt channel between AI agents and the person running them.
+HFLedger is a local control tower for work spread across AI coding agents. It
+shows what shipped, what is moving, where an owner is needed, what has gone
+quiet, and which operating habits would make the agents more effective.
 
-Most agent tools make it easy to start work. HFLedger focuses on the opposite boundary: when may an agent interrupt a human, what must it provide, and how does a reported outcome become durable? It combines a local JSON board, an append-only event ledger, strict admission and completion gates, a phone-sized decision deck, and optional read-only collectors.
+Most agent tools make it easy to start work inside one task. HFLedger provides
+the missing orientation across tasks and runtimes while retaining its strict
+boundary for human interruptions: when may an agent interrupt a person, what
+must it provide, and how does a reported outcome become durable? It combines a
+Today view, local JSON board, append-only evidence ledger, strict admission and
+completion gates, a phone-sized decision deck, and optional read-only
+collectors.
 
 HFLedger is agent-agnostic. Any runtime that can read files and run a command can use the protocol. The reference implementation is Python standard library, local-first, and MIT licensed.
 
@@ -67,6 +75,18 @@ generated/        rendered instruction packs and inactive schedules
 
 The first path is [`docs/quickstart.md`](docs/quickstart.md): file a real decision, reconcile it, open the deck, and capture completion. The complete data and event contract is [`docs/protocol.md`](docs/protocol.md).
 
+## Native Mac app
+
+The in-repository Mac host turns the same engine and canonical board into a
+native desktop app. It adds explicit workspace management, a self-contained
+runtime, process recovery, validated backups, notifications, a menu-bar item,
+Launch at Login, and DMG/release tooling while keeping all ledger traffic on
+loopback. See [`native/macos-host/README.md`](native/macos-host/README.md).
+
+Public Developer ID signing and notarization are deliberately separate from
+ordinary local builds. The Android companion remains a later phase; the Mac app
+does not expose a remote listener.
+
 ## Agent integration
 
 Agents use one CLI surface:
@@ -75,6 +95,7 @@ Agents use one CLI surface:
 ledger init
 ledger ask decision|action
 ledger done|skip
+ledger event started|checkpoint|blocked|verified|shipped|abandoned
 ledger validate
 ledger reconcile
 ledger serve
@@ -84,22 +105,39 @@ ledger render-packs
 
 `ledger ask` is intentionally demanding. Agent-executable work stays in the queue; raw ideas stay in the inbox; only an irreducible human choice or exact owner-only action should pass admission. See [`docs/discipline.md`](docs/discipline.md).
 
-The generic and Claude Code instruction adapters inject the same policy into runtime-specific layouts. The optional GitHub collector reads PR, CI, issue, and branch-comparison facts through an authenticated `gh` CLI. The local-files collector records metadata without reading contents. Details and inactive launchd/systemd schedule generation are in [`docs/automation.md`](docs/automation.md).
+`ledger event` is the low-friction evidence surface for Codex, Claude Code, and
+other runtimes. It records bounded task progress and evidence references
+without granting the writer permission to change board state. A shipped event
+requires at least one evidence reference; a `built` event alone never counts as
+shipped.
+
+The Codex, generic, and Claude Code instruction adapters inject the same policy
+and runtime-labeled evidence commands into their respective layouts. The
+optional GitHub collector reads PR, CI, issue, and branch-comparison facts
+through an authenticated `gh` CLI. The local-files collector records metadata
+without reading contents. Details and inactive launchd/systemd schedule
+generation are in [`docs/automation.md`](docs/automation.md).
 
 ## Reference interface
 
 The standard-library HTTP service provides:
 
+- a Today view for shipped, in-motion, owner-needed, and stalled work, plus
+  deterministic agent-effectiveness suggestions and coverage notices;
 - a responsive board for queue, inbox, owner tasks, admitted asks, and outcomes;
 - a mobile decision deck with option selection, recommendation acceptance, snooze, need-more-info, completion, skip, and digest-bound undo where safe;
 - config-driven branding and allowlisted independent contexts.
 
 It binds only to `127.0.0.1`, rejects non-loopback Host headers, has no CORS opt-in, and is not an authenticated remote service. Do not put an unauthenticated proxy in front of it. See [`docs/ui.md`](docs/ui.md).
 
+Observer workspaces can set `ui.readOnly: true`; the service then exposes the
+same validated views while refusing every mutation request with `403` and
+disabling write controls in both reference clients.
+
 ## Current limits
 
 - POSIX `fcntl` locking; native Windows writers are unsupported.
-- Clone-based execution; there is no package-manager release yet.
+- The CLI is clone-based; the Mac app is source-buildable but has no notarized public release yet.
 - The reference UI is loopback-only.
 - GitHub collection requires a separately installed and authenticated `gh` CLI.
 - Schedules are generated for inspection but never installed or activated automatically.

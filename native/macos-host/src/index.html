@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HFLedger</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="main.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand">
+          <img src="icon.svg" width="50" height="50" alt="">
+          <div>
+            <p class="eyebrow">Local-first control room</p>
+            <h1>HFLedger</h1>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button id="show-commands" class="button quiet command-guide-button" aria-haspopup="dialog">Command guide</button>
+          <div class="host-pill" id="host-pill"><span></span><b>Engine stopped</b></div>
+        </div>
+      </header>
+
+      <div id="error-banner" class="banner error" role="alert" hidden>
+        <span id="error-message"></span>
+        <div class="banner-actions">
+          <button id="repair-settings" class="button quiet" hidden>Repair app settings</button>
+          <button id="dismiss-error" class="icon-button" aria-label="Dismiss">×</button>
+        </div>
+      </div>
+      <div id="success-banner" class="banner success" role="status" hidden></div>
+
+      <main class="content-grid">
+        <section class="primary-column">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Workspaces</p>
+              <h2>Choose what to open</h2>
+            </div>
+            <button id="add-existing" class="button secondary">Open existing folder…</button>
+          </div>
+
+          <div id="workspace-list" class="workspace-list" aria-live="polite"></div>
+
+          <form id="create-form" class="create-card">
+            <div>
+              <h3>Create a private workspace</h3>
+              <p>HFLedger stores it inside this Mac app’s protected data folder.</p>
+            </div>
+            <div class="create-controls">
+              <label>
+                <span>Project name</span>
+                <input id="project-name" name="project" maxlength="80" required placeholder="My project">
+              </label>
+              <button class="button primary" type="submit">Create</button>
+            </div>
+          </form>
+        </section>
+
+        <aside class="side-column">
+          <section class="panel" aria-labelledby="engine-title">
+            <p class="eyebrow">Local engine</p>
+            <h2 id="engine-title">Status &amp; recovery</h2>
+            <dl class="status-list">
+              <div><dt>Workspace</dt><dd id="active-workspace">None open</dd></div>
+              <div><dt>Connection</dt><dd id="connection">Stopped</dd></div>
+            </dl>
+            <div class="button-stack">
+              <button id="restart" class="button secondary" disabled>Restart engine</button>
+              <button id="stop" class="button quiet" disabled>Stop engine</button>
+            </div>
+          </section>
+
+          <section class="panel" aria-labelledby="prefs-title">
+            <p class="eyebrow">Preferences</p>
+            <h2 id="prefs-title">Mac behavior</h2>
+            <label class="toggle-row">
+              <span><b>Notifications</b><small>Generic alerts for new owner asks</small></span>
+              <input id="pref-notifications" type="checkbox" role="switch">
+            </label>
+            <label class="toggle-row">
+              <span><b>Launch at login</b><small>Start HFLedger after you sign in</small></span>
+              <input id="pref-login" type="checkbox" role="switch">
+            </label>
+            <label class="toggle-row">
+              <span><b>Reopen last board</b><small>Restore the selected workspace at launch</small></span>
+              <input id="pref-restore" type="checkbox" role="switch">
+            </label>
+          </section>
+
+          <section class="panel" aria-labelledby="data-title">
+            <p class="eyebrow">Data safety</p>
+            <h2 id="data-title">Backups &amp; diagnostics</h2>
+            <div class="button-stack">
+              <button id="backup" class="button secondary" disabled>Create validated backup</button>
+              <button id="reveal-workspace" class="button quiet" disabled>Reveal workspace in Finder</button>
+              <button id="reveal-backups" class="button quiet">Reveal backups in Finder</button>
+              <button id="show-diagnostics" class="button quiet">Show diagnostics</button>
+            </div>
+          </section>
+        </aside>
+      </main>
+
+      <footer>
+        <span id="version"></span>
+        <button id="quit" class="text-button">Quit HFLedger</button>
+      </footer>
+    </div>
+
+    <dialog id="diagnostics-dialog">
+      <form method="dialog" class="dialog-card">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">Local support details</p><h2>Diagnostics</h2></div>
+          <button class="icon-button" value="cancel" aria-label="Close">×</button>
+        </div>
+        <pre id="diagnostics-output"></pre>
+        <div class="dialog-actions">
+          <button id="reveal-logs" class="button quiet" type="button">Reveal logs</button>
+          <button class="button primary" value="default">Done</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="commands-dialog" class="commands-dialog">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">Agent workflow shortcuts</p><h2>Command guide</h2></div>
+          <button id="close-commands" class="icon-button" type="button" aria-label="Close">×</button>
+        </div>
+
+        <p class="commands-intro">
+          Runtime adapters can install these slash commands in your AI coding chat. Your local
+          aliases may be shorter; these are not Terminal commands or built into the engine.
+        </p>
+
+        <div class="workflow-rhythm" aria-label="Typical workflow">
+          <span><code>/ledger-sweep</code><small>refresh</small></span>
+          <b aria-hidden="true">→</b>
+          <span><code>/ledger-status</code><small>choose</small></span>
+          <b aria-hidden="true">→</b>
+          <span><code>/ledger-work</code><small>build</small></span>
+          <b aria-hidden="true">→</b>
+          <span><code>/ledger-attend</code><small>decide</small></span>
+        </div>
+
+        <label class="command-search">
+          <span>Find a command</span>
+          <input id="command-search" type="search" placeholder="Try “protected”, “refresh”, or “build”" autocomplete="off">
+        </label>
+
+        <div class="command-grid" id="command-grid">
+          <article class="command-card featured" data-command-card data-search="ledger sweep refresh reconcile board cards evidence open threads highest leverage sources daily">
+            <div class="command-card-heading">
+              <code>/ledger-sweep</code>
+              <span class="command-badge refresh">Refreshes state</span>
+            </div>
+            <h3>Refresh the whole operating picture</h3>
+            <p>Reconciles durable events, checks configured read-only observations, and refreshes the operating brief.</p>
+            <dl>
+              <div><dt>Use it</dt><dd>When you need current truth, especially before deciding what to do.</dd></div>
+              <div><dt>Guardrail</dt><dd>Observations never grant build, merge, deployment, or owner-interruption authority.</dd></div>
+            </dl>
+          </article>
+
+          <article class="command-card" data-command-card data-search="ledger status fast read only situation leverage urgent next stale board">
+            <div class="command-card-heading">
+              <code>/ledger-status</code>
+              <span class="command-badge read-only">Read only</span>
+            </div>
+            <h3>Get a fast re-entry brief</h3>
+            <p>Reads the existing board and ranks what matters now by leverage and urgency without re-pulling every source.</p>
+            <dl>
+              <div><dt>Use it</dt><dd>For a quick “where are we?” or “what should I do next?”</dd></div>
+              <div><dt>Difference</dt><dd>If the board is stale, run <code>/ledger-sweep</code> first.</dd></div>
+            </dl>
+          </article>
+
+          <article class="command-card" data-command-card data-search="ledger work autonomous safe ready build queue pull request evidence checkpoint">
+            <div class="command-card-heading">
+              <code>/ledger-work</code>
+              <span class="command-badge builds">Builds</span>
+            </div>
+            <h3>Work the safe ready queue</h3>
+            <p>Chooses fully specified, explicitly safe work and reports bounded start, verification, and shipment evidence.</p>
+            <dl>
+              <div><dt>Use it</dt><dd>When the board contains authorized Ready-for-Build work.</dd></div>
+              <div><dt>Guardrail</dt><dd>Protected, ambiguous, or owner-gated work stays out.</dd></div>
+            </dl>
+          </article>
+
+          <article class="command-card attended" data-command-card data-search="ledger attend attended protected owner gated builder together review choose approve">
+            <div class="command-card-heading">
+              <code>/ledger-attend</code>
+              <span class="command-badge attended">You stay involved</span>
+            </div>
+            <h3>Handle work that needs the owner</h3>
+            <p>Presents admitted decisions and exact manual actions with their evidence, risks, and completion proof.</p>
+            <dl>
+              <div><dt>Use it</dt><dd>For protected choices or owner-only steps that autonomous work must skip.</dd></div>
+              <div><dt>Guardrail</dt><dd>Only admitted asks enter this lane; vague escalations are rejected.</dd></div>
+            </dl>
+          </article>
+        </div>
+
+        <p id="command-empty" class="command-empty" hidden>No commands match that search.</p>
+        <div class="dialog-actions">
+          <span class="commands-footnote">Command behavior comes from the installed workflow contracts.</span>
+          <button id="done-commands" class="button primary" type="button">Done</button>
+        </div>
+      </div>
+    </dialog>
+  </body>
+</html>

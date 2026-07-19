@@ -16,7 +16,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from core import admission, ledger, reconcile  # noqa: E402
+from core import admission, ledger, orientation, reconcile  # noqa: E402
 from core.store import BoardStore, BoardValidationError, load_config, resolve_home  # noqa: E402
 
 
@@ -125,7 +125,9 @@ class Runtime:
             "title": ui["title"],
             "subtitle": ui["subtitle"],
             "accent": ui["accent"],
+            "readOnly": bool(ui.get("readOnly", False)),
         }
+        self.read_only = self.ui["readOnly"]
         self.port = ui["port"]
         contexts = []
         for item in ui["contexts"]:
@@ -179,6 +181,8 @@ def _load_validated(context):
 def build_board_view(runtime, context_id=None):
     context = runtime.context(context_id)
     board = _load_validated(context)
+    entries = ledger.parse_lines(ledger.snapshot_lines(context.home), context.config)
+    ledger.validate_cursor(board, entries)
     decisions = board.get("decisions", {})
     response = runtime.shell(context.context_id)
     response.update({
@@ -194,6 +198,7 @@ def build_board_view(runtime, context_id=None):
         "inbox": copy.deepcopy(board.get("inbox", [])),
         "retriage": copy.deepcopy(board.get("retriage", [])),
         "unmatchedCompletions": copy.deepcopy(board.get("unmatchedCompletions", [])),
+        "orientation": orientation.build(board, entries, context.config),
     })
     return response
 
@@ -600,6 +605,9 @@ class Handler(BaseHTTPRequestHandler):
             route = POST_ROUTES.get(urlparse(self.path).path)
             if route is None:
                 self._send_json({"error": "not found"}, status=404)
+                return
+            if self.runtime.read_only:
+                self._send_json({"error": "workspace is read-only"}, status=403)
                 return
             body = self._json_body(raw)
             with _WRITE_LOCK:

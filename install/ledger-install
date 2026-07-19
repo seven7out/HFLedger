@@ -30,7 +30,7 @@ def build_parser():
         "--local-pattern", action="append", default=[],
         help="relative glob for every local root; defaults to **/*.md")
     parser.add_argument(
-        "--runtime", action="append", choices=("generic", "claude-code"), default=[],
+        "--runtime", action="append", choices=("codex", "generic", "claude-code"), default=[],
         help="agent pack runtime; repeat as needed; defaults to generic")
     parser.add_argument(
         "--schedule", choices=("none", "launchd", "systemd", "both"), default="none",

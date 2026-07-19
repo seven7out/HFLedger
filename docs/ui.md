@@ -50,6 +50,12 @@ Contexts are loaded and validated at startup. Requests carry only a context id. 
 
 Startup also verifies that every UI event named in the default writer registry still exists with its protocol-required `reconcile` or `audit-only` mode. A context with a missing or reclassified interface event is rejected before serving, preventing a board-first operation from discovering an unusable audit writer after mutation.
 
+Set `ui.readOnly` to `true` for observer and imported-snapshot workspaces. The
+read API remains available, the shell advertises the mode, and every mutation
+route returns `403` before invoking a writer. The reference clients disable
+mutation controls and avoid treating an empty read-only deck as proof that the
+source owner lane is clear.
+
 Existing Phase 1 data directories without `ui` remain usable. The service supplies neutral single-context defaults in memory; running `ledger init` after Phase 2 writes the object explicitly.
 
 ## Read API
@@ -62,11 +68,24 @@ Returns:
 
 - `version`, `ui`, `contexts`, and `activeContext` shell data;
 - project name, update timestamp, and generated counts;
+- a deterministic `orientation` projection with shipped, moving, needs-owner,
+  and stalled lanes, agent-effectiveness suggestions, and evidence coverage;
 - open/snoozed decisions and actions;
 - recent resolved asks;
 - owner tasks, agent queue, inbox, retriage, and unmatched completions.
 
 Every admitted ask projection includes a `srcHash`, the Phase 1 immutable-package fingerprint. Clients should send it with mutations to detect a stale card.
+
+The Today projection is computed from the validated board and ledger at read
+time; it is not a second database. Shipped means explicit shipment evidence, a
+merge event, a dated changelog entry, or a completed queue item with evidence.
+`built` alone is intentionally insufficient. Suggestions are deterministic
+rules with stable identifiers, not model-generated diagnoses.
+
+An adapter may declare an `orientationNotices` array as a normal schema extra
+section. Valid bounded `id`, `title`, and `detail` records join the coverage
+notices, allowing a private importer to disclose an intentionally hidden or
+unsupported source plane without teaching the public engine a private schema.
 
 ### `GET /api/cards?context=ID`
 

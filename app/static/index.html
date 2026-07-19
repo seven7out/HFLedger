@@ -13,10 +13,10 @@
   <header class="topbar">
     <a class="brand" href="/" aria-label="HFLedger board">
       <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
-      <span><strong id="brand-title">HFLedger</strong><small>owner control room</small></span>
+      <span><strong id="brand-title">HFLedger</strong><small>agent control tower</small></span>
     </a>
     <nav class="view-nav" aria-label="Views">
-      <a class="active" href="/">Board</a>
+      <a class="active" href="/">Today</a>
       <a href="/deck">Decision deck</a>
     </nav>
     <label class="context-control">
@@ -28,11 +28,12 @@
   <main class="board-shell">
     <section class="hero">
       <div>
-        <p class="eyebrow">Live, local, accountable</p>
+        <p class="eyebrow">Across your coding agents</p>
         <h1 id="project-title">Loading your board…</h1>
-        <p id="project-subtitle" class="hero-copy">The owner lane stays small because only admitted asks get through.</p>
+        <p id="project-subtitle" class="hero-copy">What shipped, what is moving, what needs you, and what went quiet.</p>
       </div>
       <div class="hero-actions">
+        <span id="read-only-badge" class="read-only-badge" hidden>Read-only observer</span>
         <span id="updated-at" class="updated-at"></span>
         <button id="refresh-button" class="button secondary" type="button">Refresh</button>
         <a class="button primary" href="/deck">Open deck <span aria-hidden="true">→</span></a>
@@ -46,6 +47,56 @@
       Reading the validated board…
     </div>
     <div id="error" class="error-card" role="alert" hidden></div>
+
+    <section id="today" class="today" aria-label="Cross-agent orientation" hidden>
+      <div id="coverage-notices" class="coverage-notices"></div>
+
+      <div class="today-grid">
+        <section class="panel today-panel shipped-panel">
+          <header class="panel-heading compact-heading">
+            <div><p class="eyebrow">Verified outcomes</p><h2>Shipped</h2></div>
+            <span id="shipped-count" class="count-pill"></span>
+          </header>
+          <div id="shipped-list" class="orientation-list"></div>
+        </section>
+
+        <section class="panel today-panel moving-panel">
+          <header class="panel-heading compact-heading">
+            <div><p class="eyebrow">Latest evidence</p><h2>In motion</h2></div>
+            <span id="moving-count" class="count-pill"></span>
+          </header>
+          <div id="moving-list" class="orientation-list"></div>
+        </section>
+
+        <section class="panel today-panel owner-today-panel">
+          <header class="panel-heading compact-heading">
+            <div><p class="eyebrow">Human intervention</p><h2>Needs you</h2></div>
+            <span id="needs-owner-count" class="count-pill"></span>
+          </header>
+          <div id="needs-owner-list" class="orientation-list"></div>
+        </section>
+
+        <section class="panel today-panel stalled-panel">
+          <header class="panel-heading compact-heading">
+            <div><p class="eyebrow">Not happening</p><h2>Stalled or quiet</h2></div>
+            <span id="stalled-count" class="count-pill"></span>
+          </header>
+          <div id="stalled-list" class="orientation-list"></div>
+        </section>
+      </div>
+
+      <section class="panel effectiveness-panel">
+        <header class="panel-heading compact-heading">
+          <div><p class="eyebrow">Improve the system</p><h2>Make the agents more effective</h2></div>
+        </header>
+        <div id="effectiveness-list" class="effectiveness-list"></div>
+      </section>
+
+      <div class="full-board-heading">
+        <div><p class="eyebrow">Underlying workflow</p><h2>Full board</h2></div>
+        <p>Every recommendation above comes from the validated state and evidence below.</p>
+      </div>
+    </section>
 
     <div id="board" class="board-grid" hidden>
       <section class="panel attention-panel">

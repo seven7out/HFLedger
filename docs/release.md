@@ -40,6 +40,28 @@ Before making the repository public:
 
 Do not publish an HFLedger data directory, generated collector report, local instruction pack, scheduler file containing machine paths, or private privacy-gate denylist.
 
+## Mac application release
+
+The Mac app has two release levels:
+
+1. `npm run build:dmg` creates an ad-hoc-signed local candidate and runs the
+   signature, frozen-engine, symlink-containment, privacy-marker, and checksum
+   verifier.
+2. The manual `Mac app candidate` GitHub workflow can run an explicitly enabled
+   signed job in the protected `macos-release` environment. It imports the
+   Developer ID certificate, asks Tauri to notarize and staple the DMG, verifies
+   Gatekeeper acceptance, and creates a draft GitHub release.
+
+The signed job requires the Apple secrets documented in
+[`native/macos-host/README.md`](../native/macos-host/README.md). Never place a
+certificate, app-specific password, private updater key, or keychain password in
+the repository. Review the generated `release-manifest.json` and install the DMG
+on a clean Mac account before publishing the draft.
+
+The updater remains disabled until there is a stable release URL and a separately
+stored updater signing key. Enabling it is a release-policy change, not a normal
+build step.
+
 ## Launch sequence
 
 1. Publish the repository and release.

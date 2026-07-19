@@ -7,7 +7,7 @@ import json
 import os
 import re
 
-from . import admission
+from . import admission, evidence
 
 
 ENVELOPE_FIELDS = frozenset((
@@ -99,6 +99,8 @@ def envelope_errors(entry, config):
         errors.append("authorization must be null or text")
     if entry.get("extra") is not None and not isinstance(entry.get("extra"), dict):
         errors.append("extra must be null or an object")
+    if action in evidence.ACTIONS:
+        errors.extend(evidence.event_errors(entry))
     return errors
 
 

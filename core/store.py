@@ -83,6 +83,8 @@ def config_errors(config):
             if (not isinstance(port, int) or isinstance(port, bool) or
                     not 1 <= port <= 65535):
                 errors.append("ui.port must be an integer from 1 through 65535")
+            if "readOnly" in ui and not isinstance(ui.get("readOnly"), bool):
+                errors.append("ui.readOnly must be boolean")
             contexts = ui.get("contexts")
             if not isinstance(contexts, list) or not contexts:
                 errors.append("ui.contexts must be a non-empty list")
@@ -297,11 +299,12 @@ def _automation_config_errors(automation, errors):
     packs = automation.get("packs")
     if _closed_config_object(packs, "automation.packs", {"runtimes"}, errors):
         runtimes = packs.get("runtimes")
-        allowed = {"generic", "claude-code"}
+        allowed = {"codex", "generic", "claude-code"}
         if (not isinstance(runtimes, list) or not runtimes or
                 any(runtime not in allowed for runtime in runtimes) or
                 len(runtimes) != len(set(runtimes))):
-            errors.append("automation.packs.runtimes must be a unique list of generic/claude-code")
+            errors.append(
+                "automation.packs.runtimes must be a unique list of codex/generic/claude-code")
 
     schedule = automation.get("schedule")
     if _closed_config_object(schedule, "automation.schedule", {"enabled", "hour", "minute"}, errors):

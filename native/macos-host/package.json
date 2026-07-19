@@ -1,0 +1,19 @@
+{
+  "name": "hfledger-macos-host",
+  "private": true,
+  "version": "0.6.0-alpha.4",
+  "type": "module",
+  "scripts": {
+    "bundle-engine": "python3 scripts/build_engine.py",
+    "stage-runtime": "npm run bundle-engine && python3 scripts/stage_runtime.py",
+    "tauri": "PATH=/opt/homebrew/opt/rustup/bin:$PATH tauri",
+    "dev": "PATH=/opt/homebrew/opt/rustup/bin:$PATH tauri dev",
+    "build:app": "APPLE_SIGNING_IDENTITY=- python3 scripts/build_tauri.py --bundles app && python3 scripts/sign_local.py && python3 scripts/verify_release.py",
+    "build:dmg": "APPLE_SIGNING_IDENTITY=- python3 scripts/build_tauri.py --bundles app,dmg && python3 scripts/verify_release.py",
+    "build": "npm run build:app",
+    "verify": "python3 scripts/verify_release.py"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.8.5"
+  }
+}

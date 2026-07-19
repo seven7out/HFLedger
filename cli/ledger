@@ -12,7 +12,7 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from core import __version__  # noqa: E402
-from core import admission, ledger as ledger_log, reconcile as reconciler, schema, store  # noqa: E402
+from core import admission, evidence, ledger as ledger_log, reconcile as reconciler, schema, store  # noqa: E402
 
 
 def _print_json(value):
@@ -119,11 +119,26 @@ def build_parser():
     skip = sub.add_parser("skip", help="capture the owner's report that an item is intentionally skipped")
     _add_completion_args(skip)
 
+    event = sub.add_parser(
+        "event", help="append bounded evidence about coding-agent work",
+        description=(
+            "Record an observation for the cross-agent Today view. Events are audit-only: "
+            "they never grant work, change queue status, or authorize a merge or deploy."))
+    event.add_argument("event_kind", choices=evidence.EVENT_KINDS)
+    event.add_argument("--task", required=True, dest="task_id", help="stable queue or work item id")
+    event.add_argument("--summary", required=True, help="bounded single-line factual summary")
+    event.add_argument("--runtime", required=True, choices=sorted(evidence.RUNTIMES))
+    event.add_argument("--thread", help="optional bounded source-thread reference")
+    event.add_argument(
+        "--evidence", action="append", nargs=2, default=[], metavar=("KIND", "REF"),
+        help="typed evidence reference; repeat up to eight times")
+    event.add_argument("--dry-run", action="store_true", help="validate and print without appending")
+
     sub.add_parser("validate", help="validate config, board, cursor, provenance, and generated counts")
     sub.add_parser("reconcile", help="atomically fold all unprocessed ledger events into the board")
     sub.add_parser("collect", help="write a read-only local/GitHub observation report")
     render = sub.add_parser("render-packs", help="generate configured agent instruction packs")
-    render.add_argument("--runtime", action="append", choices=("generic", "claude-code"),
+    render.add_argument("--runtime", action="append", choices=("codex", "generic", "claude-code"),
                         help="runtime to render; repeat as needed")
     render.add_argument("--force", action="store_true", help="replace existing generated files")
     serve = sub.add_parser("serve", help="run the loopback-only board and decision deck")
@@ -175,6 +190,25 @@ def main(argv=None):
                 ledger_log.append_record(entry, home, config)
                 _print_json({"status": "filed", "action": action,
                              "target": target, "targetType": target_type})
+            return 0
+
+        if args.command == "event":
+            payload = evidence.build_payload(
+                args.summary, args.runtime, evidence=args.evidence, thread=args.thread)
+            entry = ledger_log.build_entry(
+                "agent", "work_%s" % args.event_kind, task_id=args.task_id,
+                authorization=evidence.AUTHORIZATION, extra=payload)
+            errors = ledger_log.envelope_errors(entry, config)
+            if errors:
+                raise ValueError("agent evidence rejected:\n- " + "\n- ".join(errors))
+            if args.dry_run:
+                _print_json({"status": "valid", "entry": entry})
+            else:
+                ledger_log.append_record(entry, home, config)
+                _print_json({
+                    "status": "filed", "action": entry["action"],
+                    "task": entry["task_id"], "evidenceCount": len(payload["evidence"]),
+                })
             return 0
 
         if args.command == "validate":

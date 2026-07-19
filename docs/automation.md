@@ -2,6 +2,28 @@
 
 Phase 3 adds a read-only observation layer and generated operating instructions around the HFLedger protocol. Collectors never edit the board or append events. Packs explain how an agent should interpret observations and use existing HFLedger commands; they are not executable policy engines.
 
+## Agent evidence writers
+
+Codex, Claude Code, and other runtimes can report progress through the same
+bounded CLI contract:
+
+```sh
+ledger --home /path/to/private-ledger-data event started \
+  --task task-example --runtime codex --summary "Implementing the parser"
+ledger --home /path/to/private-ledger-data event verified \
+  --task task-example --runtime codex --summary "Parser suite passes" \
+  --evidence test "python3 -m unittest tests.test_parser"
+ledger --home /path/to/private-ledger-data event shipped \
+  --task task-example --runtime codex --summary "Parser merged" \
+  --evidence commit abc1234
+```
+
+The command appends audit-only `agent-evidence-v1` events. It does not move a
+queue item, resolve a decision, or authorize deployment. Runtime adapters
+should emit a `started` event when work begins, sparse `checkpoint` events only
+at durable milestones, `blocked` when progress truly stops, `verified` after a
+named check, and `shipped` only with observable evidence.
+
 ## Automation configuration
 
 The optional `automation` object in `config.json` has this closed shape:
@@ -57,7 +79,15 @@ Render the configured runtimes into the private data directory:
 ledger --home /path/to/private-ledger-data render-packs
 ```
 
-The generic adapter produces `AGENTS.md` plus `prompts/{sweep,work,attend,status}.md`. The Claude Code adapter produces `CLAUDE.md` plus `.claude/commands/ledger-{sweep,work,attend,status}.md`. A deterministic `manifest.json` records every relative path and SHA-256 digest.
+The Codex adapter produces `AGENTS.md` plus
+`prompts/ledger-{sweep,work,attend,status}.md` with `--runtime codex` evidence
+instructions. The generic adapter produces `AGENTS.md` plus
+`prompts/{sweep,work,attend,status}.md` with runtime `other`. The Claude Code
+adapter produces `CLAUDE.md` plus
+`.claude/commands/ledger-{sweep,work,attend,status}.md` with runtime
+`claude-code`. Each work/attend pack records start, true blocker, verification,
+and evidenced shipment milestones through the audit-only event surface. A
+deterministic `manifest.json` records every relative path and SHA-256 digest.
 
 Rendering is strict: templates may use only declared placeholders, unresolved tokens fail, and symlink targets are rejected. Existing generated files are not replaced unless `--force` is supplied. Generation does not copy files into a repository or a runtime-global configuration directory.
 
@@ -70,6 +100,7 @@ The Phase 3 installer creates a new data directory, validates and writes configu
   --project "Fictional orchard tools" \
   --repo orchard,example/orchard,stage,main \
   --local-root notes=/path/to/project-notes \
+  --runtime codex \
   --runtime generic \
   --runtime claude-code \
   --schedule both \

@@ -62,7 +62,11 @@ function tool(label, action) {
 
 function renderCard() {
   const card = current();
-  if (!card) { showView("deck-empty"); $("#deck-progress").textContent = "All clear"; return; }
+  if (!card) {
+    showView("deck-empty");
+    $("#deck-progress").textContent = state.data?.ui.readOnly ? "Read-only view" : "All clear";
+    return;
+  }
   showView("deck-stage");
   $("#deck-progress").textContent = `${state.index + 1} of ${state.cards.length}`;
   const target = $("#active-card"); target.style.transform = ""; target.style.opacity = "";
@@ -103,6 +107,7 @@ function primaryAction(card) { return card.type === "decision" ? "accept" : "com
 
 async function answer(action, extra = {}) {
   if (state.busy || !current()) return;
+  if (state.data?.ui.readOnly) { toast("This workspace is read-only."); return; }
   state.busy = true;
   const card = current();
   try {
@@ -144,6 +149,11 @@ function renderShell(data) {
   document.documentElement.style.setProperty("--accent", data.ui.accent);
   document.title = `${data.ui.title} · Decision deck`;
   $("#deck-brand").textContent = data.ui.title;
+  if (data.ui.readOnly) {
+    $("#deck-empty-icon").textContent = "◇";
+    $("#deck-empty-title").textContent = "No compatible cards are shown.";
+    $("#deck-empty-copy").textContent = "This workspace is read-only. Check Today’s coverage notices before treating the owner lane as complete.";
+  }
   const select = $("#deck-context");
   select.replaceChildren(...data.contexts.map((context) => {
     const option = node("option", "", context.label); option.value = context.id;
@@ -192,4 +202,3 @@ cardElement.addEventListener("pointercancel", () => { state.pointer = null; card
 
 loadCards();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/service-worker.js").catch(() => {});
-

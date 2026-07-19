@@ -3,7 +3,7 @@
 import datetime
 import json
 
-from . import admission
+from . import admission, evidence
 
 
 CORE_SECTIONS = {
@@ -75,6 +75,7 @@ def default_config(project="HFLedger workspace"):
             "subtitle": "Govern the agent-to-owner interrupt channel.",
             "accent": "#6956e8",
             "port": 7171,
+            "readOnly": False,
             "contexts": [
                 {"id": "main", "label": project, "home": "."},
             ],
@@ -108,6 +109,7 @@ def default_config(project="HFLedger workspace"):
                 "merged": "reconcile",
                 "skipped": "audit-only",
                 "decision_added": "reconcile",
+                **{action: "audit-only" for action in evidence.ACTIONS},
             }},
             "owner-ui": {"actions": {
                 "decision_resolved": "reconcile",

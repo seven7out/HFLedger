@@ -74,6 +74,7 @@ class CliTests(unittest.TestCase):
             ["--help"], ["init", "--help"], ["ask", "--help"],
             ["ask", "decision", "--help"], ["ask", "action", "--help"],
             ["done", "--help"], ["skip", "--help"],
+            ["event", "--help"],
             ["validate", "--help"], ["reconcile", "--help"],
             ["collect", "--help"], ["render-packs", "--help"],
         )
@@ -157,9 +158,46 @@ class CliTests(unittest.TestCase):
             "done", "--id", "task:fictional:timer",
             "--evidence", "The owner completed the fictional task.", "--dry-run",
         ])
-        self.assertEqual((decision.returncode, action.returncode, done.returncode), (0, 0, 0))
+        event = self.run_cli([
+            "event", "checkpoint", "--task", "task:fictional:timer",
+            "--summary", "The fictional timer checks passed.",
+            "--runtime", "codex", "--evidence", "test", "130 checks passed",
+            "--dry-run",
+        ])
+        self.assertEqual((decision.returncode, action.returncode, done.returncode, event.returncode),
+                         (0, 0, 0, 0))
         with open(os.path.join(self.temp.name, "ledger.jsonl"), encoding="utf-8") as handle:
             self.assertEqual(handle.read(), "")
+
+    def test_agent_evidence_event_appends_and_reconciles_as_audit_only(self):
+        result = self.run_cli([
+            "event", "started", "--task", "task:fictional:timer",
+            "--summary", "Started the bounded fictional timer implementation.",
+            "--runtime", "claude-code", "--thread", "fictional-thread-17",
+            "--evidence", "file", "timer-spec.md",
+        ])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["action"], "work_started")
+        folded = self.run_cli(["reconcile"])
+        self.assertEqual(folded.returncode, 0, folded.stderr)
+        self.assertEqual(json.loads(folded.stdout)["processed"], 1)
+        self.assertEqual(self.run_cli(["validate"]).returncode, 0)
+
+    def test_agent_evidence_rejects_multiline_and_unsupported_kind(self):
+        with open(os.path.join(self.temp.name, "ledger.jsonl"), encoding="utf-8") as handle:
+            before = handle.read()
+        bad_summary = self.run_cli([
+            "event", "checkpoint", "--task", "task:fictional:timer",
+            "--summary", "line one\nline two", "--runtime", "codex",
+        ])
+        bad_kind = self.run_cli([
+            "event", "verified", "--task", "task:fictional:timer",
+            "--summary", "Checked the fictional timer.", "--runtime", "codex",
+            "--evidence", "secret", "not allowed",
+        ])
+        self.assertEqual((bad_summary.returncode, bad_kind.returncode), (2, 2))
+        with open(os.path.join(self.temp.name, "ledger.jsonl"), encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), before)
 
     def test_example_data_directory_validates(self):
         environment = os.environ.copy()

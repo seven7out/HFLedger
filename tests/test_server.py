@@ -86,6 +86,8 @@ class ViewAndStaticTests(ServerCase):
         self.assertIn("queue", body)
         self.assertIn("ownerTasks", body)
         self.assertIn("resolved", body)
+        self.assertEqual(body["orientation"]["version"], 1)
+        self.assertIn("coverage", body["orientation"])
 
     def test_cards_are_compiled_from_live_admitted_packages(self):
         decision = decision_package(self.config)
@@ -150,6 +152,20 @@ class ViewAndStaticTests(ServerCase):
 
 
 class BoardMutationTests(ServerCase):
+    def test_read_only_runtime_rejects_every_mutation_without_writes(self):
+        package = self.decision()
+        self.httpd.runtime.read_only = True
+        self.httpd.runtime.ui["readOnly"] = True
+        before_board, before_ledger = self.board_bytes(), list(read_ledger(self.home))
+        response, body, _connection = self.post(
+            "/api/decisions/resolve", {"id": package["id"], "resolution": "No."})
+        self.assertEqual(response.status, 403)
+        self.assertEqual(body, {"error": "workspace is read-only"})
+        self.assertEqual(self.board_bytes(), before_board)
+        self.assertEqual(read_ledger(self.home), before_ledger)
+        _response, view, _connection = self.get("/api/board")
+        self.assertTrue(view["ui"]["readOnly"])
+
     def test_decision_reorder_requires_exact_permutation_and_audits(self):
         first = decision_package(self.config, key="test:decision:first")
         second = decision_package(self.config, key="test:decision:second")

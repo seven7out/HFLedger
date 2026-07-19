@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Native workspace and preferences shell for HFLedger",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

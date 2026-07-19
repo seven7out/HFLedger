@@ -20,6 +20,11 @@ function countQueue(counts) {
 
 function dateLabel(value) {
   if (!value) return "";
+  const dateOnly = /^(\d{4}-\d{2}-\d{2})T00:00:00(?:\+00:00|Z)$/.exec(value);
+  if (dateOnly) {
+    const date = new Date(`${dateOnly[1]}T12:00:00`);
+    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
+  }
   const date = new Date(value);
   return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat(undefined, {
     month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
@@ -54,8 +59,13 @@ function renderShell(data) {
   document.documentElement.style.setProperty("--accent", data.ui.accent);
   document.title = `${data.ui.title} · HFLedger`;
   $("#brand-title").textContent = data.ui.title;
+  $("#read-only-badge").hidden = !data.ui.readOnly;
+  document.body.classList.toggle("read-only", Boolean(data.ui.readOnly));
   $("#project-title").textContent = data.project;
-  $("#project-subtitle").textContent = data.ui.subtitle;
+  const totals = data.orientation?.totals;
+  $("#project-subtitle").textContent = totals
+    ? `${totals.shipped} shipped · ${totals.moving} in motion · ${totals.needsOwner} need you · ${totals.stalled} stalled or quiet.`
+    : data.ui.subtitle;
   $("#updated-at").textContent = data.updated ? `Updated ${dateLabel(data.updated)}` : "";
   const select = $("#context-select");
   select.replaceChildren(...data.contexts.map((context) => {
@@ -68,7 +78,13 @@ function renderShell(data) {
 }
 
 function renderStats(data) {
-  const values = [
+  const totals = data.orientation?.totals;
+  const values = totals ? [
+    ["Shipped", totals.shipped, "verified recent outcomes"],
+    ["In motion", totals.moving, "active with latest evidence"],
+    ["Needs you", totals.needsOwner, "decisions and owner actions"],
+    ["Stalled or quiet", totals.stalled, "blocked, parked, or stale"],
+  ] : [
     ["Open asks", data.decisions.filter((item) => item.state !== "snoozed").length, "admitted owner interrupts"],
     ["Snoozed", data.decisions.filter((item) => item.state === "snoozed").length, "still dedupe-active"],
     ["Agent queue", data.queue.length, "items across all stages"],
@@ -79,6 +95,97 @@ function renderStats(data) {
     card.append(node("span", "", label), node("strong", "", value), node("em", "", note));
     return card;
   }));
+}
+
+function orientationCard(item) {
+  const card = node("article", "orientation-item");
+  const heading = node("div", "orientation-heading");
+  heading.append(node("h3", "", item.title || item.id));
+  if (item.timestamp) heading.append(node("time", "", dateLabel(item.timestamp)));
+  card.append(heading);
+  if (item.summary) card.append(node("p", "", item.summary));
+  const meta = node("div", "orientation-meta");
+  [item.status, item.reason, item.runtime, item.kind, item.action?.replace("work_", "")]
+    .filter(Boolean)
+    .forEach((value) => meta.append(node("span", "tag", value)));
+  if (meta.childElementCount) card.append(meta);
+  if (item.evidence?.length) {
+    const evidence = node("div", "evidence-row");
+    item.evidence.forEach((reference) => {
+      evidence.append(node("span", "evidence-chip", `${reference.kind}: ${reference.ref}`));
+    });
+    card.append(evidence);
+  }
+  return card;
+}
+
+function renderOrientationLane(id, countId, items, total, emptyMessage) {
+  const target = $(id);
+  $(countId).textContent = total;
+  if (!items.length) return empty(target, emptyMessage);
+  target.replaceChildren(...items.map(orientationCard));
+}
+
+function renderCoverage(coverage) {
+  const target = $("#coverage-notices");
+  const notices = coverage?.notices || [];
+  if (!notices.length) {
+    target.replaceChildren();
+    target.hidden = true;
+    return;
+  }
+  const copy = node("div", "coverage-copy");
+  copy.append(
+    node("strong", "", "Observation coverage is partial"),
+    node("p", "", "HFLedger is showing what it can verify and naming what it cannot see."),
+  );
+  const list = node("div", "coverage-list");
+  notices.forEach((notice) => {
+    const item = node("article", "coverage-item");
+    item.append(node("strong", "", notice.title), node("span", "", notice.detail));
+    list.append(item);
+  });
+  target.replaceChildren(copy, list);
+  target.hidden = false;
+}
+
+function renderEffectiveness(items) {
+  const target = $("#effectiveness-list");
+  if (!items.length) return empty(target, "No deterministic workflow improvement is supported by the current evidence.");
+  target.replaceChildren(...items.map((item, index) => {
+    const card = node("article", "effectiveness-item");
+    card.append(node("span", "effectiveness-number", String(index + 1)));
+    const copy = node("div");
+    copy.append(node("h3", "", item.title), node("p", "", item.detail));
+    if (item.evidenceIds?.length) {
+      copy.append(node("small", "", `Evidence: ${item.evidenceIds.join(", ")}`));
+    }
+    card.append(copy);
+    return card;
+  }));
+}
+
+function renderToday(data) {
+  const orientation = data.orientation;
+  if (!orientation) {
+    $("#today").hidden = true;
+    return;
+  }
+  renderCoverage(orientation.coverage);
+  renderOrientationLane(
+    "#shipped-list", "#shipped-count", orientation.shipped, orientation.totals.shipped,
+    "No verified shipped outcome is visible yet.");
+  renderOrientationLane(
+    "#moving-list", "#moving-count", orientation.moving, orientation.totals.moving,
+    "No active work has recent evidence.");
+  renderOrientationLane(
+    "#needs-owner-list", "#needs-owner-count", orientation.needsOwner, orientation.totals.needsOwner,
+    "No admitted decision or direct owner task is waiting.");
+  renderOrientationLane(
+    "#stalled-list", "#stalled-count", orientation.stalled, orientation.totals.stalled,
+    "No blocked, abandoned, parked, or stale work is visible in the observed state.");
+  renderEffectiveness(orientation.effectiveness);
+  $("#today").hidden = false;
 }
 
 function moveDecision(index, direction) {
@@ -145,16 +252,20 @@ function renderDecisions(data) {
     main.append(meta);
     const actions = node("div", "ask-actions");
     const up = node("button", "icon-button", "↑");
-    up.type = "button"; up.title = "Move earlier"; up.disabled = index === 0;
+    up.type = "button"; up.title = "Move earlier";
+    up.disabled = data.ui.readOnly || index === 0;
     up.addEventListener("click", () => moveDecision(index, -1));
     const down = node("button", "icon-button", "↓");
-    down.type = "button"; down.title = "Move later"; down.disabled = index === data.decisions.length - 1;
+    down.type = "button"; down.title = "Move later";
+    down.disabled = data.ui.readOnly || index === data.decisions.length - 1;
     down.addEventListener("click", () => moveDecision(index, 1));
     const group = node("div", "ask-action-group");
     const snooze = node("button", "button secondary small", "Snooze");
-    snooze.type = "button"; snooze.addEventListener("click", () => openSnooze(item));
+    snooze.type = "button"; snooze.disabled = data.ui.readOnly;
+    snooze.addEventListener("click", () => openSnooze(item));
     const resolve = node("button", "button primary small", item.type === "action" ? "Mark done" : "Resolve");
-    resolve.type = "button"; resolve.addEventListener("click", () => openResolve(item));
+    resolve.type = "button"; resolve.disabled = data.ui.readOnly;
+    resolve.addEventListener("click", () => openResolve(item));
     group.append(snooze, resolve);
     actions.append(up, down, group);
     card.append(dot, main, actions);
@@ -171,6 +282,7 @@ function renderTasks(data) {
     const row = node("label", `task-item ${item.done ? "done" : ""}`);
     const input = document.createElement("input");
     input.type = "checkbox"; input.checked = item.done === true;
+    input.disabled = data.ui.readOnly;
     input.addEventListener("change", () => {
       input.disabled = true;
       post("/api/tasks/done", { id: item.id, done: input.checked })
@@ -222,7 +334,7 @@ function render(data) {
   state.data = data;
   state.context = data.activeContext;
   localStorage.setItem("ledger-context", state.context);
-  renderShell(data); renderStats(data); renderDecisions(data); renderTasks(data); renderQueue(data); renderResolved(data);
+  renderShell(data); renderStats(data); renderToday(data); renderDecisions(data); renderTasks(data); renderQueue(data); renderResolved(data);
   $("#loading").hidden = true; $("#error").hidden = true; $("#board").hidden = false;
 }
 
@@ -238,6 +350,7 @@ async function load(message) {
     if (message) toast(message);
   } catch (error) {
     $("#loading").hidden = true;
+    $("#today").hidden = true;
     $("#board").hidden = true;
     $("#error").textContent = error.message;
     $("#error").hidden = false;
