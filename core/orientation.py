@@ -7,7 +7,7 @@ import json
 import re
 import unicodedata
 
-from . import evidence, ledger
+from . import disputes, evidence, ledger
 from .link_safety import resolve_projected_link
 
 
@@ -678,6 +678,9 @@ class _V2Builder:
         self.links = {}
         self.diagnostics = []
         self.meta_alerts = []
+        self.dispute_output = {
+            "items": [], "total": 0, "cap": disputes.MAX_DISPUTES, "truncated": False,
+        }
         self._truncated = False
         self._adapter_valid = True
         self._collector_valid = True
@@ -923,6 +926,7 @@ class _V2Builder:
             "_shipmentClaim": False,
             "_verifiedShipment": False,
             "_disputed": False,
+            "_disputeIds": [],
             "_hasUntrusted": bool(raw.get("hasUntrustedContext")),
             "_confirmationRequired": bool(raw.get("confirmationRequired")),
             "_reasonCode": None,
@@ -1471,7 +1475,34 @@ class _V2Builder:
                 self._add_core_item(raw, "inbox-item", raw["id"], "created")
         for raw in self.board.get("unmatchedCompletions", []) if isinstance(self.board.get("unmatchedCompletions"), list) else []:
             if isinstance(raw, dict) and isinstance(raw.get("id"), str):
-                self._add_core_item(raw, "completion-escrow", raw["id"], "completion-captured")
+                item = self._add_core_item(
+                    raw, "completion-escrow", raw["id"], "completion-captured")
+                if item is not None:
+                    self._add_unmatched_completion_evidence(item, raw)
+
+    def _add_unmatched_completion_evidence(self, item, raw):
+        target = _v2_text(raw.get("target"), 160, "unknown-target")
+        target_type = raw.get("targetType") if raw.get("targetType") in ("id", "key") else "id"
+        disposition = "skipped" if raw.get("action") == "owner_skipped" else "completed"
+        stamp = _v2_time(raw.get("recordedAt")) or item["_itemChangedAt"]
+        provenance = raw.get("completionLedgerProvenance")
+        line = provenance.get("line") if isinstance(provenance, dict) else None
+        digest = provenance.get("entrySha256") if isinstance(provenance, dict) else None
+        source_ref = "ledger:completion:%s" % item["sourceItemRef"]
+        if isinstance(line, int) and isinstance(digest, str):
+            source_ref = "ledger:line:%d:%s" % (line, digest[:16])
+        self._add_evidence(
+            item, "ledger:main", source_ref, "owner-report",
+            "A completion report recorded %s for exact %s %s." % (
+                disposition, target_type, target),
+            self.now, stamp, "agent-reported",
+            claim_kind="completion-target", claim_state=disposition)
+        self._add_evidence(
+            item, "board:main", "completion:%s:unmatched" % item["sourceItemRef"],
+            "status", "Reconciliation found no exact item for %s %s." % (
+                target_type, target),
+            self.now, stamp, "verified",
+            claim_kind="completion-target", claim_state="unmatched")
 
     def _ledger_change_kind(self, action):
         return {
@@ -1852,47 +1883,47 @@ class _V2Builder:
                     timestamp_estimated=estimated)
 
     def _link_conflicts(self):
-        grouped = {}
-        for record in self.evidence_records.values():
-            claim_kind = record.get("_claimKind")
-            claim_state = record.get("_claimState")
-            if claim_kind and claim_state:
-                grouped.setdefault((record["itemId"], claim_kind), []).append(record)
-        shipped_states = frozenset(("shipped", "merged", "deployed", "complete"))
-        contrary_states = frozenset(("open", "failed", "not-shipped", "rejected"))
-        for (item_id, _claim_kind), records in grouped.items():
-            positive = [record for record in records if record.get("_claimState") in shipped_states]
-            negative = [record for record in records if record.get("_claimState") in contrary_states]
-            pairs = []
-            for first in positive:
-                for second in negative:
-                    if first["sourceId"] == second["sourceId"] and first["sourceRef"] == second["sourceRef"]:
-                        continue
-                    pairs.append((first, second))
-            for first, second in pairs:
-                if second["id"] not in first["contradictsEvidenceIds"]:
-                    first["contradictsEvidenceIds"].append(second["id"])
-                if first["id"] not in second["contradictsEvidenceIds"]:
-                    second["contradictsEvidenceIds"].append(first["id"])
-                first["contradictsEvidenceIds"].sort()
-                second["contradictsEvidenceIds"].sort()
-                first["provenance"] = "disputed"
-                second["provenance"] = "disputed"
-                self.items[item_id]["_disputed"] = True
-                self.items[item_id]["_verifiedShipment"] = False
-        for record in self.evidence_records.values():
-            for other_id in list(record["contradictsEvidenceIds"]):
-                other = self.evidence_records.get(other_id)
-                if other is None or other.get("itemId") != record.get("itemId"):
-                    record["contradictsEvidenceIds"].remove(other_id)
-                    continue
-                if record["id"] not in other["contradictsEvidenceIds"]:
-                    other["contradictsEvidenceIds"].append(record["id"])
-                    other["contradictsEvidenceIds"].sort()
+        evidence_count = len(self.evidence_records)
+        pair_limit = max(1, evidence_count * max(0, evidence_count - 1) // 2)
+        all_detected = disputes.detect(
+            self.evidence_records, self.items, self.sources, maximum=pair_limit)
+        all_disputes = all_detected["items"]
+        detected = {
+            "items": all_disputes[:disputes.MAX_DISPUTES],
+            "total": len(all_disputes),
+            "cap": disputes.MAX_DISPUTES,
+            "truncated": len(all_disputes) > disputes.MAX_DISPUTES,
+        }
+        public_ids = {record["id"] for record in detected["items"]}
+        for dispute in all_disputes:
+            item = self.items.get(dispute["itemId"])
+            if item is None:
+                continue
+            item["_disputed"] = True
+            item["_verifiedShipment"] = False
+            if dispute["id"] in public_ids and dispute["id"] not in item["_disputeIds"]:
+                item["_disputeIds"].append(dispute["id"])
+            evidence_ids = [
+                claim["evidenceId"] for claim in dispute["conflictingClaims"]
+                if claim["evidenceId"] in self.evidence_records
+            ]
+            for evidence_id in evidence_ids:
+                record = self.evidence_records[evidence_id]
+                for other_id in evidence_ids:
+                    if other_id != evidence_id and other_id not in record["contradictsEvidenceIds"]:
+                        record["contradictsEvidenceIds"].append(other_id)
+                record["contradictsEvidenceIds"].sort()
                 record["provenance"] = "disputed"
-                other["provenance"] = "disputed"
-                self.items[record["itemId"]]["_disputed"] = True
-                self.items[record["itemId"]]["_verifiedShipment"] = False
+        if detected["truncated"]:
+            self._diagnostic(
+                "disputes-truncated",
+                "The bounded dispute list omitted lower-priority contradiction records.",
+                severity="critical")
+            self._meta_alert(
+                "disputes-truncated", "Dispute detail is incomplete",
+                "More deterministic contradictions exist than the bounded projection can list.",
+                severity="critical")
+        self.dispute_output = detected
 
     def _source_recovery_changes(self):
         for source in sorted(self.sources.values(), key=lambda value: value["id"]):
@@ -2544,6 +2575,21 @@ class _V2Builder:
                 value for value in record["supportsEvidenceIds"] if value in self.evidence_records]
             record["contradictsEvidenceIds"] = [
                 value for value in record["contradictsEvidenceIds"] if value in self.evidence_records]
+        visible_disputes = []
+        for dispute in self.dispute_output["items"]:
+            evidence_ids = {
+                claim["evidenceId"] for claim in dispute["conflictingClaims"]
+            }
+            if evidence_ids.issubset(self.evidence_records):
+                visible_disputes.append(dispute)
+        if len(visible_disputes) != len(self.dispute_output["items"]):
+            self.dispute_output["truncated"] = True
+        self.dispute_output["items"] = visible_disputes
+        visible_ids = {value["id"] for value in visible_disputes}
+        for item in self.items.values():
+            item["_disputeIds"] = [
+                value for value in item["_disputeIds"] if value in visible_ids
+            ]
 
     def _prepare_changes(self, local):
         cursor_value, cursor_reason = self._cursor_decode(local["cursor"])
@@ -2739,6 +2785,7 @@ class _V2Builder:
             },
             "coverage": item["_coverage"],
             "nextAction": next_action,
+            "disputeIds": sorted(item["_disputeIds"]),
             "evidenceIds": [value["id"] for value in evidence_records[:V2_MAX_ITEM_EVIDENCE]],
             "changeIds": [value["id"] for value in change_records[:V2_MAX_ITEM_CHANGES]],
             "linkIds": [value["id"] for value in links],
@@ -2867,6 +2914,7 @@ class _V2Builder:
             "runs": runs,
             "changesById": changes_by_id,
             "evidence": public_evidence,
+            "disputes": self.dispute_output,
             "links": links,
             "coverage": coverage,
             "totals": {
@@ -2876,6 +2924,7 @@ class _V2Builder:
                 "changes": len(changes_by_id),
                 "runs": len(runs),
                 "evidence": len(public_evidence),
+                "disputes": self.dispute_output["total"],
                 "quietConcerns": len(quiet),
                 "byHome": by_home,
             },
