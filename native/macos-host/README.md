@@ -36,10 +36,11 @@ Today and Decision Deck behavior.
 The normal HFLedger, File, Edit, View, Item, Window, and Help menus expose the
 same commands as the served interface. Command-1 through Command-5 open Today,
 Changes, All Work, Shipped Log, and Watched. Up/Down select rows; Left/Right
-collapse or traverse groups; Return or `O` opens the one supported source; `E`
-acknowledges locally; `S` snoozes locally; `W` watches; Command-F filters the
-current destination; Command-K opens the command reference; Escape closes the
-top transient surface and restores focus.
+collapse or traverse groups; Space toggles the bounded evidence preview;
+Return or `O` opens the one supported source; `E` acknowledges locally; `S`
+snoozes locally; `W` watches; Command-F filters the current destination;
+Command-K opens the command reference; Escape closes the top transient surface
+and restores focus.
 
 These shortcuts do not fire from editable controls. Today has no Answer,
 Resolve, Complete, Skip, merge, deploy, or arbitrary source command. Owner
@@ -110,7 +111,9 @@ The updater is intentionally disabled until a stable release URL and a Tauri
 updater signing public key are approved. Developer ID signing, notarization,
 publishing a draft, and enabling update delivery are separate attended gates.
 
-Transition-based attention notifications, a rich menu-bar status/popover,
-Quick Look, analytics, advanced disputes, multi-machine skew detection, global
-search, and custom deep links are deferred. The current app must not present
-empty controls or documentation that implies those capabilities are shipped.
+This branch provides a Quick Look–styled in-app evidence preview without using
+the macOS Quick Look framework or adding native authority. Transition-based
+attention notifications, a rich menu-bar status/popover, analytics, advanced
+disputes, multi-machine skew detection, global search, and custom deep links
+remain deferred. The current app must not present empty controls or
+documentation that implies those capabilities are shipped.

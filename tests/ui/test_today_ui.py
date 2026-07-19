@@ -46,6 +46,29 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertIn("textContent", script)
         self.assertIn('window.addEventListener("hfledger:native-command"', script)
 
+    def test_quick_look_is_a_non_authoritative_projected_metadata_panel(self):
+        markup = HTML.read_text(encoding="utf-8")
+        script = JS.read_text(encoding="utf-8")
+        style = CSS.read_text(encoding="utf-8")
+        self.assertIn('id="quick-look-panel"', markup)
+        self.assertIn('role="dialog" aria-modal="false"', markup)
+        self.assertIn('aria-labelledby="quick-look-title"', markup)
+        self.assertIn('aria-keyshortcuts", "Space"', script)
+        self.assertIn("QUICK_LOOK_EVIDENCE_KINDS", script)
+        self.assertIn('kind === "untrusted-excerpt"', script)
+        self.assertIn(
+            "buildQuickLookModel(selectedItem(), state.orientation, state.resolvedLinks)",
+            script,
+        )
+        self.assertIn("quick-look-card", style)
+        self.assertIn("prefers-color-scheme: dark", style)
+        self.assertIn("prefers-reduced-motion: reduce", style)
+        for forbidden in (
+            "FileReader", "showOpenFilePicker", "webkitRequestFileSystem",
+            "readTextFile", "invoke(", "shell.open", "quick-look/api",
+        ):
+            self.assertNotIn(forbidden, script)
+
     def test_decision_deck_keeps_the_bounded_surface_without_undo_controls(self):
         current = CSS.read_text(encoding="utf-8")
         deck_rules = current[current.index(DECK_MARKER):]
@@ -81,6 +104,22 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertLess(transient, editable_guard)
         self.assertIn('$("#command-dialog").close()', handler[:editable_guard])
         self.assertIn('$("#snooze-dialog").close()', handler[:editable_guard])
+        self.assertIn("state.quickLookOpen", handler[:editable_guard])
+
+    def test_quick_look_keyboard_update_and_focus_return_are_explicit(self):
+        script = JS.read_text(encoding="utf-8")
+        select = script[script.index("function selectDescriptor("):
+                        script.index("function selectedItem()")]
+        keyboard = script[script.index("function handleKeyboard(event)"):
+                          script.index("function boot()")]
+        close = script[script.index("function closeQuickLook("):
+                       script.index("function toggleQuickLook()")]
+        self.assertIn("if (state.quickLookOpen) renderQuickLook()", select)
+        self.assertIn('event.key === " " || event.code === "Space"', keyboard)
+        self.assertIn("moveSelection(1)", keyboard)
+        self.assertIn("moveSelection(-1)", keyboard)
+        self.assertIn("selected?.element", close)
+        self.assertIn("preventScroll: true", close)
 
 
 if __name__ == "__main__":

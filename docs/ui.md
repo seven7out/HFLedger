@@ -180,6 +180,7 @@ Window, and Help menus.
 | --- | --- |
 | Up/Down | Select the previous/next visible row across sections. |
 | Left/Right | Collapse/expand a group or move between its header and members. |
+| Space | Toggle the bounded evidence preview for the selected row. |
 | Return or `O` | Open the one supported source, otherwise focus the inspector. |
 | `E` | Acknowledge the current attention generation locally, with Undo. |
 | `S` | Open the local snooze surface. |
@@ -244,8 +245,14 @@ JSON framing/body limits, explicit static allowlisting, CSP/frame/MIME/referrer
 headers, text-only rendering of user-authored prose, closed route registries,
 stale-card hashes, locked board/ledger writers, and atomic replacement.
 
+The deferred Quick Look branch adds only a Quick Look–styled in-app evidence
+preview over the existing orientation V2 projection. It does not use macOS
+Quick Look, read referenced files, fetch remote content, interpret markup, or
+add a server/native capability. Unsupported evidence uses a fixed unavailable
+state, while the existing inspector remains the deeper dossier.
+
 V1 does not ship transition-based attention notifications, a rich menu-bar
-status UI, Quick Look, effectiveness analytics, advanced dispute discovery,
+status UI, effectiveness analytics, advanced dispute discovery,
 multi-machine skew detection, global search, custom deep links, cloud triage
 sync, authoritative Today write-back, notarized publication, updater delivery,
 remote serving, collector auto-enable, or private authoritative cutover. The UI

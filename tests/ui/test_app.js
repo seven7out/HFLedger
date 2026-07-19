@@ -92,3 +92,111 @@ test("unwraps the server local-state context without losing capability or revisi
   assert.equal(normalized.capability.mode, "durable");
   assert.equal(normalized.capability.available, true);
 });
+
+test("Quick Look model uses only bounded projected metadata and safe source links", () => {
+  const item = {
+    id: "item-fictional",
+    title: `<b>${"T".repeat(220)}</b>`,
+    project: "Ovenlight",
+    sourceItemRef: "task:proofing-timer",
+    whyHere: `<img src=x onerror=alert(1)> ${"reason ".repeat(80)}`,
+    primaryHome: "shipped-unverified",
+    provenance: "agent-reported",
+    clocks: {
+      itemChangedAt: "2026-07-18T10:00:00Z",
+      relevantSourcesObservedAt: "2026-07-18T11:00:00Z",
+    },
+    evidenceIds: ["evidence-supported", "evidence-untrusted", "evidence-missing"],
+    linkIds: ["link-file", "link-safe"],
+    coverage: { namedAbsences: [{ detail: "Repository observation is unavailable." }] },
+  };
+  const orientation = {
+    coverage: { sources: [{ id: "ledger:main", label: "Agent ledger" }] },
+    evidence: [
+      {
+        id: "evidence-supported",
+        kind: "test",
+        claim: `<script>alert(1)</script> ${"x".repeat(700)}`,
+        provenance: "verified",
+        sourceId: "ledger:main",
+        sourceRef: "../../private/missing-report.html",
+        observedAt: "2026-07-18T11:00:00Z",
+        itemChangedAt: "2026-07-18T10:00:00Z",
+        linkId: "link-safe",
+      },
+      {
+        id: "evidence-untrusted",
+        kind: "untrusted-excerpt",
+        claim: "SECRET_UNTRUSTED_MARKUP <iframe src=evil>",
+        provenance: "disputed",
+        sourceId: "collector:notes",
+        sourceRef: "file:///private/secret.txt",
+        linkId: "link-file",
+      },
+    ],
+    links: [
+      { id: "link-file", label: "Unsafe file", target: "file:///private/secret.txt" },
+      { id: "link-safe", label: "Fictional report", target: "https://example.invalid/report/7" },
+    ],
+  };
+  const resolvedLinks = new Map([
+    ["link-file", { id: "link-file", resolved: false, target: "" }],
+    ["link-safe", { id: "link-safe", resolved: true, target: "https://example.invalid/report/7" }],
+  ]);
+  const model = ui.buildQuickLookModel(
+    item,
+    orientation,
+    resolvedLinks,
+    "http://127.0.0.1:43123/?context=main",
+  );
+  assert.equal(model.title.length, 180);
+  assert.ok(model.summary.includes("<img src=x onerror=alert(1)>"));
+  assert.ok(model.summary.length <= 280);
+  assert.equal(model.evidence[0].supported, true);
+  assert.ok(model.evidence[0].claim.startsWith("<script>alert(1)</script>"));
+  assert.equal(model.evidence[0].claim.length, 500);
+  assert.equal(model.evidence[0].sourceRef, "../../private/missing-report.html");
+  assert.equal(model.evidence[0].link.resolution.target, "https://example.invalid/report/7");
+  assert.equal(model.evidence[1].supported, false);
+  assert.equal(model.evidence[1].claim, "Evidence preview unavailable");
+  assert.ok(!model.evidence[1].claim.includes("SECRET_UNTRUSTED_MARKUP"));
+  assert.equal(model.evidence[1].link, null);
+  assert.equal(model.evidence[2].kind, "missing");
+  assert.equal(model.evidence[2].provenance, "unobserved");
+  assert.equal(model.sourceLink.resolution.target, "https://example.invalid/report/7");
+
+  const withoutResolver = ui.buildQuickLookModel(item, orientation, new Map());
+  assert.equal(withoutResolver.evidence[0].link, null);
+  assert.equal(withoutResolver.sourceLink, null);
+});
+
+test("Quick Look has an explicit evidence allowlist and no-selection fallback", () => {
+  assert.deepEqual(ui.QUICK_LOOK_EVIDENCE_KINDS, [
+    "status", "progress", "blocker", "review", "test", "ci", "pull-request",
+    "merge", "deployment", "completion", "owner-report", "collector-health",
+    "local-artifact",
+  ]);
+  assert.equal(ui.QUICK_LOOK_MAX_EVIDENCE, 8);
+  assert.equal(ui.buildQuickLookModel(null, {}), null);
+
+  const item = {
+    id: "item-many",
+    evidenceIds: Array.from({ length: 12 }, (_, index) => `evidence-${index}`),
+  };
+  const orientation = {
+    evidence: item.evidenceIds.map((id, index) => ({
+      id,
+      kind: index === 0 ? "other" : "status",
+      claim: `Fictional claim ${index}`,
+      provenance: index === 1 ? "made-up-confidence" : "inferred",
+      sourceId: "board:main",
+      sourceRef: `status:${index}`,
+    })),
+  };
+  const model = ui.buildQuickLookModel(item, orientation);
+  assert.equal(model.evidence.length, 8);
+  assert.equal(model.evidenceTotal, 12);
+  assert.equal(model.truncated, true);
+  assert.equal(model.evidence[0].supported, false);
+  assert.equal(model.evidence[1].provenance, "unobserved");
+});

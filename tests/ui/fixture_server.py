@@ -339,7 +339,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_error(404)
             return
         body = target.read_bytes()
-        if target.name == "index.html" and parse_qs(parsed.query).get("appearance") == ["light"]:
+        appearance = parse_qs(parsed.query).get("appearance")
+        if target.name == "index.html" and appearance == ["light"]:
             light_fixture = b"""<style id="fictional-light-appearance">
               .board-page { color-scheme: light; --window:#f5f5f7; --content:#fbfbfc;
                 --sidebar:rgba(237,237,240,.94); --toolbar:rgba(250,250,251,.92);
@@ -348,6 +349,15 @@ class Handler(SimpleHTTPRequestHandler):
                 --warning:#9a5a00; --danger:#a33832; --success:#23734f; }
             </style></head>"""
             body = body.replace(b"</head>", light_fixture)
+        elif target.name == "index.html" and appearance == ["dark"]:
+            dark_fixture = b"""<style id="fictional-dark-appearance">
+              .board-page { color-scheme: dark; --window:#1d1d1f; --content:#232326;
+                --sidebar:rgba(40,40,43,.96); --toolbar:rgba(43,43,46,.94);
+                --ink:#f2f2f4; --muted:#b2b2b8; --subtle:#8c8c93;
+                --line:rgba(255,255,255,.10); --strong-line:rgba(255,255,255,.20);
+                --warning:#f0a549; --danger:#ff7770; --success:#6bd2a1; }
+            </style></head>"""
+            body = body.replace(b"</head>", dark_fixture)
         content_type = {
             ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
             ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".webmanifest": "application/manifest+json",

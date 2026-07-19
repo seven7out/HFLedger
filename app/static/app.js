@@ -35,6 +35,13 @@ const PROVENANCE_LABELS = {
   unobserved: "Unobserved",
   disputed: "Disputed",
 };
+const QUICK_LOOK_EVIDENCE_KINDS = Object.freeze([
+  "status", "progress", "blocker", "review", "test", "ci", "pull-request",
+  "merge", "deployment", "completion", "owner-report", "collector-health",
+  "local-artifact",
+]);
+const QUICK_LOOK_EVIDENCE_KIND_SET = new Set(QUICK_LOOK_EVIDENCE_KINDS);
+const QUICK_LOOK_MAX_EVIDENCE = 8;
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -58,6 +65,7 @@ const state = {
   pendingVisit: false,
   inspectorOpen: false,
   sidebarOpen: false,
+  quickLookOpen: false,
   loading: false,
   toastUndo: null,
 };
@@ -137,6 +145,10 @@ function provenanceLabel(value) {
   return PROVENANCE_LABELS[value] || "Unobserved";
 }
 
+function normalizedProvenance(value) {
+  return Object.hasOwn(PROVENANCE_LABELS, value) ? value : "unobserved";
+}
+
 function safeAccent(value) {
   const text = safeText(value, 32);
   return /^#[0-9a-f]{6}$/i.test(text) ? text : "#6956e8";
@@ -173,6 +185,99 @@ function safeLinkTarget(resolution, baseHref) {
     return null;
   }
   return null;
+}
+
+function buildQuickLookModel(item, orientation = {}, resolvedLinks = new Map(), baseHref) {
+  if (!item || typeof item !== "object" || !safeText(item.id, 160)) return null;
+  const evidenceById = new Map((Array.isArray(orientation.evidence) ? orientation.evidence : [])
+    .filter((record) => record && typeof record === "object" && safeText(record.id, 160))
+    .map((record) => [record.id, record]));
+  const linksById = new Map((Array.isArray(orientation.links) ? orientation.links : [])
+    .filter((link) => link && typeof link === "object" && safeText(link.id, 160))
+    .map((link) => [link.id, link]));
+  const sourcesById = new Map((Array.isArray(orientation.coverage?.sources) ? orientation.coverage.sources : [])
+    .filter((source) => source && typeof source === "object" && safeText(source.id, 160))
+    .map((source) => [source.id, source]));
+
+  const previewLink = (linkId) => {
+    const link = linksById.get(linkId);
+    const resolution = resolvedLinks instanceof Map ? resolvedLinks.get(linkId) : null;
+    if (!link || !safeLinkTarget(resolution, baseHref)) return null;
+    return {
+      label: safeText(link.label, 180) || "Open Source",
+      resolution,
+    };
+  };
+
+  const evidenceIds = Array.isArray(item.evidenceIds) ? item.evidenceIds.slice(0, 50) : [];
+  const evidence = evidenceIds.slice(0, QUICK_LOOK_MAX_EVIDENCE).map((id) => {
+    const record = evidenceById.get(id);
+    if (!record) {
+      return {
+        id: safeText(id, 160) || "missing-evidence",
+        supported: false,
+        kind: "missing",
+        claim: "Evidence preview unavailable",
+        provenance: "unobserved",
+        source: "Unknown source",
+        sourceRef: "Reference unavailable",
+        itemChangedAt: null,
+        observedAt: null,
+        link: null,
+        reason: "The selected item references evidence that is not present in this projection.",
+      };
+    }
+    const kind = safeText(record.kind, 64) || "other";
+    const claim = safeText(record.claim, 500);
+    const kindAllowed = QUICK_LOOK_EVIDENCE_KIND_SET.has(kind);
+    let reason = null;
+    if (!kindAllowed && kind === "untrusted-excerpt") {
+      reason = "Untrusted excerpts are never rendered in Quick Look; only their bounded metadata remains visible.";
+    } else if (!kindAllowed && kind === "other") {
+      reason = "Generic evidence is not on the Quick Look allowlist.";
+    } else if (!kindAllowed) {
+      reason = "This evidence kind is not on the Quick Look allowlist.";
+    } else if (!claim) {
+      reason = "The projected evidence record has no bounded claim to preview.";
+    }
+    const source = sourcesById.get(record.sourceId);
+    return {
+      id: safeText(record.id, 160) || safeText(id, 160) || "evidence",
+      supported: kindAllowed && Boolean(claim),
+      kind,
+      claim: kindAllowed && claim ? claim : "Evidence preview unavailable",
+      provenance: normalizedProvenance(record.provenance),
+      source: safeText(source?.label || record.sourceId, 180) || "Unknown source",
+      sourceRef: safeText(record.sourceRef, 800) || "Reference unavailable",
+      itemChangedAt: safeText(record.itemChangedAt, 80) || null,
+      observedAt: safeText(record.observedAt, 80) || null,
+      link: previewLink(record.linkId),
+      reason,
+    };
+  });
+
+  const itemLinks = [item.nextAction?.linkId, ...(Array.isArray(item.linkIds) ? item.linkIds : [])]
+    .filter(Boolean);
+  const sourceLink = itemLinks.map(previewLink).find(Boolean) || null;
+  const namedAbsences = (Array.isArray(item.coverage?.namedAbsences) ? item.coverage.namedAbsences : [])
+    .slice(0, 3)
+    .map((gap) => safeText(gap?.detail || gap?.label || gap?.sourceId || gap, 280))
+    .filter(Boolean);
+  return {
+    itemId: safeText(item.id, 160),
+    title: safeText(item.title || item.id, 180),
+    identity: safeText([item.project, item.sourceItemRef || item.id].filter(Boolean).join(" · "), 280),
+    summary: safeText(item.whyHere, 280) || "No deterministic reason was supplied.",
+    primaryHome: safeText(item.primaryHome, 64) || "unobserved",
+    provenance: normalizedProvenance(item.provenance),
+    itemChangedAt: safeText(item.clocks?.itemChangedAt, 80) || null,
+    sourcesObservedAt: safeText(item.clocks?.relevantSourcesObservedAt, 80) || null,
+    namedAbsences,
+    evidence,
+    evidenceTotal: evidenceIds.length,
+    truncated: evidenceIds.length > QUICK_LOOK_MAX_EVIDENCE,
+    sourceLink,
+  };
 }
 
 function buildCopyContext(item, orientation = state.orientation) {
@@ -463,6 +568,7 @@ function restoreLocalPreferences() {
 
 function setView(view, { project = null, home = null, focus = true, persist = true } = {}) {
   if (![...PRIMARY_VIEWS, "projects", "project"].includes(view)) return;
+  closeQuickLook({ restoreFocus: false });
   state.view = view;
   state.selectedProject = view === "project" ? project : null;
   state.homeFilter = view === "all-work" ? home : null;
@@ -531,6 +637,7 @@ function ledgerRow(item, options = {}) {
   const row = node("button", "ledger-row");
   row.type = "button";
   row.setAttribute("role", "option");
+  row.setAttribute("aria-keyshortcuts", "Space");
   row.dataset.home = safeText(item.primaryHome, 40);
   row.dataset.provenance = safeText(provenance, 40);
   if (options.unseen) row.classList.add("is-unseen");
@@ -947,6 +1054,7 @@ function restoreVisibleSelection() {
     state.selection = null;
     renderInspector(null);
   }
+  if (state.quickLookOpen) renderQuickLook();
 }
 
 function selectDescriptor(descriptor, { focus = true, persist = true } = {}) {
@@ -959,7 +1067,8 @@ function selectDescriptor(descriptor, { focus = true, persist = true } = {}) {
   const entry = state.visibleRows.find((candidate) => candidate.descriptor.kind === descriptor.kind && candidate.descriptor.id === descriptor.id);
   if (focus) entry?.element.focus({ preventScroll: true });
   renderInspector(descriptor);
-  openInspectorForViewport();
+  if (state.quickLookOpen) renderQuickLook();
+  else openInspectorForViewport();
   if (persist && (descriptor.kind === "item" || descriptor.itemId)) persistNavigation();
 }
 
@@ -1113,6 +1222,126 @@ function evidenceRow(record) {
   );
   row.append(source);
   return row;
+}
+
+function quickLookLinkButton(link, label = "Open Source") {
+  if (!safeLinkTarget(link?.resolution)) return null;
+  return button("control-button quick-look-source", label, () => openSafeTarget(link.resolution));
+}
+
+function quickLookEvidenceRow(record) {
+  const row = node("article", `quick-look-evidence${record.supported ? "" : " is-unavailable"}`);
+  row.dataset.provenance = record.provenance;
+  const header = node("header", "quick-look-evidence-header");
+  header.append(
+    node("span", "quick-look-provenance", provenanceLabel(record.provenance)),
+    node("span", "quick-look-kind", record.kind),
+  );
+  row.append(header);
+  if (record.supported) row.append(node("p", "quick-look-claim", record.claim));
+  else row.append(node("p", "quick-look-unavailable", record.reason || "This evidence cannot be previewed safely."));
+  const metadata = node("dl", "quick-look-metadata");
+  metadata.append(
+    node("dt", "", "Source"), node("dd", "", record.source),
+    node("dt", "", "Reference"), node("dd", "mono", record.sourceRef),
+    node("dt", "", "Item changed"), node("dd", "", exactTime(record.itemChangedAt)),
+    node("dt", "", "Observed"), node("dd", "", exactTime(record.observedAt)),
+  );
+  row.append(metadata);
+  const source = quickLookLinkButton(record.link);
+  if (source) row.append(source);
+  else if (!record.supported) row.append(node("p", "quick-look-source-note", "Open Source is unavailable because no validated source link was supplied."));
+  return row;
+}
+
+function renderQuickLook() {
+  if (!state.quickLookOpen) return;
+  const model = buildQuickLookModel(selectedItem(), state.orientation, state.resolvedLinks);
+  if (!model) {
+    closeQuickLook({ restoreFocus: true });
+    return;
+  }
+  const target = $("#quick-look-content");
+  const card = node("article", "quick-look-card");
+  const header = node("header", "quick-look-header");
+  const heading = node("div", "quick-look-heading");
+  heading.append(node("p", "quick-look-eyebrow", "Evidence Preview"));
+  const title = node("h2", "", model.title);
+  title.id = "quick-look-title";
+  const subtitle = node("p", "quick-look-subtitle", `${model.identity || model.itemId} · ${provenanceLabel(model.provenance)}`);
+  subtitle.id = "quick-look-subtitle";
+  heading.append(title, subtitle);
+  header.append(heading, button("quick-look-close", "×", () => closeQuickLook()));
+  header.lastChild.setAttribute("aria-label", "Close evidence preview");
+
+  const summary = node("section", "quick-look-summary");
+  const summaryText = node("p", "", model.summary);
+  summaryText.id = "quick-look-summary";
+  const clocks = node("dl", "quick-look-clocks");
+  clocks.append(
+    node("dt", "", "Item changed"), node("dd", "", exactTime(model.itemChangedAt)),
+    node("dt", "", "Sources observed"), node("dd", "", exactTime(model.sourcesObservedAt)),
+  );
+  summary.append(summaryText, clocks);
+  if (model.namedAbsences.length) {
+    const gaps = node("ul", "quick-look-gaps");
+    model.namedAbsences.forEach((gap) => gaps.append(node("li", "", gap)));
+    summary.append(gaps);
+  }
+
+  const evidenceSection = node("section", "quick-look-evidence-list");
+  const evidenceHeading = node("div", "quick-look-section-heading");
+  evidenceHeading.append(
+    node("h3", "", "Selected Evidence"),
+    node("span", "", model.truncated ? `${model.evidence.length} of ${model.evidenceTotal}` : `${model.evidenceTotal}`),
+  );
+  evidenceSection.append(evidenceHeading);
+  if (model.evidence.length) model.evidence.forEach((record) => evidenceSection.append(quickLookEvidenceRow(record)));
+  else evidenceSection.append(node("p", "quick-look-empty", "No bounded evidence records are attached to this item. Use the full inspector for named observation gaps."));
+  if (model.truncated) evidenceSection.append(node("p", "quick-look-empty", `Showing the first ${QUICK_LOOK_MAX_EVIDENCE} records. The full inspector keeps the complete bounded list.`));
+
+  const footer = node("footer", "quick-look-footer");
+  footer.append(node("p", "quick-look-hint", "Space closes · ↑↓ moves through items · Escape returns to the selected row"));
+  const actions = node("div", "quick-look-actions");
+  const openSource = quickLookLinkButton(model.sourceLink);
+  if (openSource) actions.append(openSource);
+  actions.append(button("control-button", "View Full Details", () => {
+    closeQuickLook({ restoreFocus: false });
+    focusInspector();
+  }));
+  footer.append(actions);
+  card.append(header, summary, evidenceSection, footer);
+  target.replaceChildren(card);
+  $("#quick-look-panel").setAttribute("aria-label", `Evidence preview for ${model.title}`);
+}
+
+function openQuickLook() {
+  if (!selectedItem()) {
+    announce("Select an item to preview its evidence.");
+    return false;
+  }
+  state.quickLookOpen = true;
+  document.body.classList.add("quick-look-open");
+  $("#quick-look-panel").hidden = false;
+  renderQuickLook();
+  return true;
+}
+
+function closeQuickLook({ restoreFocus = true } = {}) {
+  if (!state.quickLookOpen) return;
+  state.quickLookOpen = false;
+  document.body.classList.remove("quick-look-open");
+  $("#quick-look-panel").hidden = true;
+  $("#quick-look-content").replaceChildren();
+  if (!restoreFocus) return;
+  const selected = state.visibleRows.find((entry) =>
+    entry.descriptor.kind === state.selection?.kind && entry.descriptor.id === state.selection?.id);
+  (selected?.element || $("#ledger-center")).focus({ preventScroll: true });
+}
+
+function toggleQuickLook() {
+  if (state.quickLookOpen) closeQuickLook();
+  else openQuickLook();
 }
 
 function buildNextAction(item) {
@@ -1373,6 +1602,7 @@ function showLoadError(error, preserve) {
     announce(`Refresh failed. Last successful view remains visible: ${error.message}`);
     return;
   }
+  closeQuickLook({ restoreFocus: false });
   $("#loading-state").hidden = true;
   $("#center-content").hidden = true;
   $("#no-board-state").hidden = error.status !== 404;
@@ -1568,6 +1798,11 @@ function handleKeyboard(event) {
       $("#snooze-dialog").close();
       return;
     }
+    if (state.quickLookOpen) {
+      event.preventDefault();
+      closeQuickLook();
+      return;
+    }
     if (event.target === $("#view-filter")) {
       event.preventDefault();
       toggleFilter(false);
@@ -1594,6 +1829,9 @@ function handleKeyboard(event) {
   else if (event.key.toLocaleLowerCase() === "e") { event.preventDefault(); acknowledgeItem(); }
   else if (event.key.toLocaleLowerCase() === "s") { event.preventDefault(); openSnooze(); }
   else if (event.key.toLocaleLowerCase() === "w") { event.preventDefault(); dispatchCommand("item.watch"); }
+  else if ((event.key === " " || event.code === "Space") && !event.target?.closest?.("#quick-look-panel")) {
+    if (selectedItem()) { event.preventDefault(); toggleQuickLook(); }
+  }
   else if (event.key === "Escape") {
     if (state.inspectorOpen) closeInspector();
     else if (state.sidebarOpen) closeTransientPanes();
@@ -1632,6 +1870,7 @@ function boot() {
   $("#inspector-toggle").addEventListener("click", toggleInspector);
   $("#inspector-close").addEventListener("click", closeInspector);
   $("#inspector-back").addEventListener("click", closeInspector);
+  $("#quick-look-scrim").addEventListener("click", () => closeQuickLook());
   $("#toast-undo").addEventListener("click", () => {
     const undo = state.toastUndo;
     state.toastUndo = null;
@@ -1671,6 +1910,9 @@ globalThis.HFLedgerUI = Object.freeze({
   buildCopyContext,
   provenanceLabel,
   normalizeLocalResponse,
+  buildQuickLookModel,
+  QUICK_LOOK_EVIDENCE_KINDS,
+  QUICK_LOOK_MAX_EVIDENCE,
   HOME_ORDER: Object.freeze([...HOME_ORDER]),
   PRIMARY_VIEWS: Object.freeze([...PRIMARY_VIEWS]),
 });
