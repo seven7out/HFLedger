@@ -68,3 +68,21 @@ test("uses only the five closed provenance labels", () => {
   assert.equal(ui.provenanceLabel("disputed"), "Disputed");
   assert.equal(ui.provenanceLabel("made-up-confidence"), "Unobserved");
 });
+
+test("unwraps the server local-state context without losing capability or revision", () => {
+  const context = {
+    contextId: "main",
+    watched: [{ itemId: "item-fictional", watchedAt: "2026-07-18T10:00:00Z" }],
+    navigation: { selectedView: "watched", selectedProjectId: null, selectedItemId: "item-fictional" },
+  };
+  const normalized = ui.normalizeLocalResponse({
+    schemaVersion: 1,
+    revision: 7,
+    context,
+    capability: { mode: "durable", available: true, schemaVersion: 1, reason: null },
+  });
+  assert.equal(normalized.local, context);
+  assert.equal(normalized.revision, 7);
+  assert.equal(normalized.capability.mode, "durable");
+  assert.equal(normalized.capability.available, true);
+});

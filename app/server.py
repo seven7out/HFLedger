@@ -232,7 +232,13 @@ def build_board_view(runtime, context_id=None):
     ledger.validate_cursor(board, entries)
     now_utc = runtime.now_fn()
     try:
-        local_view_state = runtime.local_state.get(context.context_id)
+        local_state_response = runtime.local_state.get(context.context_id)
+        local_view_state = (
+            local_state_response.get("context")
+            if isinstance(local_state_response, dict) and
+            isinstance(local_state_response.get("context"), dict)
+            else None
+        )
     except local_state.LocalStateError:
         # App-private state failure cannot make validated authoritative data
         # unavailable. The capability still advertises the closed failure.

@@ -72,6 +72,16 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertIn("prefers-color-scheme: dark", served_rules)
         self.assertIn("prefers-reduced-motion: reduce", served_rules)
 
+    def test_escape_closes_transients_before_editable_shortcut_guard(self):
+        script = JS.read_text(encoding="utf-8")
+        handler = script[script.index("function handleKeyboard(event)"):
+                         script.index("function boot()")]
+        transient = handler.index('if (event.key === "Escape")')
+        editable_guard = handler.index("if (editing) return")
+        self.assertLess(transient, editable_guard)
+        self.assertIn('$("#command-dialog").close()', handler[:editable_guard])
+        self.assertIn('$("#snooze-dialog").close()', handler[:editable_guard])
+
 
 if __name__ == "__main__":
     unittest.main()

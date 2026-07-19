@@ -1,9 +1,12 @@
 import json
 import os
+import runpy
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
+from app import server
 from core import store
 from tests.helpers import CLI, ROOT, load_board
 
@@ -77,11 +80,31 @@ class CliTests(unittest.TestCase):
             ["event", "--help"],
             ["validate", "--help"], ["reconcile", "--help"],
             ["collect", "--help"], ["render-packs", "--help"],
+            ["serve", "--help"],
         )
         for command in commands:
             result = self.run_cli(command)
             self.assertEqual(result.returncode, 0, (command, result.stderr))
             self.assertIn("usage:", result.stdout)
+
+    def test_native_serve_state_identity_reaches_server(self):
+        namespace = runpy.run_path(CLI, run_name="ledger_cli_under_test")
+        state_root = os.path.realpath(os.path.join(self.temp.name, "UIState"))
+        with mock.patch.object(server, "serve") as launch:
+            result = namespace["main"]([
+                "--home", self.temp.name,
+                "serve",
+                "--port", "17173",
+                "--local-state-root", state_root,
+                "--local-state-workspace-id", "workspace-fictional",
+            ])
+        self.assertEqual(result, 0)
+        launch.assert_called_once_with(
+            self.temp.name,
+            port=17173,
+            local_state_root=state_root,
+            local_state_workspace_id="workspace-fictional",
+        )
 
     def test_full_decision_action_completion_walkthrough(self):
         decision = self.run_cli(self.decision_args())

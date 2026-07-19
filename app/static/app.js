@@ -196,7 +196,7 @@ async function request(path, options = {}) {
 }
 
 function normalizeLocalResponse(response) {
-  const local = response?.state || response?.contextState || response?.localState || response || {};
+  const local = response?.context || response?.state || response?.contextState || response?.localState || response || {};
   const capability = response?.capability || response?.localStateCapability || state.data?.ui?.localState || state.localCapability;
   return {
     local,
@@ -1517,6 +1517,23 @@ function isEditingTarget(target) {
 
 function handleKeyboard(event) {
   const editing = isEditingTarget(event.target);
+  if (event.key === "Escape") {
+    if ($("#command-dialog").open) {
+      event.preventDefault();
+      $("#command-dialog").close();
+      return;
+    }
+    if ($("#snooze-dialog").open) {
+      event.preventDefault();
+      $("#snooze-dialog").close();
+      return;
+    }
+    if (event.target === $("#view-filter")) {
+      event.preventDefault();
+      toggleFilter(false);
+      return;
+    }
+  }
   if (event.metaKey && !event.altKey && !event.ctrlKey) {
     if (/^[1-5]$/.test(event.key)) {
       event.preventDefault();
@@ -1528,10 +1545,7 @@ function handleKeyboard(event) {
     if (event.key.toLocaleLowerCase() === "r") { event.preventDefault(); loadBoard({ preserve: true }); return; }
     if (event.shiftKey && event.key.toLocaleLowerCase() === "c") { event.preventDefault(); copyContext(); return; }
   }
-  if (editing) {
-    if (event.key === "Escape" && event.target === $("#view-filter")) toggleFilter(false);
-    return;
-  }
+  if (editing) return;
   if (event.key === "ArrowDown") { event.preventDefault(); moveSelection(1); }
   else if (event.key === "ArrowUp") { event.preventDefault(); moveSelection(-1); }
   else if (event.key === "ArrowLeft") { event.preventDefault(); collapseSelected(false); }
@@ -1541,9 +1555,7 @@ function handleKeyboard(event) {
   else if (event.key.toLocaleLowerCase() === "s") { event.preventDefault(); openSnooze(); }
   else if (event.key.toLocaleLowerCase() === "w") { event.preventDefault(); dispatchCommand("item.watch"); }
   else if (event.key === "Escape") {
-    if ($("#command-dialog").open) $("#command-dialog").close();
-    else if ($("#snooze-dialog").open) $("#snooze-dialog").close();
-    else if (state.inspectorOpen) closeInspector();
+    if (state.inspectorOpen) closeInspector();
     else if (state.sidebarOpen) closeTransientPanes();
     else document.querySelector("[data-view].is-selected")?.focus();
   }
@@ -1614,6 +1626,7 @@ globalThis.HFLedgerUI = Object.freeze({
   safeLinkTarget,
   buildCopyContext,
   provenanceLabel,
+  normalizeLocalResponse,
   HOME_ORDER: Object.freeze([...HOME_ORDER]),
   PRIMARY_VIEWS: Object.freeze([...PRIMARY_VIEWS]),
 });

@@ -143,6 +143,12 @@ def build_parser():
     render.add_argument("--force", action="store_true", help="replace existing generated files")
     serve = sub.add_parser("serve", help="run the loopback-only board and decision deck")
     serve.add_argument("--port", type=int, help="port; defaults to config ui.port")
+    serve.add_argument(
+        "--local-state-root",
+        help="trusted native-only absolute root for app-private presentation state")
+    serve.add_argument(
+        "--local-state-workspace-id",
+        help="trusted native-only stable workspace registration identity")
     return parser
 
 
@@ -244,7 +250,12 @@ def main(argv=None):
             return 0
         if args.command == "serve":
             from app.server import serve
-            serve(home, port=args.port)
+            serve(
+                home,
+                port=args.port,
+                local_state_root=args.local_state_root,
+                local_state_workspace_id=args.local_state_workspace_id,
+            )
             return 0
         parser.error("unknown command")
     except (ValueError, OSError) as exc:

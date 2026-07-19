@@ -408,6 +408,39 @@ class LocalStateRouteTests(ServerCase):
         self.assertEqual(response.status, 403)
         self.assertEqual(body, {"error": "workspace is read-only"})
 
+    def test_local_attention_triage_is_reflected_in_fresh_projection(self):
+        self.decision()
+        self.httpd.runtime.read_only = True
+        self.httpd.runtime.ui["readOnly"] = True
+        before_board = self.board_bytes()
+        before_ledger = list(read_ledger(self.home))
+
+        _response, initial, _connection = self.get("/api/board")
+        projection = initial["orientationV2"]
+        attention_item = next(
+            item for item in projection["items"] if item.get("attentionKey"))
+        response, local, _connection = self.command(
+            "acknowledge-attention", {
+                "itemId": attention_item["id"],
+                "attentionKey": attention_item["attentionKey"],
+            }, 0)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(local["context"]["attention"][0]["state"], "acknowledged")
+
+        _response, refreshed, _connection = self.get("/api/board")
+        updated = refreshed["orientationV2"]
+        updated_item = next(
+            item for item in updated["items"]
+            if item["id"] == attention_item["id"])
+        self.assertIn("acknowledged", updated_item["secondaryFlags"])
+        self.assertEqual(
+            updated["attention"]["total"], projection["attention"]["total"] - 1)
+        self.assertEqual(
+            updated["attention"]["acknowledgedTotal"],
+            projection["attention"]["acknowledgedTotal"] + 1)
+        self.assertEqual(self.board_bytes(), before_board)
+        self.assertEqual(read_ledger(self.home), before_ledger)
+
     def test_closed_envelope_and_command_arguments_reject_smuggling(self):
         self.decision()
         _response, board, _connection = self.get("/api/board")
@@ -504,6 +537,11 @@ class LocalStateRouteTests(ServerCase):
             self.assertEqual(response.status, 200)
             self.assertEqual(body["orientationV2"]["version"], 2)
             self.assertFalse(body["ui"]["localState"]["available"])
+
+        with mock.patch.object(backend, "get", return_value={"context": "invalid"}):
+            response, body, _connection = self.get("/api/board")
+            self.assertEqual(response.status, 200)
+            self.assertEqual(body["orientationV2"]["version"], 2)
 
     def test_local_route_uses_32k_limit_and_loopback_host_defense(self):
         connection = self.connection()
