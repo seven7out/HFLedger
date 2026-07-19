@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 0,
+  "workspaceId": "workspace-ovenlight-fixture",
+  "revision": 3,
+  "context": "main",
+  "view": "today",
+  "itemKey": "task:ovenlight:legacy-selection",
+  "changeKeys": ["change:ovenlight:legacy-seen"],
+  "watchedItemKeys": ["task:ovenlight:legacy-watch"]
+}

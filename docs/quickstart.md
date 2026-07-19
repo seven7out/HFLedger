@@ -1,6 +1,8 @@
 # Quickstart
 
-This guide reaches a real decision swipe in about two minutes, then creates a clean personal workspace and files an ask through the protocol.
+This guide opens the fictional Today browser, reaches a real decision swipe in
+about two minutes, then creates a clean personal workspace and files an ask
+through the protocol.
 
 ## 1. Swipe the disposable demo
 
@@ -12,9 +14,20 @@ DEMO_HOME="$(mktemp -d)"
 ./cli/ledger --home "$DEMO_HOME" serve
 ```
 
-Open [http://127.0.0.1:7171/deck](http://127.0.0.1:7171/deck). The fictional Ovenlight bakery card offers two timer-alert choices and one recommendation. Tap either choice, tap “Accept recommendation,” or swipe the card right. The event and resolved card land in the disposable data directory, not in the engine checkout.
+Open [http://127.0.0.1:7171/](http://127.0.0.1:7171/). Today ranks the
+fictional work that needs attention and groups changes by the run that produced
+them. Select a row to inspect its provenance, item-change clock,
+source-observation clock, named coverage, and one supported next action.
 
-Open [http://127.0.0.1:7171/](http://127.0.0.1:7171/) to see the queue and resolved outcome. Stop the server with `Ctrl-C`.
+For the admitted bakery choice, use **Open Decision Deck** or open
+[http://127.0.0.1:7171/deck](http://127.0.0.1:7171/deck). The card offers two
+timer-alert choices and one recommendation. Tap either choice, tap “Accept
+recommendation,” or swipe the card right. The outcome lands only in the
+disposable data directory printed by `ledger-demo`; Today itself never answers
+the decision.
+
+Return to Today to inspect the run-grouped outcome. Stop the server with
+`Ctrl-C`. The committed `example/` and redesign fixtures remain unchanged.
 
 ## 2. Initialize a private workspace
 
@@ -27,6 +40,12 @@ export LEDGER_HOME="$HOME/.ledger"
 ```
 
 The initializer refuses existing data files. `--home` overrides `LEDGER_HOME`; otherwise HFLedger uses `$XDG_DATA_HOME/ledger` and then `~/.ledger`.
+
+On a first visit, Changes shows recent activity rather than inventing a prior
+cursor. In browser-only serving, seen, acknowledge, snooze, watch, selection,
+and pane state are session-only and reset when the server process exits. The
+native Mac app can persist that private state by stable workspace registration
+across restarts and dynamic port changes.
 
 ## 3. File a decision
 
@@ -89,9 +108,14 @@ New workspaces default to the generic instruction layout:
 
 Review files under `$LEDGER_HOME/generated/packs/`. Copy or reference them deliberately from the agent runtime; HFLedger does not alter global prompt directories. To configure Claude Code, collectors, repositories, and inactive schedules, continue with [`automation.md`](automation.md).
 
+Collectors are explicit and off by default. Until a required source completes
+a usable observation, Today labels the affected work unobserved. It never calls
+a disabled, stale, unavailable, degraded, or never-observed source quiet.
+
 ## Next reading
 
 - [`protocol.md`](protocol.md): formats, invariants, lifecycle, and exit statuses.
 - [`discipline.md`](discipline.md): what belongs in queue, inbox, or the owner lane.
-- [`ui.md`](ui.md): local board/deck API and security boundary.
+- [`ui.md`](ui.md): Today, Changes, evidence, local triage, native commands,
+  Decision Deck separation, and the loopback security boundary.
 - [`automation.md`](automation.md): packs, collectors, installer, and schedules.

@@ -1,10 +1,10 @@
 {
   "meta": {
     "project": "Ovenlight Bakery Tools",
-    "updated": "2026-07-17T07:00:00+00:00",
+    "updated": "2026-07-18T17:55:00+00:00",
     "lastSession": {
-      "kind": "planning",
-      "summary": "Prepared fictional release work and one demo decision for a bakery scheduling product."
+      "kind": "agent-session",
+      "summary": "Prepared fictional bakery work in queued, active, review, shipped, parked, and owner-decision states."
     },
     "ledgerCursor": {
       "line": 1,
@@ -27,6 +27,78 @@
       ],
       "risksTrustConcerns": "Do not imply food-safety certification.",
       "recommendedNextAgent": "implementation agent",
+      "updated": "2026-07-18T16:20:00+00:00",
+      "links": []
+    },
+    {
+      "id": "task:ovenlight:packing-display",
+      "title": "Improve the packing-station batch display",
+      "status": "In Progress",
+      "context": "A fictional agent is simplifying the display used during the morning packing run.",
+      "userProblem": "Dense labels make the next batch difficult to identify at a glance.",
+      "desiredOutcome": "The next fictional batch and its timer are obvious without opening details.",
+      "scope": "Accessible row hierarchy and keyboard focus for the local display.",
+      "outOfScope": "Customer messaging and production deployment.",
+      "acceptanceCriteria": [
+        "The next batch is identifiable from the first line.",
+        "Keyboard focus remains visible while moving between batches."
+      ],
+      "risksTrustConcerns": "Use fictional batch data only.",
+      "recommendedNextAgent": "implementation agent",
+      "updated": "2026-07-18T14:10:00+00:00",
+      "links": []
+    },
+    {
+      "id": "task:ovenlight:recipe-export",
+      "title": "Review the fictional recipe export",
+      "status": "Needs Review",
+      "context": "The bounded export format is ready for a fictional review pass.",
+      "userProblem": "The bakery needs a portable summary without exposing private notes.",
+      "desiredOutcome": "The reviewer can confirm the export contains only the declared fields.",
+      "scope": "Schema and privacy review of the fictional export.",
+      "outOfScope": "Cloud sync and automatic sharing.",
+      "acceptanceCriteria": [
+        "The export matches the declared fictional schema.",
+        "No local note or machine path appears."
+      ],
+      "risksTrustConcerns": "A review result is not a deployment claim.",
+      "recommendedNextAgent": "review agent",
+      "updated": "2026-07-18T15:40:00+00:00",
+      "links": []
+    },
+    {
+      "id": "task:ovenlight:tray-labels",
+      "title": "Ship clearer fictional tray labels",
+      "status": "Done",
+      "context": "The fictional label change was independently checked in a named local artifact.",
+      "userProblem": "Similar tray labels slowed the morning handoff.",
+      "desiredOutcome": "Each tray label has a unique short code and readable name.",
+      "scope": "Fictional tray labels and their accessible text.",
+      "outOfScope": "Hardware printers and production rollout.",
+      "acceptanceCriteria": [
+        "Every fictional tray has a unique code.",
+        "The reviewed artifact contains the readable tray name."
+      ],
+      "risksTrustConcerns": "The artifact proves the fixture only, not a real deployment.",
+      "recommendedNextAgent": "none",
+      "updated": "2026-07-18T13:30:00+00:00",
+      "links": []
+    },
+    {
+      "id": "task:ovenlight:supplier-sync",
+      "title": "Explore a fictional supplier sync",
+      "status": "Parked",
+      "context": "The idea is intentionally deferred until a safe data boundary is specified.",
+      "userProblem": "Ingredient updates are entered twice in the fictional workflow.",
+      "desiredOutcome": "A future spec can describe an explicit read-only import boundary.",
+      "scope": "No implementation while parked.",
+      "outOfScope": "Credentials, external writes, ordering, and production data.",
+      "acceptanceCriteria": [
+        "The item remains parked until its data and authority boundaries are specified."
+      ],
+      "risksTrustConcerns": "Do not infer permission to contact or write to a supplier system.",
+      "recommendedNextAgent": "planning agent",
+      "updated": "2026-07-14T09:00:00+00:00",
       "links": []
     }
   ],
@@ -102,11 +174,24 @@
   },
   "ownerTasks": [],
   "changelog": {
-    "entries": []
+    "entries": [
+      {
+        "id": "change:ovenlight:tray-labels:artifact",
+        "itemId": "task:ovenlight:tray-labels",
+        "title": "Verified the fictional tray-label artifact",
+        "entry": "A named local artifact contains the six declared fictional tray codes and readable labels.",
+        "evidence": "artifact:ovenlight:tray-labels:v1",
+        "date": "2026-07-18T13:30:00+00:00"
+      }
+    ]
   },
   "statusCounts": {
     "queue": {
-      "Ready for Build": 1
+      "Ready for Build": 1,
+      "In Progress": 1,
+      "Needs Review": 1,
+      "Done": 1,
+      "Parked": 1
     },
     "decisions": {
       "open": 1,

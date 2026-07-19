@@ -15,6 +15,9 @@ The repository is designed so all technical preparation can finish before choosi
 4. Confirm `core.__version__`, [`CHANGELOG.md`](../CHANGELOG.md), and the intended tag agree.
 5. Run the README demo from a fresh clone or clean worktree and make one real swipe.
 6. Inspect the board and deck at desktop and phone widths with no console errors or horizontal overflow.
+7. Validate every declared file in `tests/fixtures/redesign-v2/`; project the
+   catalog twice with the same injected UTC clock and require byte-identical
+   normalized results.
 
 The privacy gate deliberately lives outside the public repository so the denylist cannot reveal the identities and systems it protects.
 
@@ -38,7 +41,11 @@ Before making the repository public:
 - create the `v0.4.1` release from [`CHANGELOG.md`](../CHANGELOG.md);
 - clone the public repository into a new directory and run `scripts/release-check` there.
 
-Do not publish an HFLedger data directory, generated collector report, local instruction pack, scheduler file containing machine paths, or private privacy-gate denylist.
+Do not publish an HFLedger data directory, generated collector report, private
+adapter output, app-private triage state, local instruction pack, scheduler file
+containing machine paths, or private privacy-gate denylist. Only the reviewed
+fictional `example/` and `tests/fixtures/redesign-v2/` data are public runtime
+fixtures.
 
 ## Mac application release
 

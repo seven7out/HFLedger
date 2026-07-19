@@ -16,11 +16,34 @@ separate native window.
   attended-build commands;
 - saved window state, a menu-bar item, Dock attention badges, notifications,
   and optional Launch at Login;
+- native View/Item commands for Today, Changes, All Work, Shipped Log, Watched,
+  filtering, inspector/sidebar visibility, open, acknowledge, snooze, watch,
+  and Copy Context;
+- private seen, snooze, acknowledge, watch, navigation, pane, and disclosure
+  state keyed by stable workspace registration across dynamic port changes;
+- debounced refresh of only the configured board, ledger, collector, and
+  adapter files, without recursive discovery or a primary Refresh button;
 - `.app` and DMG builds with signature, bundle-integrity, and privacy checks.
 
-The loopback board has no Tauri IPC authority. The native settings window owns
-filesystem selection and process control; the served HTML remains the single
-implementation of board and decision behavior.
+The loopback board has no general Tauri IPC authority. Native commands enter
+the page only as an allowlisted one-way event; page state returns through the
+closed loopback API. The native settings window owns filesystem selection and
+process control, while the served HTML remains the single implementation of
+Today and Decision Deck behavior.
+
+## Keyboard and menu behavior
+
+The normal HFLedger, File, Edit, View, Item, Window, and Help menus expose the
+same commands as the served interface. Command-1 through Command-5 open Today,
+Changes, All Work, Shipped Log, and Watched. Up/Down select rows; Left/Right
+collapse or traverse groups; Return or `O` opens the one supported source; `E`
+acknowledges locally; `S` snoozes locally; `W` watches; Command-F filters the
+current destination; Command-K opens the command reference; Escape closes the
+top transient surface and restores focus.
+
+These shortcuts do not fire from editable controls. Today has no Answer,
+Resolve, Complete, Skip, merge, deploy, or arbitrary source command. Owner
+outcomes remain in the Decision Deck or named authoritative application.
 
 ## Build locally
 
@@ -65,6 +88,12 @@ directories are mode `0700`.
 The included Ovenlight workspace is fictional and persists across app upgrades.
 Removing a workspace from future app settings must never delete its data.
 
+Private UI state lives under the app data directory in a separate mode-`0700`
+tree with mode-`0600` files. It is excluded from workspace backups and public
+artifacts. Browser-only use has process-session state instead; it does not
+provide native menus, file watching, Dock badges, window restoration, or
+durability after the server process exits.
+
 ## Public release gate
 
 The manual `Mac app candidate` GitHub workflow always builds an ad-hoc candidate.
@@ -80,3 +109,8 @@ repository secrets:
 The updater is intentionally disabled until a stable release URL and a Tauri
 updater signing public key are approved. Developer ID signing, notarization,
 publishing a draft, and enabling update delivery are separate attended gates.
+
+Transition-based attention notifications, a rich menu-bar status/popover,
+Quick Look, analytics, advanced disputes, multi-machine skew detection, global
+search, and custom deep links are deferred. The current app must not present
+empty controls or documentation that implies those capabilities are shipped.
