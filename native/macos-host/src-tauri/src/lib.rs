@@ -1,19 +1,24 @@
 use chrono::Local;
+use notify::{Config as NotifyConfig, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
-use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use tauri::menu::{Menu, MenuItem};
+use tauri::menu::{
+    AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID,
+};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
@@ -26,6 +31,21 @@ const CONFIG_VERSION: u32 = 1;
 const LOG_LIMIT_BYTES: u64 = 1_048_576;
 const CORE_FILES: [&str; 3] = ["config.json", "board.json", "ledger.jsonl"];
 const DATA_DIRECTORIES: [&str; 3] = ["locks", "backups", "reports"];
+const WATCHED_WORKSPACE_FILES: [&str; 2] = ["board.json", "ledger.jsonl"];
+const WATCHED_REPORT_FILES: [&str; 1] = ["collector-latest.json"];
+const WATCH_DEBOUNCE: Duration = Duration::from_millis(350);
+const NATIVE_CHROME_POLL: Duration = Duration::from_secs(3);
+
+macro_rules! native_event_script {
+    ($id:literal) => {
+        concat!(
+            "window.dispatchEvent(new CustomEvent('hfledger:native-command',",
+            "{detail:{id:'",
+            $id,
+            "'}}));"
+        )
+    };
+}
 
 #[derive(Clone)]
 struct AppPaths {
@@ -34,17 +54,119 @@ struct AppPaths {
     engine: PathBuf,
     logs: PathBuf,
     backups: PathBuf,
+    ui_state: PathBuf,
 }
 
-#[derive(Default)]
 struct HostRuntime {
     child: Mutex<Option<Child>>,
     startup_error: Mutex<Option<String>>,
+    observer_error: Mutex<Option<String>>,
     port: Mutex<Option<u16>>,
     active_workspace: Mutex<Option<Workspace>>,
     paths: Mutex<Option<AppPaths>>,
     config_guard: Mutex<()>,
     notification_baseline: Mutex<Option<usize>>,
+    workspace_watcher: Mutex<Option<WorkspaceWatch>>,
+    watch_generation: AtomicU64,
+    native_menu: Mutex<Option<NativeMenuState>>,
+    board_zoom: Mutex<f64>,
+}
+
+impl Default for HostRuntime {
+    fn default() -> Self {
+        Self {
+            child: Mutex::new(None),
+            startup_error: Mutex::new(None),
+            observer_error: Mutex::new(None),
+            port: Mutex::new(None),
+            active_workspace: Mutex::new(None),
+            paths: Mutex::new(None),
+            config_guard: Mutex::new(()),
+            notification_baseline: Mutex::new(None),
+            workspace_watcher: Mutex::new(None),
+            watch_generation: AtomicU64::new(0),
+            native_menu: Mutex::new(None),
+            board_zoom: Mutex::new(1.0),
+        }
+    }
+}
+
+struct WorkspaceWatch {
+    _watcher: RecommendedWatcher,
+    _generation: u64,
+}
+
+#[derive(Clone)]
+struct NativeMenuState {
+    board_commands: Vec<MenuItem<tauri::Wry>>,
+    source_commands: Vec<MenuItem<tauri::Wry>>,
+    attention_commands: Vec<MenuItem<tauri::Wry>>,
+    selection_commands: Vec<MenuItem<tauri::Wry>>,
+    watch_commands: Vec<MenuItem<tauri::Wry>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NativeCommand {
+    ViewToday,
+    ViewChanges,
+    ViewAllWork,
+    ViewShippedLog,
+    ViewWatched,
+    ViewFilter,
+    ViewCommands,
+    ViewReload,
+    ToggleSidebar,
+    ToggleInspector,
+    ItemOpen,
+    ItemAcknowledge,
+    ItemSnooze,
+    ItemWatch,
+    ItemCopyContext,
+    HelpCommands,
+}
+
+impl NativeCommand {
+    fn id(self) -> &'static str {
+        match self {
+            Self::ViewToday => "view.today",
+            Self::ViewChanges => "view.changes",
+            Self::ViewAllWork => "view.all-work",
+            Self::ViewShippedLog => "view.shipped-log",
+            Self::ViewWatched => "view.watched",
+            Self::ViewFilter => "view.filter",
+            Self::ViewCommands => "view.commands",
+            Self::ViewReload => "view.reload",
+            Self::ToggleSidebar => "pane.toggle-sidebar",
+            Self::ToggleInspector => "pane.toggle-inspector",
+            Self::ItemOpen => "item.open",
+            Self::ItemAcknowledge => "item.acknowledge",
+            Self::ItemSnooze => "item.snooze",
+            Self::ItemWatch => "item.watch",
+            Self::ItemCopyContext => "item.copy-context",
+            Self::HelpCommands => "help.commands",
+        }
+    }
+
+    fn event_script(self) -> &'static str {
+        match self {
+            Self::ViewToday => native_event_script!("view.today"),
+            Self::ViewChanges => native_event_script!("view.changes"),
+            Self::ViewAllWork => native_event_script!("view.all-work"),
+            Self::ViewShippedLog => native_event_script!("view.shipped-log"),
+            Self::ViewWatched => native_event_script!("view.watched"),
+            Self::ViewFilter => native_event_script!("view.filter"),
+            Self::ViewCommands => native_event_script!("view.commands"),
+            Self::ViewReload => native_event_script!("view.reload"),
+            Self::ToggleSidebar => native_event_script!("pane.toggle-sidebar"),
+            Self::ToggleInspector => native_event_script!("pane.toggle-inspector"),
+            Self::ItemOpen => native_event_script!("item.open"),
+            Self::ItemAcknowledge => native_event_script!("item.acknowledge"),
+            Self::ItemSnooze => native_event_script!("item.snooze"),
+            Self::ItemWatch => native_event_script!("item.watch"),
+            Self::ItemCopyContext => native_event_script!("item.copy-context"),
+            Self::HelpCommands => native_event_script!("help.commands"),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -98,6 +220,7 @@ struct HostStatus {
     phase: String,
     ready: bool,
     error: Option<String>,
+    observer_error: Option<String>,
     url: Option<String>,
     port: Option<u16>,
     workspace: Option<Workspace>,
@@ -140,6 +263,13 @@ fn private_permissions(path: &Path, mode: u32) -> Result<(), String> {
 fn create_private_dir(path: &Path) -> Result<(), String> {
     fs::create_dir_all(path)
         .map_err(|error| format!("could not create {}: {error}", path.display()))?;
+    reject_symlink_chain(path)?;
+    if !path.is_dir() {
+        return Err(format!(
+            "private path is not a directory: {}",
+            path.display()
+        ));
+    }
     private_permissions(path, 0o700)
 }
 
@@ -226,8 +356,12 @@ fn validate_stored_config(config: &StoredConfig) -> Result<(), String> {
     let mut ids = HashSet::new();
     let mut locations = HashSet::new();
     for workspace in &config.workspaces {
-        if workspace.id.is_empty() || workspace.label.trim().is_empty() {
-            return Err("workspace settings contain an empty id or label".into());
+        if workspace.id.is_empty()
+            || workspace.id.chars().count() > 160
+            || workspace.id.chars().any(char::is_control)
+            || workspace.label.trim().is_empty()
+        {
+            return Err("workspace settings contain an invalid id or label".into());
         }
         if !Path::new(&workspace.path).is_absolute() {
             return Err(format!(
@@ -308,7 +442,8 @@ fn initialize_app(app: &tauri::App, state: &HostRuntime) -> Result<StoredConfig,
     let logs = app_data.join("Logs");
     let backups = app_data.join("Backups");
     let managed = app_data.join("Workspaces");
-    for directory in [&logs, &backups, &managed] {
+    let ui_state = app_data.join("UIState");
+    for directory in [&logs, &backups, &managed, &ui_state] {
         create_private_dir(directory)?;
     }
     let engine = resource_root.join("engine/hfledger-engine/hfledger-engine");
@@ -324,6 +459,7 @@ fn initialize_app(app: &tauri::App, state: &HostRuntime) -> Result<StoredConfig,
         engine,
         logs,
         backups,
+        ui_state,
         app_data: app_data.clone(),
     };
     *state
@@ -445,9 +581,11 @@ fn validate_workspace(state: &HostRuntime, raw_path: &Path) -> Result<(PathBuf, 
 }
 
 fn workspace_id(path: &Path) -> String {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    path.hash(&mut hasher);
-    format!("workspace-{:016x}", hasher.finish())
+    let mut digest = Sha256::new();
+    digest.update(b"hfledger-workspace-v1\0");
+    digest.update(path.as_os_str().as_bytes());
+    let hex = format!("{:x}", digest.finalize());
+    format!("workspace-{}", &hex[..32])
 }
 
 fn project_slug(project: &str) -> String {
@@ -485,6 +623,20 @@ fn reserve_port() -> Result<u16, String> {
     ))
 }
 
+fn engine_serve_arguments(workspace: &Workspace, ui_state: &Path, port: u16) -> Vec<OsString> {
+    vec![
+        OsString::from("--home"),
+        OsString::from(&workspace.path),
+        OsString::from("serve"),
+        OsString::from("--local-state-root"),
+        ui_state.as_os_str().to_os_string(),
+        OsString::from("--local-state-workspace-id"),
+        OsString::from(&workspace.id),
+        OsString::from("--port"),
+        OsString::from(port.to_string()),
+    ]
+}
+
 fn rotate_log(path: &Path) -> Result<(), String> {
     if path.metadata().map(|metadata| metadata.len()).unwrap_or(0) < LOG_LIMIT_BYTES {
         return Ok(());
@@ -509,12 +661,15 @@ fn log_file(path: &Path) -> Result<File, String> {
     Ok(file)
 }
 
-fn fetch_board(port: u16) -> Option<Value> {
+fn fetch_json(port: u16, path: &str) -> Option<Value> {
+    if !path.starts_with('/') || path.chars().any(|value| matches!(value, '\r' | '\n')) {
+        return None;
+    }
     let address: SocketAddr = ([127, 0, 0, 1], port).into();
     let mut stream = TcpStream::connect_timeout(&address, Duration::from_millis(180)).ok()?;
     let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
     let request =
-        format!("GET /api/board HTTP/1.1\r\nHost: {HOST}:{port}\r\nConnection: close\r\n\r\n");
+        format!("GET {path} HTTP/1.1\r\nHost: {HOST}:{port}\r\nConnection: close\r\n\r\n");
     stream.write_all(request.as_bytes()).ok()?;
     let mut response = String::new();
     stream.read_to_string(&mut response).ok()?;
@@ -523,6 +678,10 @@ fn fetch_board(port: u16) -> Option<Value> {
     }
     let body = response.split_once("\r\n\r\n")?.1;
     serde_json::from_str(body).ok()
+}
+
+fn fetch_board(port: u16) -> Option<Value> {
+    fetch_json(port, "/api/board")
 }
 
 fn verified_board(port: u16, expected_project: &str) -> bool {
@@ -537,7 +696,204 @@ fn verified_board(port: u16, expected_project: &str) -> bool {
         == Some(expected_project)
 }
 
+struct WatchPlan {
+    roots: Vec<PathBuf>,
+    allowed_files: Arc<HashSet<PathBuf>>,
+    required_files: Arc<HashSet<PathBuf>>,
+}
+
+fn workspace_watch_plan(workspace: &Workspace) -> Result<WatchPlan, String> {
+    let root = PathBuf::from(&workspace.path);
+    reject_symlink_chain(&root)?;
+    let canonical = root
+        .canonicalize()
+        .map_err(|error| format!("could not resolve the workspace watcher root: {error}"))?;
+    if canonical != root || !canonical.is_dir() {
+        return Err("workspace watcher root is not the registered canonical directory".into());
+    }
+
+    let mut allowed_files = HashSet::new();
+    let mut required_files = HashSet::new();
+    for name in WATCHED_WORKSPACE_FILES {
+        let path = canonical.join(name);
+        reject_symlink(&path)?;
+        if !path.is_file() {
+            return Err(format!("workspace watcher input is missing: {name}"));
+        }
+        allowed_files.insert(path.clone());
+        required_files.insert(path);
+    }
+
+    let mut roots = vec![canonical.clone()];
+    let report_root = canonical.join("reports");
+    if report_root.exists() {
+        reject_symlink_chain(&report_root)?;
+        if !report_root.is_dir() {
+            return Err("workspace reports path is not a directory".into());
+        }
+        roots.push(report_root.clone());
+        for name in WATCHED_REPORT_FILES {
+            let path = report_root.join(name);
+            if path.exists() {
+                reject_symlink(&path)?;
+                if !path.is_file() {
+                    return Err(format!("workspace report input is not a file: {name}"));
+                }
+            }
+            allowed_files.insert(path);
+        }
+    }
+    Ok(WatchPlan {
+        roots,
+        allowed_files: Arc::new(allowed_files),
+        required_files: Arc::new(required_files),
+    })
+}
+
+fn event_is_relevant(event: &Event, allowed_files: &HashSet<PathBuf>) -> bool {
+    event.paths.iter().any(|path| allowed_files.contains(path))
+}
+
+fn merge_watch_signal(saw_change: &mut bool, saw_error: &mut bool, changed: bool) {
+    if changed {
+        *saw_change = true;
+    } else {
+        *saw_error = true;
+    }
+}
+
+fn watch_snapshot_is_safe(
+    required_files: &HashSet<PathBuf>,
+    allowed_files: &HashSet<PathBuf>,
+) -> bool {
+    required_files
+        .iter()
+        .all(|path| path.exists() && reject_symlink_chain(path).is_ok() && path.is_file())
+        && allowed_files
+            .iter()
+            .all(|path| !path.exists() || (reject_symlink_chain(path).is_ok() && path.is_file()))
+}
+
+fn set_observer_error(state: &HostRuntime, message: Option<&str>) {
+    if let Ok(mut current) = state.observer_error.lock() {
+        *current = message.map(str::to_string);
+    }
+}
+
+fn dispatch_native_command(app: &AppHandle, command: NativeCommand) -> Result<(), String> {
+    let board = app
+        .get_webview_window("board")
+        .ok_or_else(|| "no ledger window is open".to_string())?;
+    board
+        .eval(command.event_script())
+        .map_err(|error| format!("could not route native command {}: {error}", command.id()))
+}
+
+fn stop_workspace_watch(state: &HostRuntime) {
+    state.watch_generation.fetch_add(1, Ordering::SeqCst);
+    if let Ok(mut watcher) = state.workspace_watcher.lock() {
+        watcher.take();
+    }
+}
+
+fn start_workspace_watch(
+    app: &AppHandle,
+    state: &HostRuntime,
+    workspace: &Workspace,
+) -> Result<(), String> {
+    stop_workspace_watch(state);
+    let generation = state.watch_generation.fetch_add(1, Ordering::SeqCst) + 1;
+    let plan = workspace_watch_plan(workspace)?;
+    let allowed_files = Arc::clone(&plan.allowed_files);
+    let allowed_for_worker = Arc::clone(&plan.allowed_files);
+    let required_for_worker = Arc::clone(&plan.required_files);
+    let (sender, receiver) = mpsc::channel();
+    let mut watcher = RecommendedWatcher::new(
+        move |result: notify::Result<Event>| match result {
+            Ok(event) if event_is_relevant(&event, &allowed_files) => {
+                let _ = sender.send(true);
+            }
+            Ok(_) => {}
+            Err(_) => {
+                let _ = sender.send(false);
+            }
+        },
+        NotifyConfig::default(),
+    )
+    .map_err(|_| "could not initialize workspace observation".to_string())?;
+    for root in &plan.roots {
+        watcher
+            .watch(root, RecursiveMode::NonRecursive)
+            .map_err(|_| "could not observe an allowlisted workspace directory".to_string())?;
+    }
+
+    let app_handle = app.clone();
+    thread::spawn(move || {
+        while let Ok(changed) = receiver.recv() {
+            if app_handle
+                .state::<HostRuntime>()
+                .watch_generation
+                .load(Ordering::SeqCst)
+                != generation
+            {
+                return;
+            }
+            let mut saw_change = false;
+            let mut saw_error = false;
+            merge_watch_signal(&mut saw_change, &mut saw_error, changed);
+
+            loop {
+                match receiver.recv_timeout(WATCH_DEBOUNCE) {
+                    Ok(next) => merge_watch_signal(&mut saw_change, &mut saw_error, next),
+                    Err(mpsc::RecvTimeoutError::Timeout) => break,
+                    Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                }
+            }
+            if app_handle
+                .state::<HostRuntime>()
+                .watch_generation
+                .load(Ordering::SeqCst)
+                != generation
+            {
+                return;
+            }
+            if saw_error {
+                set_observer_error(
+                    &app_handle.state::<HostRuntime>(),
+                    Some(
+                        "Workspace observation paused; use Refresh Sources or restart the engine.",
+                    ),
+                );
+            } else {
+                set_observer_error(&app_handle.state::<HostRuntime>(), None);
+            }
+            if !saw_change {
+                continue;
+            }
+            if !watch_snapshot_is_safe(&required_for_worker, &allowed_for_worker) {
+                set_observer_error(
+                    &app_handle.state::<HostRuntime>(),
+                    Some("Workspace observation rejected an unsafe or missing input."),
+                );
+                continue;
+            }
+            let _ = dispatch_native_command(&app_handle, NativeCommand::ViewReload);
+            thread::sleep(Duration::from_millis(225));
+            refresh_native_chrome(&app_handle);
+        }
+    });
+    *state
+        .workspace_watcher
+        .lock()
+        .map_err(|_| "workspace watcher lock was poisoned".to_string())? = Some(WorkspaceWatch {
+        _watcher: watcher,
+        _generation: generation,
+    });
+    Ok(())
+}
+
 fn stop_host(state: &HostRuntime) {
+    stop_workspace_watch(state);
     if let Ok(mut child) = state.child.lock() {
         if let Some(mut process) = child.take() {
             let _ = process.kill();
@@ -553,6 +909,7 @@ fn stop_host(state: &HostRuntime) {
     if let Ok(mut baseline) = state.notification_baseline.lock() {
         *baseline = None;
     }
+    set_observer_error(state, None);
 }
 
 fn current_host_status(state: &HostRuntime) -> HostStatus {
@@ -564,6 +921,11 @@ fn current_host_status(state: &HostRuntime) -> HostStatus {
     let port = state.port.lock().ok().and_then(|value| *value);
     let mut error = state
         .startup_error
+        .lock()
+        .ok()
+        .and_then(|value| value.clone());
+    let observer_error = state
+        .observer_error
         .lock()
         .ok()
         .and_then(|value| value.clone());
@@ -600,6 +962,7 @@ fn current_host_status(state: &HostRuntime) -> HostStatus {
         phase: phase.into(),
         ready,
         error,
+        observer_error,
         url: port.map(|value| format!("http://{HOST}:{value}/")),
         port,
         workspace,
@@ -618,7 +981,7 @@ fn show_board_window(app: &AppHandle, workspace: &Workspace, port: u16) -> Resul
     let url = format!("http://{HOST}:{port}/")
         .parse()
         .map_err(|error| format!("could not build the local board URL: {error}"))?;
-    let title = format!("{} — HFLedger", workspace.label);
+    let title = format!("HFLedger — {}", workspace.label);
     if let Some(window) = app.get_webview_window("board") {
         window
             .navigate(url)
@@ -631,7 +994,7 @@ fn show_board_window(app: &AppHandle, workspace: &Workspace, port: u16) -> Resul
         WebviewWindowBuilder::new(app, "board", WebviewUrl::External(url))
             .title(&title)
             .inner_size(1280.0, 820.0)
-            .min_inner_size(900.0, 600.0)
+            .min_inner_size(600.0, 560.0)
             .center()
             .build()
             .map_err(|error| format!("could not create the board window: {error}"))?;
@@ -639,6 +1002,7 @@ fn show_board_window(app: &AppHandle, workspace: &Workspace, port: u16) -> Resul
     if let Some(launcher) = app.get_webview_window("main") {
         let _ = launcher.hide();
     }
+    set_board_menu_available(&app.state::<HostRuntime>(), true);
     Ok(())
 }
 
@@ -670,12 +1034,9 @@ fn start_workspace_inner(
     let stderr = stdout
         .try_clone()
         .map_err(|error| format!("could not clone the engine log handle: {error}"))?;
+    let arguments = engine_serve_arguments(&workspace, &app_paths.ui_state, port);
     let child = Command::new(&app_paths.engine)
-        .arg("--home")
-        .arg(&workspace.path)
-        .arg("serve")
-        .arg("--port")
-        .arg(port.to_string())
+        .args(&arguments)
         .env("PYTHONDONTWRITEBYTECODE", "1")
         .env("PYTHONNOUSERSITE", "1")
         .stdin(Stdio::null())
@@ -702,7 +1063,12 @@ fn start_workspace_inner(
     for _ in 0..60 {
         if verified_board(port, &workspace.label) {
             write_config(state, &config)?;
+            if let Err(error) = start_workspace_watch(app, state, &workspace) {
+                stop_host(state);
+                return Err(error);
+            }
             show_board_window(app, &workspace, port)?;
+            refresh_native_chrome(app);
             return Ok(current_host_status(state));
         }
         if let Ok(mut process) = state.child.lock() {
@@ -881,6 +1247,7 @@ fn remove_workspace(
         .unwrap_or(false);
     if is_active {
         stop_host(&state);
+        set_board_menu_available(&state, false);
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.set_badge_count(None);
         }
@@ -920,6 +1287,7 @@ fn restart_workspace(app: AppHandle, state: State<'_, HostRuntime>) -> Result<Ho
 #[tauri::command]
 fn stop_workspace(app: AppHandle, state: State<'_, HostRuntime>) -> HostStatus {
     stop_host(&state);
+    set_board_menu_available(&state, false);
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_badge_count(None);
     }
@@ -1044,6 +1412,418 @@ fn quit_app(app: AppHandle) {
     app.exit(0);
 }
 
+fn custom_menu_item(
+    app: &AppHandle,
+    id: &str,
+    text: &str,
+    enabled: bool,
+    accelerator: Option<&str>,
+) -> tauri::Result<MenuItem<tauri::Wry>> {
+    MenuItem::with_id(app, id, text, enabled, accelerator)
+}
+
+fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, NativeMenuState)> {
+    let about = AboutMetadata {
+        name: Some("HFLedger".into()),
+        version: Some(env!("CARGO_PKG_VERSION").into()),
+        comments: Some("A local-first, evidence-backed ledger browser.".into()),
+        ..Default::default()
+    };
+
+    let settings = custom_menu_item(app, "app.settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
+    let app_menu = Submenu::with_items(
+        app,
+        "HFLedger",
+        true,
+        &[
+            &PredefinedMenuItem::about(app, None, Some(about))?,
+            &settings,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::services(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::hide(app, None)?,
+            &PredefinedMenuItem::hide_others(app, None)?,
+            &PredefinedMenuItem::show_all(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::quit(app, None)?,
+        ],
+    )?;
+
+    let open_workspace =
+        custom_menu_item(app, "file.open-workspace", "Open Workspace…", true, None)?;
+    let file_open_source = custom_menu_item(
+        app,
+        "file.open-source",
+        "Open Authoritative Source",
+        false,
+        Some("Enter"),
+    )?;
+    let reload = custom_menu_item(
+        app,
+        "view.reload",
+        "Refresh Sources",
+        false,
+        Some("CmdOrCtrl+R"),
+    )?;
+    let file_menu = Submenu::with_items(
+        app,
+        "File",
+        true,
+        &[
+            &open_workspace,
+            &file_open_source,
+            &reload,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::close_window(app, None)?,
+        ],
+    )?;
+
+    let edit_copy_context = custom_menu_item(
+        app,
+        "edit.copy-context",
+        "Copy Context",
+        false,
+        Some("CmdOrCtrl+Shift+C"),
+    )?;
+    let edit_find = custom_menu_item(
+        app,
+        "view.filter",
+        "Find in Current View…",
+        false,
+        Some("CmdOrCtrl+F"),
+    )?;
+    let find_next = custom_menu_item(
+        app,
+        "edit.find-next",
+        "Find Next",
+        false,
+        Some("CmdOrCtrl+G"),
+    )?;
+    let find_previous = custom_menu_item(
+        app,
+        "edit.find-previous",
+        "Find Previous",
+        false,
+        Some("CmdOrCtrl+Shift+G"),
+    )?;
+    let edit_menu = Submenu::with_items(
+        app,
+        "Edit",
+        true,
+        &[
+            &PredefinedMenuItem::undo(app, None)?,
+            &PredefinedMenuItem::redo(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::cut(app, None)?,
+            &PredefinedMenuItem::copy(app, None)?,
+            &PredefinedMenuItem::paste(app, None)?,
+            &PredefinedMenuItem::select_all(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &edit_copy_context,
+            &edit_find,
+            &find_next,
+            &find_previous,
+        ],
+    )?;
+
+    let today = custom_menu_item(app, "view.today", "Today", false, Some("CmdOrCtrl+1"))?;
+    let changes = custom_menu_item(app, "view.changes", "Changes", false, Some("CmdOrCtrl+2"))?;
+    let all_work = custom_menu_item(app, "view.all-work", "All Work", false, Some("CmdOrCtrl+3"))?;
+    let shipped = custom_menu_item(
+        app,
+        "view.shipped-log",
+        "Shipped Log",
+        false,
+        Some("CmdOrCtrl+4"),
+    )?;
+    let watched = custom_menu_item(app, "view.watched", "Watched", false, Some("CmdOrCtrl+5"))?;
+    let commands = custom_menu_item(app, "view.commands", "Command Guide", false, None)?;
+    let sidebar = custom_menu_item(
+        app,
+        "pane.toggle-sidebar",
+        "Show/Hide Sidebar",
+        false,
+        Some("CmdOrCtrl+Control+S"),
+    )?;
+    let inspector = custom_menu_item(
+        app,
+        "pane.toggle-inspector",
+        "Show/Hide Inspector",
+        false,
+        Some("CmdOrCtrl+Alt+I"),
+    )?;
+    let group = custom_menu_item(
+        app,
+        "view.group",
+        "Expand/Collapse Selected Group",
+        false,
+        None,
+    )?;
+    let actual_size = custom_menu_item(
+        app,
+        "view.actual-size",
+        "Actual Size",
+        false,
+        Some("CmdOrCtrl+0"),
+    )?;
+    let zoom_in = custom_menu_item(app, "view.zoom-in", "Zoom In", false, Some("CmdOrCtrl++"))?;
+    let zoom_out = custom_menu_item(app, "view.zoom-out", "Zoom Out", false, Some("CmdOrCtrl+-"))?;
+    let view_menu = Submenu::with_items(
+        app,
+        "View",
+        true,
+        &[
+            &today,
+            &changes,
+            &all_work,
+            &shipped,
+            &watched,
+            &PredefinedMenuItem::separator(app)?,
+            &commands,
+            &PredefinedMenuItem::separator(app)?,
+            &sidebar,
+            &inspector,
+            &group,
+            &PredefinedMenuItem::separator(app)?,
+            &actual_size,
+            &zoom_in,
+            &zoom_out,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::fullscreen(app, None)?,
+        ],
+    )?;
+
+    let item_open = custom_menu_item(
+        app,
+        "item.open",
+        "Open Authoritative Source",
+        false,
+        Some("O"),
+    )?;
+    let acknowledge = custom_menu_item(
+        app,
+        "item.acknowledge",
+        "Acknowledge Locally",
+        false,
+        Some("E"),
+    )?;
+    let snooze = custom_menu_item(app, "item.snooze", "Snooze Locally…", false, Some("S"))?;
+    let watch = custom_menu_item(app, "item.watch", "Watch", false, Some("W"))?;
+    let item_copy_context = custom_menu_item(
+        app,
+        "item.copy-context",
+        "Copy Context",
+        false,
+        Some("CmdOrCtrl+Shift+C"),
+    )?;
+    let reset_triage = custom_menu_item(
+        app,
+        "item.reset-triage",
+        "Reset Local Triage State…",
+        false,
+        None,
+    )?;
+    let item_menu = Submenu::with_items(
+        app,
+        "Item",
+        true,
+        &[
+            &item_open,
+            &acknowledge,
+            &snooze,
+            &watch,
+            &item_copy_context,
+            &PredefinedMenuItem::separator(app)?,
+            &reset_triage,
+        ],
+    )?;
+
+    let window_menu = Submenu::with_id_and_items(
+        app,
+        WINDOW_SUBMENU_ID,
+        "Window",
+        true,
+        &[
+            &PredefinedMenuItem::minimize(app, None)?,
+            &PredefinedMenuItem::maximize(app, Some("Zoom"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::bring_all_to_front(app, None)?,
+        ],
+    )?;
+
+    let help = custom_menu_item(app, "help.commands", "HFLedger Help", true, None)?;
+    let keyboard = custom_menu_item(
+        app,
+        "help.keyboard",
+        "Keyboard Shortcuts",
+        true,
+        Some("CmdOrCtrl+K"),
+    )?;
+    let privacy = custom_menu_item(app, "help.privacy", "Privacy & Read-only Model", true, None)?;
+    let diagnostics = custom_menu_item(app, "help.diagnostics", "Show Diagnostics", true, None)?;
+    let help_menu = Submenu::with_id_and_items(
+        app,
+        HELP_SUBMENU_ID,
+        "Help",
+        true,
+        &[
+            &help,
+            &keyboard,
+            &privacy,
+            &PredefinedMenuItem::separator(app)?,
+            &diagnostics,
+        ],
+    )?;
+
+    let menu = Menu::with_items(
+        app,
+        &[
+            &app_menu,
+            &file_menu,
+            &edit_menu,
+            &view_menu,
+            &item_menu,
+            &window_menu,
+            &help_menu,
+        ],
+    )?;
+    let board_commands = vec![
+        reload.clone(),
+        edit_find,
+        today.clone(),
+        changes.clone(),
+        all_work.clone(),
+        shipped.clone(),
+        watched.clone(),
+        commands.clone(),
+        sidebar.clone(),
+        inspector.clone(),
+        actual_size,
+        zoom_in,
+        zoom_out,
+    ];
+    Ok((
+        menu,
+        NativeMenuState {
+            board_commands,
+            source_commands: vec![file_open_source, item_open],
+            attention_commands: vec![acknowledge, snooze],
+            selection_commands: vec![edit_copy_context, item_copy_context, watch.clone()],
+            watch_commands: vec![watch],
+        },
+    ))
+}
+
+fn set_menu_items_enabled(items: &[MenuItem<tauri::Wry>], enabled: bool) {
+    for item in items {
+        let _ = item.set_enabled(enabled);
+    }
+}
+
+fn set_board_menu_available(state: &HostRuntime, available: bool) {
+    let Ok(menu) = state.native_menu.lock() else {
+        return;
+    };
+    let Some(menu) = menu.as_ref() else {
+        return;
+    };
+    set_menu_items_enabled(&menu.board_commands, available);
+    if !available {
+        set_menu_items_enabled(&menu.source_commands, false);
+        set_menu_items_enabled(&menu.attention_commands, false);
+        set_menu_items_enabled(&menu.selection_commands, false);
+        for item in &menu.watch_commands {
+            let _ = item.set_text("Watch");
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct MenuEligibility {
+    selected: bool,
+    openable: bool,
+    attention: bool,
+    watched: bool,
+}
+
+fn local_state_body(value: &Value) -> &Value {
+    value
+        .get("state")
+        .or_else(|| value.get("localState"))
+        .unwrap_or(value)
+}
+
+fn selected_item_id(local_state: &Value) -> Option<&str> {
+    let state = local_state_body(local_state);
+    state
+        .pointer("/navigation/selectedItemId")
+        .or_else(|| state.pointer("/context/navigation/selectedItemId"))
+        .and_then(Value::as_str)
+}
+
+fn local_item_is_watched(local_state: &Value, item_id: &str) -> bool {
+    let state = local_state_body(local_state);
+    state
+        .get("watched")
+        .or_else(|| state.pointer("/context/watched"))
+        .and_then(Value::as_array)
+        .is_some_and(|items| {
+            items.iter().any(|item| {
+                item.get("itemId").and_then(Value::as_str) == Some(item_id)
+                    || item.get("itemKey").and_then(Value::as_str) == Some(item_id)
+            })
+        })
+}
+
+fn menu_eligibility(board: &Value, local_state: &Value) -> MenuEligibility {
+    let Some(item_id) = selected_item_id(local_state) else {
+        return MenuEligibility::default();
+    };
+    let Some(item) = board
+        .pointer("/orientationV2/items")
+        .and_then(Value::as_array)
+        .and_then(|items| {
+            items
+                .iter()
+                .find(|item| item.get("id").and_then(Value::as_str) == Some(item_id))
+        })
+    else {
+        return MenuEligibility::default();
+    };
+    let action = item.get("nextAction");
+    let openable = action
+        .and_then(|value| value.get("kind"))
+        .and_then(Value::as_str)
+        .is_some_and(|kind| matches!(kind, "open-source" | "open-decision"));
+    MenuEligibility {
+        selected: true,
+        openable,
+        attention: item
+            .get("attentionKey")
+            .is_some_and(|value| !value.is_null()),
+        watched: local_item_is_watched(local_state, item_id),
+    }
+}
+
+fn update_item_menu(state: &HostRuntime, eligibility: MenuEligibility) {
+    let Ok(menu) = state.native_menu.lock() else {
+        return;
+    };
+    let Some(menu) = menu.as_ref() else {
+        return;
+    };
+    set_menu_items_enabled(&menu.selection_commands, eligibility.selected);
+    set_menu_items_enabled(&menu.source_commands, eligibility.openable);
+    set_menu_items_enabled(&menu.attention_commands, eligibility.attention);
+    for item in &menu.watch_commands {
+        let _ = item.set_text(if eligibility.watched {
+            "Unwatch"
+        } else {
+            "Watch"
+        });
+    }
+}
+
 fn decision_count(value: &Value) -> usize {
     value
         .get("decisions")
@@ -1052,41 +1832,180 @@ fn decision_count(value: &Value) -> usize {
         .unwrap_or(0)
 }
 
-fn start_attention_monitor(app: AppHandle) {
-    thread::spawn(move || loop {
-        thread::sleep(Duration::from_secs(15));
-        let state = app.state::<HostRuntime>();
-        let Some(port) = state.port.lock().ok().and_then(|value| *value) else {
-            continue;
-        };
-        let Some(board) = fetch_board(port) else {
-            continue;
-        };
-        let count = decision_count(&board);
+fn attention_badge_count(value: &Value) -> Option<usize> {
+    let Some(orientation) = value.get("orientationV2") else {
+        return Some(decision_count(value));
+    };
+    let count = orientation
+        .pointer("/attention/total")
+        .and_then(Value::as_u64)
+        .and_then(|value| usize::try_from(value).ok())?;
+    let screen_invalid = orientation
+        .pointer("/coverage/screen/state")
+        .and_then(Value::as_str)
+        == Some("invalid");
+    if screen_invalid && count == 0 {
+        None
+    } else {
+        Some(count)
+    }
+}
+
+fn active_context_id(value: &Value) -> Option<&str> {
+    let context = value.get("activeContext")?.as_str()?;
+    if context.is_empty()
+        || context.len() > 128
+        || !context
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+    {
+        return None;
+    }
+    Some(context)
+}
+
+fn coverage_is_invalid(value: &Value) -> bool {
+    value
+        .pointer("/orientationV2/coverage/screen/state")
+        .and_then(Value::as_str)
+        == Some("invalid")
+}
+
+fn refresh_native_chrome(app: &AppHandle) {
+    let state = app.state::<HostRuntime>();
+    let Some(port) = state.port.lock().ok().and_then(|value| *value) else {
+        return;
+    };
+    let Some(board) = fetch_board(port) else {
+        return;
+    };
+
+    if let Some(count) = attention_badge_count(&board) {
         if let Some(window) = app.get_webview_window("main") {
-            let _ = window.set_badge_count((count > 0).then_some(count as i64));
+            let badge = i64::try_from(count).unwrap_or(i64::MAX);
+            let _ = window.set_badge_count((count > 0).then_some(badge));
         }
-        let previous = {
-            let Ok(mut baseline) = state.notification_baseline.lock() else {
-                continue;
-            };
-            let old = *baseline;
-            *baseline = Some(count);
-            old
+    }
+    let notification_count = decision_count(&board);
+    let previous = {
+        let Ok(mut baseline) = state.notification_baseline.lock() else {
+            return;
         };
-        if previous.is_some_and(|value| count > value)
-            && read_config(&state)
-                .map(|config| config.preferences.notifications)
-                .unwrap_or(false)
-        {
-            let _ = app
-                .notification()
-                .builder()
-                .title("HFLedger needs your attention")
-                .body("A new owner decision or manual action is ready.")
-                .show();
-        }
+        let old = *baseline;
+        *baseline = Some(notification_count);
+        old
+    };
+    if previous.is_some_and(|value| notification_count > value)
+        && read_config(&state)
+            .map(|config| config.preferences.notifications)
+            .unwrap_or(false)
+    {
+        let _ = app
+            .notification()
+            .builder()
+            .title("HFLedger needs your attention")
+            .body("A new owner decision or manual action is ready.")
+            .show();
+    }
+
+    if let Some(tray) = app.tray_by_id("status") {
+        let tooltip = if coverage_is_invalid(&board) {
+            "HFLedger — observation needs review"
+        } else {
+            "HFLedger"
+        };
+        let _ = tray.set_tooltip(Some(tooltip));
+    }
+
+    let eligibility = active_context_id(&board)
+        .and_then(|context| {
+            fetch_json(port, &format!("/api/local-state?context={context}"))
+                .map(|local| menu_eligibility(&board, &local))
+        })
+        .unwrap_or_default();
+    update_item_menu(&state, eligibility);
+}
+
+fn start_native_chrome_monitor(app: AppHandle) {
+    thread::spawn(move || loop {
+        thread::sleep(NATIVE_CHROME_POLL);
+        refresh_native_chrome(&app);
     });
+}
+
+fn native_command_for_menu_id(id: &str) -> Option<NativeCommand> {
+    match id {
+        "view.today" => Some(NativeCommand::ViewToday),
+        "view.changes" => Some(NativeCommand::ViewChanges),
+        "view.all-work" => Some(NativeCommand::ViewAllWork),
+        "view.shipped-log" => Some(NativeCommand::ViewShippedLog),
+        "view.watched" => Some(NativeCommand::ViewWatched),
+        "view.filter" => Some(NativeCommand::ViewFilter),
+        "view.commands" => Some(NativeCommand::ViewCommands),
+        "view.reload" => Some(NativeCommand::ViewReload),
+        "pane.toggle-sidebar" => Some(NativeCommand::ToggleSidebar),
+        "pane.toggle-inspector" => Some(NativeCommand::ToggleInspector),
+        "file.open-source" | "item.open" => Some(NativeCommand::ItemOpen),
+        "item.acknowledge" => Some(NativeCommand::ItemAcknowledge),
+        "item.snooze" => Some(NativeCommand::ItemSnooze),
+        "item.watch" => Some(NativeCommand::ItemWatch),
+        "edit.copy-context" | "item.copy-context" => Some(NativeCommand::ItemCopyContext),
+        "help.commands" | "help.keyboard" | "help.privacy" => Some(NativeCommand::HelpCommands),
+        _ => None,
+    }
+}
+
+fn show_launcher_dialog(app: &AppHandle, button_id: &str) {
+    show_launcher(app);
+    if let Some(window) = app.get_webview_window("main") {
+        let script = match button_id {
+            "show-diagnostics" => "document.getElementById('show-diagnostics')?.click();",
+            "show-commands" => "document.getElementById('show-commands')?.click();",
+            _ => return,
+        };
+        let _ = window.eval(script);
+    }
+}
+
+fn set_board_zoom(app: &AppHandle, requested: f64) {
+    let scale = requested.clamp(0.75, 2.0);
+    if let Some(board) = app.get_webview_window("board") {
+        if board.set_zoom(scale).is_ok() {
+            if let Ok(mut current) = app.state::<HostRuntime>().board_zoom.lock() {
+                *current = scale;
+            }
+        }
+    }
+}
+
+fn adjust_board_zoom(app: &AppHandle, delta: f64) {
+    let current = app
+        .state::<HostRuntime>()
+        .board_zoom
+        .lock()
+        .map(|value| *value)
+        .unwrap_or(1.0);
+    set_board_zoom(app, current + delta);
+}
+
+fn handle_native_menu(app: &AppHandle, id: &str) {
+    match id {
+        "app.settings" | "file.open-workspace" => show_launcher(app),
+        "help.diagnostics" => show_launcher_dialog(app, "show-diagnostics"),
+        "help.commands" | "help.keyboard" | "help.privacy"
+            if app.get_webview_window("board").is_none() =>
+        {
+            show_launcher_dialog(app, "show-commands")
+        }
+        "view.actual-size" => set_board_zoom(app, 1.0),
+        "view.zoom-in" => adjust_board_zoom(app, 0.1),
+        "view.zoom-out" => adjust_board_zoom(app, -0.1),
+        _ => {
+            if let Some(command) = native_command_for_menu_id(id) {
+                let _ = dispatch_native_command(app, command);
+            }
+        }
+    }
 }
 
 fn build_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
@@ -1099,7 +2018,7 @@ fn build_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .default_window_icon()
         .cloned()
         .ok_or("application icon is unavailable")?;
-    TrayIconBuilder::new()
+    TrayIconBuilder::with_id("status")
         .icon(icon)
         .tooltip("HFLedger")
         .menu(&menu)
@@ -1157,8 +2076,16 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(HostRuntime::default())
+        .on_menu_event(|app, event| handle_native_menu(app, event.id.as_ref()))
         .setup(|app| {
             let state = app.state::<HostRuntime>();
+            let (menu, native_menu) = build_native_menu(app.handle())?;
+            app.set_menu(menu)?;
+            *state
+                .native_menu
+                .lock()
+                .map_err(|_| "native menu lock was poisoned")? = Some(native_menu);
+            set_board_menu_available(&state, false);
             match initialize_app(app, &state) {
                 Ok(config) => {
                     if let Err(error) =
@@ -1169,7 +2096,7 @@ pub fn run() {
                         }
                     }
                     build_tray(app)?;
-                    start_attention_monitor(app.handle().clone());
+                    start_native_chrome_monitor(app.handle().clone());
                     if config.preferences.restore_board_window {
                         if let Some(workspace_id) = config.selected_workspace_id {
                             let _ = start_workspace_inner(app.handle(), &state, &workspace_id);
@@ -1190,6 +2117,7 @@ pub fn run() {
                     api.prevent_close();
                     let _ = window.hide();
                 } else if window.label() == "board" {
+                    set_board_menu_available(&window.app_handle().state::<HostRuntime>(), false);
                     show_launcher(window.app_handle());
                 }
             }
@@ -1237,8 +2165,45 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{decision_count, project_slug, validate_stored_config, Preferences, StoredConfig};
+    use super::{
+        active_context_id, attention_badge_count, decision_count, engine_serve_arguments,
+        event_is_relevant, menu_eligibility, merge_watch_signal, native_command_for_menu_id,
+        project_slug, validate_stored_config, watch_snapshot_is_safe, workspace_id,
+        workspace_watch_plan, NativeCommand, Preferences, StoredConfig, Workspace, WorkspaceKind,
+    };
+    use notify::{Event, EventKind};
     use serde_json::json;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn disposable_workspace(label: &str) -> (PathBuf, Workspace) {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "hfledger-native-core-{}-{label}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(root.join("reports")).expect("create disposable workspace");
+        for name in ["config.json", "board.json"] {
+            fs::write(root.join(name), b"{}\n").expect("write disposable JSON");
+        }
+        fs::write(root.join("ledger.jsonl"), b"").expect("write disposable ledger");
+        let canonical = root.canonicalize().expect("canonical disposable workspace");
+        let workspace = Workspace {
+            id: workspace_id(&canonical),
+            label: label.into(),
+            path: canonical.display().to_string(),
+            kind: WorkspaceKind::Existing,
+        };
+        (canonical, workspace)
+    }
+
+    fn remove_disposable(path: &Path) {
+        fs::remove_dir_all(path).expect("remove disposable workspace");
+    }
 
     #[test]
     fn project_names_become_bounded_folder_slugs() {
@@ -1251,6 +2216,222 @@ mod tests {
     fn decision_count_uses_the_compact_api_shape() {
         assert_eq!(decision_count(&json!({"decisions": [{}, {}]})), 2);
         assert_eq!(decision_count(&json!({"decisions": {}})), 0);
+    }
+
+    #[test]
+    fn orientation_v2_attention_owns_the_badge_and_invalid_zero_is_not_reassuring() {
+        assert_eq!(
+            attention_badge_count(&json!({
+                "decisions": [{}, {}],
+                "orientationV2": {
+                    "attention": {"total": 7},
+                    "coverage": {"screen": {"state": "complete"}}
+                }
+            })),
+            Some(7)
+        );
+        assert_eq!(
+            attention_badge_count(&json!({
+                "orientationV2": {
+                    "attention": {"total": 0},
+                    "coverage": {"screen": {"state": "complete"}}
+                }
+            })),
+            Some(0)
+        );
+        assert_eq!(
+            attention_badge_count(&json!({
+                "orientationV2": {
+                    "attention": {"total": 0},
+                    "coverage": {"screen": {"state": "invalid"}}
+                }
+            })),
+            None
+        );
+        assert_eq!(attention_badge_count(&json!({"decisions": [{}]})), Some(1));
+    }
+
+    #[test]
+    fn engine_launch_receives_only_trusted_state_identity_and_dynamic_port() {
+        let workspace = Workspace {
+            id: "workspace-fictional-1".into(),
+            label: "Fictional".into(),
+            path: "/tmp/fictional-ledger".into(),
+            kind: WorkspaceKind::Existing,
+        };
+        let arguments = engine_serve_arguments(&workspace, Path::new("/tmp/app/UIState"), 17173)
+            .into_iter()
+            .map(|value| value.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            arguments,
+            vec![
+                "--home",
+                "/tmp/fictional-ledger",
+                "serve",
+                "--local-state-root",
+                "/tmp/app/UIState",
+                "--local-state-workspace-id",
+                "workspace-fictional-1",
+                "--port",
+                "17173",
+            ]
+        );
+    }
+
+    #[test]
+    fn watcher_plan_is_workspace_scoped_allowlisted_and_switchable() {
+        let (first_root, first) = disposable_workspace("first");
+        let (second_root, second) = disposable_workspace("second");
+        let first_plan = workspace_watch_plan(&first).expect("first watch plan");
+        let second_plan = workspace_watch_plan(&second).expect("second watch plan");
+
+        assert!(first_plan
+            .allowed_files
+            .contains(&first_root.join("board.json")));
+        assert!(first_plan
+            .allowed_files
+            .contains(&first_root.join("ledger.jsonl")));
+        assert!(first_plan
+            .allowed_files
+            .contains(&first_root.join("reports/collector-latest.json")));
+        assert!(first_plan
+            .allowed_files
+            .is_disjoint(&second_plan.allowed_files));
+
+        let board_event = Event::new(EventKind::Any).add_path(first_root.join("board.json"));
+        let unrelated_event = Event::new(EventKind::Any).add_path(first_root.join("notes.txt"));
+        assert!(event_is_relevant(&board_event, &first_plan.allowed_files));
+        assert!(!event_is_relevant(
+            &unrelated_event,
+            &first_plan.allowed_files
+        ));
+        assert!(!event_is_relevant(&board_event, &second_plan.allowed_files));
+
+        remove_disposable(&first_root);
+        remove_disposable(&second_root);
+    }
+
+    #[test]
+    fn watcher_refuses_symlinked_authoritative_inputs() {
+        use std::os::unix::fs::symlink;
+
+        let (root, workspace) = disposable_workspace("symlink");
+        let plan = workspace_watch_plan(&workspace).expect("initial safe watch plan");
+        fs::rename(root.join("ledger.jsonl"), root.join("ledger.real"))
+            .expect("move disposable ledger");
+        symlink(root.join("ledger.real"), root.join("ledger.jsonl"))
+            .expect("create disposable symlink");
+        assert!(!watch_snapshot_is_safe(
+            &plan.required_files,
+            &plan.allowed_files
+        ));
+        assert!(workspace_watch_plan(&workspace).is_err());
+        remove_disposable(&root);
+    }
+
+    #[test]
+    fn debounce_batch_coalesces_bursts_without_hiding_watcher_errors() {
+        let mut saw_change = false;
+        let mut saw_error = false;
+        for signal in [true, true, false, true] {
+            merge_watch_signal(&mut saw_change, &mut saw_error, signal);
+        }
+        assert!(saw_change, "one refresh should follow the settled burst");
+        assert!(saw_error, "the batch must retain its observer-health error");
+    }
+
+    #[test]
+    fn stable_workspace_identity_is_path_bound_not_port_bound() {
+        let first = Path::new("/tmp/fictional-one");
+        let second = Path::new("/tmp/fictional-two");
+        assert_eq!(workspace_id(first), workspace_id(first));
+        assert_ne!(workspace_id(first), workspace_id(second));
+        assert!(workspace_id(first).starts_with("workspace-"));
+    }
+
+    #[test]
+    fn menu_routes_only_the_locked_one_way_command_allowlist() {
+        let cases = [
+            ("view.today", NativeCommand::ViewToday),
+            ("view.changes", NativeCommand::ViewChanges),
+            ("view.all-work", NativeCommand::ViewAllWork),
+            ("view.shipped-log", NativeCommand::ViewShippedLog),
+            ("view.watched", NativeCommand::ViewWatched),
+            ("view.filter", NativeCommand::ViewFilter),
+            ("view.commands", NativeCommand::ViewCommands),
+            ("view.reload", NativeCommand::ViewReload),
+            ("pane.toggle-sidebar", NativeCommand::ToggleSidebar),
+            ("pane.toggle-inspector", NativeCommand::ToggleInspector),
+            ("item.open", NativeCommand::ItemOpen),
+            ("item.acknowledge", NativeCommand::ItemAcknowledge),
+            ("item.snooze", NativeCommand::ItemSnooze),
+            ("item.watch", NativeCommand::ItemWatch),
+            ("item.copy-context", NativeCommand::ItemCopyContext),
+            ("help.commands", NativeCommand::HelpCommands),
+        ];
+        for (id, expected) in cases {
+            let command = native_command_for_menu_id(id).expect("allowlisted command");
+            assert_eq!(command, expected);
+            assert_eq!(command.id(), expected.id());
+            assert!(command.event_script().contains(expected.id()));
+            assert!(command.event_script().contains("hfledger:native-command"));
+        }
+        assert_eq!(native_command_for_menu_id("item.resolve"), None);
+        assert_eq!(native_command_for_menu_id("shell.run"), None);
+        assert_eq!(native_command_for_menu_id("file.open-path"), None);
+    }
+
+    #[test]
+    fn item_menu_state_comes_from_projection_and_private_navigation_only() {
+        let board = json!({
+            "orientationV2": {
+                "items": [{
+                    "id": "item-fictional",
+                    "attentionKey": "attention-fictional",
+                    "nextAction": {"kind": "open-source"}
+                }]
+            }
+        });
+        let local = json!({
+            "state": {
+                "navigation": {"selectedItemId": "item-fictional"},
+                "watched": [{"itemId": "item-fictional"}]
+            }
+        });
+        assert_eq!(
+            menu_eligibility(&board, &local),
+            super::MenuEligibility {
+                selected: true,
+                openable: true,
+                attention: true,
+                watched: true,
+            }
+        );
+        assert_eq!(
+            menu_eligibility(&board, &json!({"state": {}})),
+            super::MenuEligibility::default()
+        );
+    }
+
+    #[test]
+    fn context_query_rejects_path_and_header_smuggling() {
+        assert_eq!(
+            active_context_id(&json!({"activeContext": "main"})),
+            Some("main")
+        );
+        assert_eq!(
+            active_context_id(&json!({"activeContext": "project-one"})),
+            Some("project-one")
+        );
+        assert_eq!(
+            active_context_id(&json!({"activeContext": "../other"})),
+            None
+        );
+        assert_eq!(
+            active_context_id(&json!({"activeContext": "main\r\nHost: bad"})),
+            None
+        );
     }
 
     #[test]
@@ -1274,5 +2455,33 @@ mod tests {
             }
         }))
         .is_err());
+        assert!(serde_json::from_value::<StoredConfig>(json!({
+            "version": 1,
+            "workspaces": [{
+                "id": "bad\nid",
+                "label": "Fictional",
+                "path": "/tmp/fictional",
+                "kind": "existing"
+            }],
+            "selectedWorkspaceId": null,
+            "preferences": {
+                "notifications": false,
+                "launchAtLogin": false,
+                "restoreBoardWindow": false
+            }
+        }))
+        .is_ok());
+        let invalid_id = StoredConfig {
+            version: 1,
+            workspaces: vec![Workspace {
+                id: "bad\nid".into(),
+                label: "Fictional".into(),
+                path: "/tmp/fictional".into(),
+                kind: WorkspaceKind::Existing,
+            }],
+            selected_workspace_id: None,
+            preferences: Preferences::default(),
+        };
+        assert!(validate_stored_config(&invalid_id).is_err());
     }
 }
