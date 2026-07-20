@@ -3,6 +3,7 @@ const elements = Object.fromEntries([
   "host-pill", "workspace-list", "active-workspace", "connection", "version",
   "error-banner", "error-message", "success-banner", "restart", "stop", "backup",
   "reveal-workspace", "pref-notifications", "pref-login", "pref-restore",
+  "preferences-panel", "pref-text-size", "text-size-status",
   "diagnostics-dialog", "diagnostics-output",
   "commands-dialog", "command-search", "command-empty", "command-grid",
 ].map((id) => [id, document.getElementById(id)]));
@@ -12,18 +13,18 @@ let busy = false;
 
 function setBusy(value) {
   busy = value;
-  document.querySelectorAll("button").forEach((button) => {
-    if (value) button.dataset.wasDisabled = String(button.disabled);
-    if (value) button.disabled = true;
-    else if (button.dataset.wasDisabled !== undefined) {
-      button.disabled = button.dataset.wasDisabled === "true";
-      delete button.dataset.wasDisabled;
+  document.querySelectorAll("button, input, select").forEach((control) => {
+    if (value) control.dataset.wasDisabled = String(control.disabled);
+    if (value) control.disabled = true;
+    else if (control.dataset.wasDisabled !== undefined) {
+      control.disabled = control.dataset.wasDisabled === "true";
+      delete control.dataset.wasDisabled;
     }
   });
 }
 
 function showError(error) {
-  const message = String(error).replace(/^Error:\s*/, "");
+  const message = String(error).replace(/^Error:\s*/, "").slice(0, 600);
   elements["error-message"].textContent = message;
   document.getElementById("repair-settings").hidden = !/app settings/i.test(message);
   elements["error-banner"].hidden = false;
@@ -153,6 +154,7 @@ function renderPreferences() {
   elements["pref-notifications"].checked = snapshot.preferences.notifications;
   elements["pref-login"].checked = snapshot.preferences.launchAtLogin;
   elements["pref-restore"].checked = snapshot.preferences.restoreBoardWindow;
+  elements["pref-text-size"].value = snapshot.preferences.textSize;
 }
 
 function render() {
@@ -173,8 +175,36 @@ async function savePreferences() {
       notifications: elements["pref-notifications"].checked,
       launchAtLogin: elements["pref-login"].checked,
       restoreBoardWindow: elements["pref-restore"].checked,
+      textSize: elements["pref-text-size"].value,
     },
   }), "Preferences saved.");
+}
+
+async function saveTextSize() {
+  if (busy) return;
+  const prior = snapshot.preferences.textSize;
+  const requested = elements["pref-text-size"].value;
+  setBusy(true);
+  elements["error-banner"].hidden = true;
+  try {
+    const preferences = await invoke("update_preferences", {
+      preferences: {
+        notifications: elements["pref-notifications"].checked,
+        launchAtLogin: elements["pref-login"].checked,
+        restoreBoardWindow: elements["pref-restore"].checked,
+        textSize: requested,
+      },
+    });
+    snapshot.preferences = preferences;
+    await refresh();
+  } catch (error) {
+    snapshot.preferences.textSize = prior;
+    elements["pref-text-size"].value = prior;
+    showError(error);
+  } finally {
+    setBusy(false);
+    renderHost(snapshot?.host);
+  }
 }
 
 document.getElementById("dismiss-error").addEventListener("click", () => { elements["error-banner"].hidden = true; });
@@ -208,6 +238,27 @@ elements["reveal-workspace"].addEventListener("click", () => action(() => invoke
 document.getElementById("reveal-backups").addEventListener("click", () => action(() => invoke("reveal_backups")));
 document.getElementById("reveal-logs").addEventListener("click", () => action(() => invoke("reveal_logs")));
 ["pref-notifications", "pref-login", "pref-restore"].forEach((id) => elements[id].addEventListener("change", savePreferences));
+elements["pref-text-size"].addEventListener("change", saveTextSize);
+
+window.addEventListener("hfledger:text-size-changed", (event) => {
+  const detail = event.detail || {};
+  if (detail.value) {
+    elements["pref-text-size"].value = detail.value;
+    if (snapshot?.preferences) snapshot.preferences.textSize = detail.value;
+  }
+  if (detail.announce) {
+    elements["text-size-status"].textContent = `Text size ${detail.label}, ${detail.percent} percent.`;
+  }
+});
+
+window.addEventListener("hfledger:show-settings", () => {
+  elements["preferences-panel"].scrollIntoView({ block: "center" });
+  elements["pref-text-size"].focus({ preventScroll: true });
+});
+
+window.addEventListener("hfledger:settings-error", (event) => {
+  showError(event.detail?.message || "Settings could not be saved. The previous values were restored.");
+});
 
 document.getElementById("show-diagnostics").addEventListener("click", async () => {
   try {

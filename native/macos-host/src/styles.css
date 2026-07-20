@@ -16,7 +16,8 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
+.visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; margin: -1px !important; padding: 0 !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 
 body {
   min-width: 760px;
@@ -68,7 +69,7 @@ p { color: var(--muted); line-height: 1.45; }
 .workspace-copy h3 { margin: 0 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-meta { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
 .workspace-actions { display: grid; justify-items: stretch; gap: 5px; min-width: 82px; }
-.workspace-actions .text-button { font-size: 9px; }
+.workspace-actions .text-button { font-size: 11px; }
 .kind { padding: 3px 6px; border-radius: 5px; background: rgba(248, 245, 237, .055); text-transform: capitalize; }
 .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -83,6 +84,8 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(168, 156, 
 .side-column { display: grid; align-content: start; gap: 12px; }
 .panel { padding: 17px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
 .panel h2 { margin-bottom: 14px; font-size: 16px; }
+.preferences-panel:focus { outline: none; }
+.preferences-panel:focus-within { border-color: rgba(168, 156, 255, .42); box-shadow: 0 0 0 3px rgba(168, 156, 255, .1); }
 .status-list { margin: 0 0 13px; }
 .status-list div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid rgba(248, 245, 237, .06); font-size: 11px; }
 .status-list dt { color: var(--muted); }
@@ -92,11 +95,25 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(168, 156, 
 .toggle-row span { margin: 0; }
 .toggle-row b, .toggle-row small { display: block; }
 .toggle-row b { margin-bottom: 2px; font-size: 12px; }
-.toggle-row small { color: var(--muted); font-size: 10px; }
+.toggle-row small { color: var(--muted); font-size: 11px; line-height: 1.35; }
 input[role="switch"] { appearance: none; width: 34px; height: 20px; flex: 0 0 auto; margin: 0; padding: 2px; border-radius: 999px; background: #4b4d60; cursor: pointer; transition: background .18s; }
 input[role="switch"]::after { content: ""; display: block; width: 16px; height: 16px; border-radius: 50%; background: white; box-shadow: 0 1px 4px rgba(0,0,0,.35); transition: transform .18s; }
 input[role="switch"]:checked { background: var(--accent); }
 input[role="switch"]:checked::after { transform: translateX(14px); }
+
+.text-size-setting { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid rgba(248, 245, 237, .06); }
+.text-size-setting label { min-width: 0; }
+.text-size-setting label b,
+.text-size-setting label small { display: block; }
+.text-size-setting label b { margin-bottom: 2px; font-size: 12px; }
+.text-size-setting label small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+#pref-text-size { min-width: 160px; min-height: 36px; padding: 5px 28px 5px 9px; color: var(--ink); border: 1px solid rgba(248, 245, 237, .16); border-radius: 8px; background: #292a3d; }
+#pref-text-size:focus-visible { outline: 3px solid rgba(168, 156, 255, .35); outline-offset: 2px; border-color: var(--accent); }
+.text-size-preview { margin: 0 0 4px; padding: 11px 12px; border: 1px solid rgba(248, 245, 237, .08); border-radius: 9px; background: rgba(17, 18, 29, .48); }
+.text-size-preview p { margin: 0; }
+.preview-normal { color: var(--ink); font-size: 12px; line-height: 1.45; }
+.preview-secondary { margin-top: 4px !important; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.preview-provenance { margin-top: 7px !important; color: var(--accent-strong); font-size: 10px; font-weight: 750; letter-spacing: .025em; }
 
 .button-stack { display: grid; gap: 7px; }
 .button { min-height: 36px; padding: 0 13px; border: 1px solid transparent; border-radius: 9px; color: var(--ink); cursor: pointer; font-size: 12px; font-weight: 700; transition: background .15s, border-color .15s, opacity .15s; }
@@ -113,7 +130,7 @@ input[role="switch"]:checked::after { transform: translateX(14px); }
 .text-button:hover, .icon-button:hover { color: var(--ink); }
 .text-button.danger-text { color: var(--danger); }
 
-footer { margin-top: 22px; padding-top: 15px; border-top: 1px solid rgba(248, 245, 237, .06); color: rgba(248, 245, 237, .36); font-size: 10px; }
+footer { margin-top: 22px; padding-top: 15px; border-top: 1px solid rgba(248, 245, 237, .06); color: rgba(248, 245, 237, .46); font-size: 11px; }
 
 dialog { width: min(650px, calc(100vw - 60px)); padding: 0; color: var(--ink); border: 1px solid rgba(248, 245, 237, .16); border-radius: 16px; background: #202133; box-shadow: 0 35px 90px rgba(0, 0, 0, .55); }
 dialog::backdrop { background: rgba(7, 8, 14, .65); backdrop-filter: blur(7px); }
@@ -128,7 +145,7 @@ dialog::backdrop { background: rgba(7, 8, 14, .65); backdrop-filter: blur(7px); 
 .workflow-rhythm { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 17px; padding: 11px 14px; overflow-x: auto; border: 1px solid rgba(168, 156, 255, .16); border-radius: 11px; background: rgba(168, 156, 255, .055); }
 .workflow-rhythm span { display: grid; justify-items: center; gap: 2px; min-width: 59px; }
 .workflow-rhythm code { color: var(--accent-strong); font-size: 11px; font-weight: 800; }
-.workflow-rhythm small { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .07em; }
+.workflow-rhythm small { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
 .workflow-rhythm b { color: rgba(248, 245, 237, .25); font-size: 11px; }
 .command-search { display: block; width: 100%; margin-bottom: 14px; }
 .command-search > span { margin-bottom: 6px; }
@@ -143,11 +160,11 @@ dialog::backdrop { background: rgba(7, 8, 14, .65); backdrop-filter: blur(7px); 
 .command-card h3 { margin-bottom: 5px; font-size: 13px; }
 .command-card p { min-height: 49px; margin-bottom: 12px; font-size: 11px; }
 .command-card dl { margin: 0; }
-.command-card dl div { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 8px; padding: 6px 0; border-top: 1px solid rgba(248, 245, 237, .06); font-size: 10px; line-height: 1.4; }
+.command-card dl div { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 8px; padding: 6px 0; border-top: 1px solid rgba(248, 245, 237, .06); font-size: 11px; line-height: 1.4; }
 .command-card dt { color: rgba(248, 245, 237, .45); font-weight: 750; }
 .command-card dd { margin: 0; color: rgba(248, 245, 237, .74); }
 .command-card dd code { color: var(--accent-strong); font-size: .95em; }
-.command-badge { flex: 0 0 auto; padding: 4px 7px; border: 1px solid; border-radius: 999px; font-size: 8px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.command-badge { flex: 0 0 auto; padding: 4px 7px; border: 1px solid; border-radius: 999px; font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .command-badge.safe, .command-badge.read-only { color: var(--good); border-color: rgba(126, 217, 180, .2); background: rgba(126, 217, 180, .06); }
 .command-badge.refresh { color: #9fe3c6; border-color: rgba(126, 217, 180, .22); background: rgba(126, 217, 180, .08); }
 .command-badge.plan { color: #d4ceff; border-color: rgba(168, 156, 255, .22); background: rgba(168, 156, 255, .08); }
@@ -155,7 +172,7 @@ dialog::backdrop { background: rgba(7, 8, 14, .65); backdrop-filter: blur(7px); 
 .command-badge.attended { color: #ffbfba; border-color: rgba(255, 170, 166, .22); background: rgba(255, 170, 166, .07); }
 .command-empty { padding: 28px; border: 1px dashed var(--line); border-radius: 12px; text-align: center; font-size: 12px; }
 .commands-dialog .dialog-actions { justify-content: space-between; }
-.commands-footnote { color: rgba(248, 245, 237, .38); font-size: 9px; }
+.commands-footnote { color: rgba(248, 245, 237, .48); font-size: 10px; }
 
 @media (max-width: 850px) {
   .content-grid { grid-template-columns: 1fr; }

@@ -63,7 +63,6 @@ def main() -> None:
     app = args.app.resolve()
     if not app.is_dir():
         raise SystemExit(f"app bundle not found: {app}")
-
     info_path = app / "Contents" / "Info.plist"
     with info_path.open("rb") as handle:
         info = plistlib.load(handle)

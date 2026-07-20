@@ -73,9 +73,26 @@
             </div>
           </section>
 
-          <section class="panel" aria-labelledby="prefs-title">
+          <section id="preferences-panel" class="panel preferences-panel" aria-labelledby="prefs-title" tabindex="-1">
             <p class="eyebrow">Preferences</p>
             <h2 id="prefs-title">Mac behavior</h2>
+            <div class="text-size-setting">
+              <label for="pref-text-size">
+                <b>Text size</b>
+                <small id="text-size-description">Applies immediately throughout HFLedger</small>
+              </label>
+              <select id="pref-text-size" aria-describedby="text-size-description text-size-preview">
+                <option value="compact">Compact — 100%</option>
+                <option value="comfortable">Comfortable — 115%</option>
+                <option value="large">Large — 130%</option>
+                <option value="extraLarge">Extra Large — 150%</option>
+              </select>
+            </div>
+            <div id="text-size-preview" class="text-size-preview" aria-label="Text size preview">
+              <p class="preview-normal">Choose the release window after reviewing the evidence.</p>
+              <p class="preview-secondary">Secondary detail stays readable without competing with the decision.</p>
+              <p class="preview-provenance"><time datetime="2026-07-19T18:42:00Z">Observed 6:42 PM</time> · Verified provenance</p>
+            </div>
             <label class="toggle-row">
               <span><b>Notifications</b><small>Generic alerts for new owner asks</small></span>
               <input id="pref-notifications" type="checkbox" role="switch">
@@ -88,6 +105,7 @@
               <span><b>Reopen last board</b><small>Restore the selected workspace at launch</small></span>
               <input id="pref-restore" type="checkbox" role="switch">
             </label>
+            <p id="text-size-status" class="visually-hidden" role="status" aria-live="polite"></p>
           </section>
 
           <section class="panel" aria-labelledby="data-title">

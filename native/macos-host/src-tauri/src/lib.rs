@@ -20,6 +20,7 @@ use tauri::menu::{
     AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID,
 };
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::webview::PageLoadEvent;
 use tauri::{AppHandle, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
 use tauri_plugin_notification::NotificationExt;
@@ -27,7 +28,8 @@ use tauri_plugin_notification::NotificationExt;
 const HOST: &str = "127.0.0.1";
 const PORT_START: u16 = 17171;
 const PORT_END: u16 = 17199;
-const CONFIG_VERSION: u32 = 1;
+const CONFIG_VERSION: u32 = 2;
+const PREVIOUS_CONFIG_VERSION: u32 = 1;
 const LOG_LIMIT_BYTES: u64 = 1_048_576;
 const CORE_FILES: [&str; 3] = ["config.json", "board.json", "ledger.jsonl"];
 const DATA_DIRECTORIES: [&str; 3] = ["locks", "backups", "reports"];
@@ -69,7 +71,6 @@ struct HostRuntime {
     workspace_watcher: Mutex<Option<WorkspaceWatch>>,
     watch_generation: AtomicU64,
     native_menu: Mutex<Option<NativeMenuState>>,
-    board_zoom: Mutex<f64>,
 }
 
 impl Default for HostRuntime {
@@ -86,7 +87,6 @@ impl Default for HostRuntime {
             workspace_watcher: Mutex::new(None),
             watch_generation: AtomicU64::new(0),
             native_menu: Mutex::new(None),
-            board_zoom: Mutex::new(1.0),
         }
     }
 }
@@ -103,6 +103,8 @@ struct NativeMenuState {
     attention_commands: Vec<MenuItem<tauri::Wry>>,
     selection_commands: Vec<MenuItem<tauri::Wry>>,
     watch_commands: Vec<MenuItem<tauri::Wry>>,
+    decrease_text_size: MenuItem<tauri::Wry>,
+    increase_text_size: MenuItem<tauri::Wry>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -186,21 +188,152 @@ enum WorkspaceKind {
     Demo,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum TextSize {
+    Compact,
+    #[default]
+    Comfortable,
+    Large,
+    ExtraLarge,
+}
+
+impl TextSize {
+    const ALL: [Self; 4] = [
+        Self::Compact,
+        Self::Comfortable,
+        Self::Large,
+        Self::ExtraLarge,
+    ];
+
+    fn scale(self) -> f64 {
+        match self {
+            Self::Compact => 1.0,
+            Self::Comfortable => 1.15,
+            Self::Large => 1.3,
+            Self::ExtraLarge => 1.5,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Compact => "Compact",
+            Self::Comfortable => "Comfortable",
+            Self::Large => "Large",
+            Self::ExtraLarge => "Extra Large",
+        }
+    }
+
+    fn percent(self) -> u16 {
+        match self {
+            Self::Compact => 100,
+            Self::Comfortable => 115,
+            Self::Large => 130,
+            Self::ExtraLarge => 150,
+        }
+    }
+
+    fn index(self) -> usize {
+        Self::ALL
+            .iter()
+            .position(|candidate| *candidate == self)
+            .expect("closed text size is always in the preset list")
+    }
+
+    fn previous(self) -> Self {
+        Self::ALL[self.index().saturating_sub(1)]
+    }
+
+    fn next(self) -> Self {
+        Self::ALL[(self.index() + 1).min(Self::ALL.len() - 1)]
+    }
+
+    fn can_decrease(self) -> bool {
+        self != Self::Compact
+    }
+
+    fn can_increase(self) -> bool {
+        self != Self::ExtraLarge
+    }
+
+    fn page_script(self, announce: bool) -> &'static str {
+        match (self, announce) {
+            (Self::Compact, false) => "document.documentElement.dataset.textSize='compact';window.dispatchEvent(new CustomEvent('hfledger:text-size-changed',{detail:{value:'compact',label:'Compact',percent:100,announce:false}}));",
+            (Self::Compact, true) => "document.documentElement.dataset.textSize='compact';window.dispatchEvent(new CustomEvent('hfledger:text-size-changed',{detail:{value:'compact',label:'Compact',percent:100,announce:true}}));",
+            (Self::Comfortable, false) => "document.documentElement.dataset.textSize='comfortable';window.dispatchEvent(new CustomEvent('hfledger:text-size-changed',{detail:{value:'comfortable',label:'Comfortable',percent:115,announce:false}}));",
+            (Self::Comfortable, true) => "document.documentElement.dataset.textSize='comfortable';window.dispatchEvent(new CustomEvent('hfledger:text-size-changed',{detail:{value:'comfortable',label:'Comfortable',percent:115,announce:true}}));",
+            (Self::Large, false) => "document.documentElement.dataset.textSize='large';window.dispatchEvent(new CustomEvent('hfledger:text-size-changed',{detail:{value:'large',label:'Large',percent:130,announce:false}}));",
+            (Self::Large, true) => "document.documentElement.dataset.textSize='large';window.dispatchEvent(new CustomEvent('hfledger:text-size-changed',{detail:{value:'large',label:'Large',percent:130,announce:true}}));",
+            (Self::ExtraLarge, false) => "document.documentElement.dataset.textSize='extraLarge';window.dispatchEvent(new CustomEvent('hfledger:text-size-changed',{detail:{value:'extraLarge',label:'Extra Large',percent:150,announce:false}}));",
+            (Self::ExtraLarge, true) => "document.documentElement.dataset.textSize='extraLarge';window.dispatchEvent(new CustomEvent('hfledger:text-size-changed',{detail:{value:'extraLarge',label:'Extra Large',percent:150,announce:true}}));",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TextSizeAction {
+    Decrease,
+    Increase,
+    Reset,
+}
+
+fn text_size_after(current: TextSize, action: TextSizeAction) -> TextSize {
+    match action {
+        TextSizeAction::Decrease => current.previous(),
+        TextSizeAction::Increase => current.next(),
+        TextSizeAction::Reset => TextSize::default(),
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Preferences {
     notifications: bool,
     launch_at_login: bool,
     restore_board_window: bool,
+    text_size: TextSize,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct StoredConfig {
     version: u32,
     workspaces: Vec<Workspace>,
     selected_workspace_id: Option<String>,
     preferences: Preferences,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PreferencesV1 {
+    notifications: bool,
+    launch_at_login: bool,
+    restore_board_window: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StoredConfigV1 {
+    version: u32,
+    workspaces: Vec<Workspace>,
+    selected_workspace_id: Option<String>,
+    preferences: PreferencesV1,
+}
+
+impl From<StoredConfigV1> for StoredConfig {
+    fn from(previous: StoredConfigV1) -> Self {
+        Self {
+            version: CONFIG_VERSION,
+            workspaces: previous.workspaces,
+            selected_workspace_id: previous.selected_workspace_id,
+            preferences: Preferences {
+                notifications: previous.preferences.notifications,
+                launch_at_login: previous.preferences.launch_at_login,
+                restore_board_window: previous.preferences.restore_board_window,
+                text_size: TextSize::default(),
+            },
+        }
+    }
 }
 
 impl Default for StoredConfig {
@@ -381,27 +514,41 @@ fn validate_stored_config(config: &StoredConfig) -> Result<(), String> {
     Ok(())
 }
 
-fn read_config(state: &HostRuntime) -> Result<StoredConfig, String> {
-    let app_paths = paths(state)?;
-    let _guard = state
-        .config_guard
-        .lock()
-        .map_err(|_| "settings lock was poisoned".to_string())?;
-    let bytes = fs::read(&app_paths.config)
-        .map_err(|error| format!("could not read app settings: {error}"))?;
-    let config: StoredConfig = serde_json::from_slice(&bytes)
+fn decode_stored_config(bytes: &[u8]) -> Result<(StoredConfig, bool), String> {
+    let value: Value = serde_json::from_slice(bytes)
         .map_err(|error| format!("app settings are invalid: {error}"))?;
+    let version = value
+        .get("version")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .ok_or_else(|| {
+            "app settings are invalid: version must be an unsigned integer".to_string()
+        })?;
+    let (config, migrated) = match version {
+        PREVIOUS_CONFIG_VERSION => {
+            let previous: StoredConfigV1 = serde_json::from_value(value)
+                .map_err(|error| format!("app settings are invalid: {error}"))?;
+            if previous.version != PREVIOUS_CONFIG_VERSION {
+                return Err("app settings are invalid: version changed during migration".into());
+            }
+            (StoredConfig::from(previous), true)
+        }
+        CONFIG_VERSION => {
+            let config: StoredConfig = serde_json::from_value(value)
+                .map_err(|error| format!("app settings are invalid: {error}"))?;
+            (config, false)
+        }
+        unsupported => {
+            return Err(format!(
+                "unsupported app settings version {unsupported}; this copy supports version {CONFIG_VERSION}"
+            ))
+        }
+    };
     validate_stored_config(&config)?;
-    Ok(config)
+    Ok((config, migrated))
 }
 
-fn write_config(state: &HostRuntime, config: &StoredConfig) -> Result<(), String> {
-    validate_stored_config(config)?;
-    let app_paths = paths(state)?;
-    let _guard = state
-        .config_guard
-        .lock()
-        .map_err(|_| "settings lock was poisoned".to_string())?;
+fn write_config_unlocked(app_paths: &AppPaths, config: &StoredConfig) -> Result<(), String> {
     let temporary = app_paths.config.with_extension("json.tmp");
     let bytes = serde_json::to_vec_pretty(config)
         .map_err(|error| format!("could not encode app settings: {error}"))?;
@@ -426,6 +573,31 @@ fn write_config(state: &HostRuntime, config: &StoredConfig) -> Result<(), String
             .map_err(|error| format!("could not finish saving app settings: {error}"))?;
     }
     Ok(())
+}
+
+fn read_config(state: &HostRuntime) -> Result<StoredConfig, String> {
+    let app_paths = paths(state)?;
+    let _guard = state
+        .config_guard
+        .lock()
+        .map_err(|_| "settings lock was poisoned".to_string())?;
+    let bytes = fs::read(&app_paths.config)
+        .map_err(|error| format!("could not read app settings: {error}"))?;
+    let (config, migrated) = decode_stored_config(&bytes)?;
+    if migrated {
+        write_config_unlocked(&app_paths, &config)?;
+    }
+    Ok(config)
+}
+
+fn write_config(state: &HostRuntime, config: &StoredConfig) -> Result<(), String> {
+    validate_stored_config(config)?;
+    let app_paths = paths(state)?;
+    let _guard = state
+        .config_guard
+        .lock()
+        .map_err(|_| "settings lock was poisoned".to_string())?;
+    write_config_unlocked(&app_paths, config)
 }
 
 fn initialize_app(app: &tauri::App, state: &HostRuntime) -> Result<StoredConfig, String> {
@@ -975,6 +1147,14 @@ fn show_launcher(app: &AppHandle) {
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
+    let _ = apply_stored_text_size(app, false);
+}
+
+fn show_launcher_settings(app: &AppHandle) {
+    show_launcher(app);
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.eval("window.dispatchEvent(new CustomEvent('hfledger:show-settings'));");
+    }
 }
 
 fn show_board_window(app: &AppHandle, workspace: &Workspace, port: u16) -> Result<(), String> {
@@ -1002,6 +1182,7 @@ fn show_board_window(app: &AppHandle, workspace: &Workspace, port: u16) -> Resul
     if let Some(launcher) = app.get_webview_window("main") {
         let _ = launcher.hide();
     }
+    apply_stored_text_size(app, false)?;
     set_board_menu_available(&app.state::<HostRuntime>(), true);
     Ok(())
 }
@@ -1096,6 +1277,62 @@ fn sync_autostart(app: &AppHandle, enabled: bool) -> Result<(), String> {
         manager.disable()
     }
     .map_err(|error| format!("could not update Launch at Login: {error}"))
+}
+
+fn apply_text_size(app: &AppHandle, text_size: TextSize, announce: bool) -> Result<(), String> {
+    for label in ["main", "board"] {
+        let Some(window) = app.get_webview_window(label) else {
+            continue;
+        };
+        window.set_zoom(text_size.scale()).map_err(|error| {
+            format!(
+                "could not apply {} text at {}% to the {label} window: {error}",
+                text_size.label(),
+                text_size.percent()
+            )
+        })?;
+        let _ = window.eval(text_size.page_script(announce));
+    }
+    update_text_size_menu_state(&app.state::<HostRuntime>(), text_size);
+    Ok(())
+}
+
+fn apply_stored_text_size(app: &AppHandle, announce: bool) -> Result<(), String> {
+    let text_size = read_config(&app.state::<HostRuntime>())?
+        .preferences
+        .text_size;
+    apply_text_size(app, text_size, announce)
+}
+
+fn persist_text_size(app: &AppHandle, action: TextSizeAction) -> Result<TextSize, String> {
+    let state = app.state::<HostRuntime>();
+    let mut config = read_config(&state)?;
+    let prior = config.preferences.text_size;
+    let next = text_size_after(prior, action);
+    if next != prior {
+        config.preferences.text_size = next;
+        write_config(&state, &config)?;
+    }
+    if let Err(error) = apply_text_size(app, next, true) {
+        if next != prior {
+            config.preferences.text_size = prior;
+            let _ = write_config(&state, &config);
+        }
+        let _ = apply_text_size(app, prior, false);
+        return Err(format!(
+            "Text size could not be applied. The previous size was restored. {error}"
+        ));
+    }
+    Ok(next)
+}
+
+fn report_text_size_error(app: &AppHandle) {
+    show_launcher_settings(app);
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.eval(
+            "window.dispatchEvent(new CustomEvent('hfledger:settings-error',{detail:{message:'Text size could not be saved. The previous size was restored.'}}));",
+        );
+    }
 }
 
 #[tauri::command]
@@ -1347,13 +1584,34 @@ fn update_preferences(
     preferences: Preferences,
     state: State<'_, HostRuntime>,
 ) -> Result<Preferences, String> {
-    sync_autostart(&app, preferences.launch_at_login)?;
-    if preferences.notifications {
+    let mut config = read_config(&state)?;
+    let prior = config.preferences.clone();
+    if preferences.launch_at_login != prior.launch_at_login {
+        sync_autostart(&app, preferences.launch_at_login)?;
+    }
+    config.preferences = preferences.clone();
+    if let Err(error) = write_config(&state, &config) {
+        if preferences.launch_at_login != prior.launch_at_login {
+            let _ = sync_autostart(&app, prior.launch_at_login);
+        }
+        return Err(format!(
+            "Preferences could not be saved. The previous values were restored. {error}"
+        ));
+    }
+    if let Err(error) = apply_text_size(&app, preferences.text_size, true) {
+        config.preferences = prior.clone();
+        let _ = write_config(&state, &config);
+        if preferences.launch_at_login != prior.launch_at_login {
+            let _ = sync_autostart(&app, prior.launch_at_login);
+        }
+        let _ = apply_text_size(&app, prior.text_size, false);
+        return Err(format!(
+            "Preferences could not be applied. The previous values were restored. {error}"
+        ));
+    }
+    if preferences.notifications && !prior.notifications {
         let _ = app.notification().request_permission();
     }
-    let mut config = read_config(&state)?;
-    config.preferences = preferences.clone();
-    write_config(&state, &config)?;
     Ok(preferences)
 }
 
@@ -1570,15 +1828,27 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
         false,
         None,
     )?;
-    let actual_size = custom_menu_item(
+    let reset_text_size = custom_menu_item(
         app,
-        "view.actual-size",
-        "Actual Size",
-        false,
+        "view.reset-text-size",
+        "Reset Text Size",
+        true,
         Some("CmdOrCtrl+0"),
     )?;
-    let zoom_in = custom_menu_item(app, "view.zoom-in", "Zoom In", false, Some("CmdOrCtrl++"))?;
-    let zoom_out = custom_menu_item(app, "view.zoom-out", "Zoom Out", false, Some("CmdOrCtrl+-"))?;
+    let increase_text_size = custom_menu_item(
+        app,
+        "view.increase-text-size",
+        "Increase Text Size",
+        true,
+        Some("CmdOrCtrl++"),
+    )?;
+    let decrease_text_size = custom_menu_item(
+        app,
+        "view.decrease-text-size",
+        "Decrease Text Size",
+        true,
+        Some("CmdOrCtrl+-"),
+    )?;
     let view_menu = Submenu::with_items(
         app,
         "View",
@@ -1596,9 +1866,9 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
             &inspector,
             &group,
             &PredefinedMenuItem::separator(app)?,
-            &actual_size,
-            &zoom_in,
-            &zoom_out,
+            &increase_text_size,
+            &decrease_text_size,
+            &reset_text_size,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::fullscreen(app, None)?,
         ],
@@ -1721,9 +1991,6 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
         commands.clone(),
         sidebar.clone(),
         inspector.clone(),
-        actual_size,
-        zoom_in,
-        zoom_out,
     ];
     Ok((
         menu,
@@ -1733,6 +2000,8 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
             attention_commands: vec![acknowledge, snooze],
             selection_commands: vec![edit_copy_context, item_copy_context, watch.clone()],
             watch_commands: vec![watch],
+            decrease_text_size,
+            increase_text_size,
         },
     ))
 }
@@ -1759,6 +2028,21 @@ fn set_board_menu_available(state: &HostRuntime, available: bool) {
             let _ = item.set_text("Watch");
         }
     }
+}
+
+fn update_text_size_menu_state(state: &HostRuntime, text_size: TextSize) {
+    let Ok(menu) = state.native_menu.lock() else {
+        return;
+    };
+    let Some(menu) = menu.as_ref() else {
+        return;
+    };
+    let _ = menu
+        .decrease_text_size
+        .set_enabled(text_size.can_decrease());
+    let _ = menu
+        .increase_text_size
+        .set_enabled(text_size.can_increase());
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -1990,39 +2274,31 @@ fn show_launcher_dialog(app: &AppHandle, button_id: &str) {
     }
 }
 
-fn set_board_zoom(app: &AppHandle, requested: f64) {
-    let scale = requested.clamp(0.75, 2.0);
-    if let Some(board) = app.get_webview_window("board") {
-        if board.set_zoom(scale).is_ok() {
-            if let Ok(mut current) = app.state::<HostRuntime>().board_zoom.lock() {
-                *current = scale;
-            }
-        }
-    }
-}
-
-fn adjust_board_zoom(app: &AppHandle, delta: f64) {
-    let current = app
-        .state::<HostRuntime>()
-        .board_zoom
-        .lock()
-        .map(|value| *value)
-        .unwrap_or(1.0);
-    set_board_zoom(app, current + delta);
-}
-
 fn handle_native_menu(app: &AppHandle, id: &str) {
     match id {
-        "app.settings" | "file.open-workspace" => show_launcher(app),
+        "app.settings" => show_launcher_settings(app),
+        "file.open-workspace" => show_launcher(app),
         "help.diagnostics" => show_launcher_dialog(app, "show-diagnostics"),
         "help.commands" | "help.keyboard" | "help.privacy"
             if app.get_webview_window("board").is_none() =>
         {
             show_launcher_dialog(app, "show-commands")
         }
-        "view.actual-size" => set_board_zoom(app, 1.0),
-        "view.zoom-in" => adjust_board_zoom(app, 0.1),
-        "view.zoom-out" => adjust_board_zoom(app, -0.1),
+        "view.increase-text-size" => {
+            if persist_text_size(app, TextSizeAction::Increase).is_err() {
+                report_text_size_error(app);
+            }
+        }
+        "view.decrease-text-size" => {
+            if persist_text_size(app, TextSizeAction::Decrease).is_err() {
+                report_text_size_error(app);
+            }
+        }
+        "view.reset-text-size" => {
+            if persist_text_size(app, TextSizeAction::Reset).is_err() {
+                report_text_size_error(app);
+            }
+        }
         _ => {
             if let Some(command) = native_command_for_menu_id(id) {
                 let _ = dispatch_native_command(app, command);
@@ -2100,6 +2376,11 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(HostRuntime::default())
         .on_menu_event(|app, event| handle_native_menu(app, event.id.as_ref()))
+        .on_page_load(|webview, payload| {
+            if payload.event() == PageLoadEvent::Finished {
+                let _ = apply_stored_text_size(webview.app_handle(), false);
+            }
+        })
         .setup(|app| {
             let state = app.state::<HostRuntime>();
             let (menu, native_menu) = build_native_menu(app.handle())?;
@@ -2111,6 +2392,7 @@ pub fn run() {
             set_board_menu_available(&state, false);
             match initialize_app(app, &state) {
                 Ok(config) => {
+                    let _ = apply_text_size(app.handle(), config.preferences.text_size, false);
                     if let Err(error) =
                         sync_autostart(app.handle(), config.preferences.launch_at_login)
                     {
@@ -2178,6 +2460,7 @@ pub fn run() {
                 let _ = board.show();
                 let _ = board.unminimize();
                 let _ = board.set_focus();
+                let _ = apply_stored_text_size(app_handle, false);
             } else {
                 show_launcher(app_handle);
             }
@@ -2189,11 +2472,13 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        active_context_id, attention_badge_count, decision_count, engine_serve_arguments,
-        event_is_relevant, guarded_item_menu_accelerator, menu_eligibility, merge_watch_signal,
-        native_command_for_menu_id, project_slug, validate_stored_config, watch_snapshot_is_safe,
-        workspace_id, workspace_watch_plan, NativeCommand, Preferences, StoredConfig, Workspace,
-        WorkspaceKind,
+        active_context_id, attention_badge_count, decision_count, decode_stored_config,
+        engine_serve_arguments, event_is_relevant, guarded_item_menu_accelerator,
+        menu_eligibility, merge_watch_signal, native_command_for_menu_id, project_slug,
+        text_size_after, validate_stored_config, watch_snapshot_is_safe, workspace_id,
+        workspace_watch_plan, write_config_unlocked, AppPaths, AppSnapshot, HostStatus,
+        NativeCommand, Preferences, StoredConfig, TextSize, TextSizeAction, Workspace,
+        WorkspaceKind, CONFIG_VERSION,
     };
     use notify::{Event, EventKind};
     use serde_json::json;
@@ -2469,26 +2754,27 @@ mod tests {
     #[test]
     fn app_settings_are_closed_and_versioned() {
         let config = StoredConfig {
-            version: 1,
+            version: CONFIG_VERSION,
             workspaces: vec![],
             selected_workspace_id: None,
             preferences: Preferences::default(),
         };
         assert!(validate_stored_config(&config).is_ok());
         assert!(serde_json::from_value::<StoredConfig>(json!({
-            "version": 1,
+            "version": 2,
             "workspaces": [],
             "selectedWorkspaceId": null,
             "preferences": {
                 "notifications": false,
                 "launchAtLogin": false,
                 "restoreBoardWindow": false,
+                "textSize": "comfortable",
                 "unexpected": true
             }
         }))
         .is_err());
         assert!(serde_json::from_value::<StoredConfig>(json!({
-            "version": 1,
+            "version": 2,
             "workspaces": [{
                 "id": "bad\nid",
                 "label": "Fictional",
@@ -2499,12 +2785,13 @@ mod tests {
             "preferences": {
                 "notifications": false,
                 "launchAtLogin": false,
-                "restoreBoardWindow": false
+                "restoreBoardWindow": false,
+                "textSize": "comfortable"
             }
         }))
         .is_ok());
         let invalid_id = StoredConfig {
-            version: 1,
+            version: CONFIG_VERSION,
             workspaces: vec![Workspace {
                 id: "bad\nid".into(),
                 label: "Fictional".into(),
@@ -2515,5 +2802,205 @@ mod tests {
             preferences: Preferences::default(),
         };
         assert!(validate_stored_config(&invalid_id).is_err());
+    }
+
+    #[test]
+    fn readable_default_and_closed_text_size_mapping_are_exact() {
+        assert_eq!(TextSize::default(), TextSize::Comfortable);
+        assert_eq!(TextSize::Compact.scale(), 1.0);
+        assert_eq!(TextSize::Comfortable.scale(), 1.15);
+        assert_eq!(TextSize::Large.scale(), 1.3);
+        assert_eq!(TextSize::ExtraLarge.scale(), 1.5);
+        assert_eq!(TextSize::Compact.percent(), 100);
+        assert_eq!(TextSize::Comfortable.percent(), 115);
+        assert_eq!(TextSize::Large.percent(), 130);
+        assert_eq!(TextSize::ExtraLarge.percent(), 150);
+        assert_eq!(
+            serde_json::to_value(TextSize::ExtraLarge).expect("serialize preset"),
+            json!("extraLarge")
+        );
+    }
+
+    #[test]
+    fn text_size_menu_steps_clamp_reset_and_expose_bounds() {
+        assert_eq!(
+            text_size_after(TextSize::Compact, TextSizeAction::Decrease),
+            TextSize::Compact
+        );
+        assert_eq!(
+            text_size_after(TextSize::Compact, TextSizeAction::Increase),
+            TextSize::Comfortable
+        );
+        assert_eq!(
+            text_size_after(TextSize::Comfortable, TextSizeAction::Increase),
+            TextSize::Large
+        );
+        assert_eq!(
+            text_size_after(TextSize::Large, TextSizeAction::Increase),
+            TextSize::ExtraLarge
+        );
+        assert_eq!(
+            text_size_after(TextSize::ExtraLarge, TextSizeAction::Increase),
+            TextSize::ExtraLarge
+        );
+        assert_eq!(
+            text_size_after(TextSize::ExtraLarge, TextSizeAction::Reset),
+            TextSize::Comfortable
+        );
+        assert!(!TextSize::Compact.can_decrease());
+        assert!(TextSize::Compact.can_increase());
+        assert!(TextSize::ExtraLarge.can_decrease());
+        assert!(!TextSize::ExtraLarge.can_increase());
+    }
+
+    #[test]
+    fn version_one_settings_migrate_without_losing_registration_or_preferences() {
+        let source = serde_json::to_vec(&json!({
+            "version": 1,
+            "workspaces": [{
+                "id": "workspace-fictional",
+                "label": "Fictional ledger",
+                "path": "/tmp/fictional-ledger",
+                "kind": "existing"
+            }],
+            "selectedWorkspaceId": "workspace-fictional",
+            "preferences": {
+                "notifications": true,
+                "launchAtLogin": true,
+                "restoreBoardWindow": true
+            }
+        }))
+        .expect("encode v1 settings");
+        let (migrated, changed) = decode_stored_config(&source).expect("migrate v1 settings");
+        assert!(changed);
+        assert_eq!(migrated.version, CONFIG_VERSION);
+        assert_eq!(migrated.workspaces.len(), 1);
+        assert_eq!(
+            migrated.selected_workspace_id.as_deref(),
+            Some("workspace-fictional")
+        );
+        assert!(migrated.preferences.notifications);
+        assert!(migrated.preferences.launch_at_login);
+        assert!(migrated.preferences.restore_board_window);
+        assert_eq!(migrated.preferences.text_size, TextSize::Comfortable);
+
+        let encoded = serde_json::to_vec(&migrated).expect("encode migrated settings");
+        let (round_trip, changed_again) =
+            decode_stored_config(&encoded).expect("read migrated settings");
+        assert!(!changed_again);
+        assert_eq!(round_trip, migrated);
+    }
+
+    #[test]
+    fn app_snapshot_and_update_preferences_share_the_exact_text_size_shape() {
+        let incoming: Preferences = serde_json::from_value(json!({
+            "notifications": true,
+            "launchAtLogin": false,
+            "restoreBoardWindow": true,
+            "textSize": "large"
+        }))
+        .expect("decode update_preferences payload");
+        let snapshot = AppSnapshot {
+            version: "fictional".into(),
+            workspaces: vec![],
+            selected_workspace_id: None,
+            preferences: incoming.clone(),
+            host: HostStatus {
+                phase: "stopped".into(),
+                ready: false,
+                error: None,
+                observer_error: None,
+                url: None,
+                port: None,
+                workspace: None,
+            },
+            app_data: "/tmp/fictional-app-data".into(),
+        };
+        let encoded = serde_json::to_value(snapshot).expect("encode app_snapshot payload");
+        assert_eq!(
+            encoded.pointer("/preferences/textSize"),
+            Some(&json!("large"))
+        );
+        assert_eq!(
+            serde_json::from_value::<Preferences>(encoded["preferences"].clone())
+                .expect("decode snapshot preferences"),
+            incoming
+        );
+    }
+
+    #[test]
+    fn unknown_text_sizes_unknown_fields_and_future_versions_fail_closed() {
+        for invalid in [
+            json!({
+                "version": 2,
+                "workspaces": [],
+                "selectedWorkspaceId": null,
+                "preferences": {
+                    "notifications": false,
+                    "launchAtLogin": false,
+                    "restoreBoardWindow": false,
+                    "textSize": "gigantic"
+                }
+            }),
+            json!({
+                "version": 2,
+                "workspaces": [],
+                "selectedWorkspaceId": null,
+                "preferences": {
+                    "notifications": false,
+                    "launchAtLogin": false,
+                    "restoreBoardWindow": false,
+                    "textSize": "comfortable",
+                    "browserFallback": true
+                }
+            }),
+            json!({
+                "version": 3,
+                "workspaces": [],
+                "selectedWorkspaceId": null,
+                "preferences": {
+                    "notifications": false,
+                    "launchAtLogin": false,
+                    "restoreBoardWindow": false,
+                    "textSize": "comfortable"
+                }
+            }),
+        ] {
+            let bytes = serde_json::to_vec(&invalid).expect("encode invalid settings");
+            assert!(decode_stored_config(&bytes).is_err());
+        }
+    }
+
+    #[test]
+    fn writing_the_global_preference_leaves_board_and_ledger_bytes_unchanged() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "hfledger-text-size-authority-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("create disposable app data");
+        let board = root.join("board.json");
+        let ledger = root.join("ledger.jsonl");
+        fs::write(&board, b"{\"authoritative\":true}\n").expect("write board");
+        fs::write(&ledger, b"{\"action\":\"fictional\"}\n").expect("write ledger");
+        let before_board = fs::read(&board).expect("read board before");
+        let before_ledger = fs::read(&ledger).expect("read ledger before");
+        let paths = AppPaths {
+            app_data: root.clone(),
+            config: root.join("app.json"),
+            engine: root.join("engine"),
+            logs: root.join("Logs"),
+            backups: root.join("Backups"),
+            ui_state: root.join("UIState"),
+        };
+        let mut config = StoredConfig::default();
+        config.preferences.text_size = TextSize::ExtraLarge;
+        write_config_unlocked(&paths, &config).expect("write app-private preference");
+        assert_eq!(fs::read(&board).expect("read board after"), before_board);
+        assert_eq!(fs::read(&ledger).expect("read ledger after"), before_ledger);
+        fs::remove_dir_all(root).expect("remove disposable app data");
     }
 }

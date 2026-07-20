@@ -188,5 +188,10 @@ cardElement.addEventListener("pointerup", (event) => {
 });
 cardElement.addEventListener("pointercancel", () => { state.pointer = null; cardElement.style.transform = ""; });
 
+window.addEventListener("hfledger:text-size-changed", (event) => {
+  const detail = event.detail || {};
+  if (detail.announce) toast(`Text size ${detail.label}, ${detail.percent} percent.`);
+});
+
 loadCards();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/service-worker.js").catch(() => {});

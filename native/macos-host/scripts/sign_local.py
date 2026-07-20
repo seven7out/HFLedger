@@ -12,6 +12,7 @@ APP = HOST_ROOT / "src-tauri" / "target" / "release" / "bundle" / "macos" / "HFL
 def main() -> None:
     if not APP.is_dir():
         raise SystemExit(f"app bundle not found: {APP}")
+    subprocess.run(["/usr/bin/xattr", "-cr", str(APP)], check=True)
     subprocess.run(
         ["/usr/bin/codesign", "--force", "--deep", "--sign", "-", str(APP)],
         check=True,

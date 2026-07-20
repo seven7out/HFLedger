@@ -54,6 +54,14 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertNotIn(".undo-bar", deck_rules)
         self.assertNotIn("#undo-timer", deck_rules)
 
+    def test_decision_deck_uses_the_shared_native_scale_and_large_layout_hooks(self):
+        style = CSS.read_text(encoding="utf-8")
+        deck = (ROOT / "app" / "static" / "deck.js").read_text(encoding="utf-8")
+        deck_style = style[style.index(DECK_MARKER):]
+        self.assertIn('data-text-size="extraLarge"', deck_style)
+        self.assertIn("hfledger:text-size-changed", deck)
+        self.assertNotRegex(deck, r"localStorage\.(?:getItem|setItem)\([^)]*text[-_ ]?size")
+
     def test_visual_contract_removes_dashboard_patterns(self):
         markup = HTML.read_text(encoding="utf-8")
         style = CSS.read_text(encoding="utf-8")

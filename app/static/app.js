@@ -1649,6 +1649,10 @@ function boot() {
     const id = typeof event.detail === "string" ? event.detail : event.detail?.id;
     if (COMMANDS.some(([command]) => command === id) || ["view.commands", "pane.toggle-sidebar", "pane.toggle-inspector", "help.commands"].includes(id)) dispatchCommand(id);
   });
+  window.addEventListener("hfledger:text-size-changed", (event) => {
+    const detail = event.detail || {};
+    if (detail.announce) announce(`Text size ${detail.label}, ${detail.percent} percent.`);
+  });
   window.addEventListener("focus", () => { if (state.pendingVisit) recordSuccessfulVisit(false); });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && state.pendingVisit) recordSuccessfulVisit(false);
