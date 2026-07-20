@@ -17,6 +17,7 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from core import admission, ledger, local_state, orientation, reconcile  # noqa: E402
+from core.link_safety import resolve_projected_link  # noqa: E402
 from core.store import BoardStore, BoardValidationError, load_config, resolve_home  # noqa: E402
 
 
@@ -24,7 +25,6 @@ HOST = "127.0.0.1"
 DEFAULT_PORT = 7171
 MAX_BODY_BYTES = 1024 * 1024
 LOCAL_STATE_MAX_BODY_BYTES = 32 * 1024
-UNDO_WINDOW_SECONDS = 30
 LOOPBACK_HOSTS = frozenset(("127.0.0.1", "localhost", "::1"))
 ITEM_ID_RE = re.compile(r"item-[0-9a-f]{24}")
 ATTENTION_KEY_RE = re.compile(r"attention-[0-9a-f]{24}")
@@ -118,6 +118,7 @@ class Context:
         self.label = label
         self.home = home
         self.config = load_config(home)
+        self.read_only = bool(self.config.get("ui", {}).get("readOnly", False))
         self.store = BoardStore(home, config=self.config)
         required_modes = {
             ("owner-ui", "decision_resolved"): "reconcile",
@@ -166,7 +167,6 @@ class Runtime:
             "accent": ui["accent"],
             "readOnly": bool(ui.get("readOnly", False)),
         }
-        self.read_only = self.ui["readOnly"]
         self.port = ui["port"]
         contexts = []
         for item in ui["contexts"]:
@@ -193,6 +193,7 @@ class Runtime:
     def shell(self, context_id=None):
         context = self.context(context_id)
         ui = copy.deepcopy(self.ui)
+        ui["readOnly"] = context.read_only
         ui["localState"] = copy.deepcopy(self.local_state.capability())
         return {
             "version": 1,
@@ -265,6 +266,7 @@ def build_board_view(runtime, context_id=None):
             context.config,
             now_utc,
             local_view_state=local_view_state,
+            context_id=context.context_id,
         ),
     })
     return response
@@ -281,6 +283,34 @@ def build_item_view(runtime, item_id, context_id=None):
         "version": 2,
         "context": board_view["activeContext"],
         "item": copy.deepcopy(item),
+    }
+
+
+def build_resolved_links_view(runtime, context_id=None):
+    """Resolve only links in the selected validated projection.
+
+    The client supplies a context, never a target. Unsafe projected targets
+    remain visible as unavailable records so they cannot be confused with a
+    resolver/network failure.
+    """
+    board_view = build_board_view(runtime, context_id)
+    selected_context = board_view["activeContext"]
+    records = []
+    for link in board_view["orientationV2"].get("links", []):
+        if not isinstance(link, dict) or not isinstance(link.get("id"), str):
+            continue
+        target = resolve_projected_link(link, selected_context)
+        record = {
+            "id": link["id"],
+            "resolved": target is not None,
+        }
+        if target is not None:
+            record["target"] = target
+        records.append(record)
+    return {
+        "version": 1,
+        "context": selected_context,
+        "links": records,
     }
 
 
@@ -395,11 +425,9 @@ def resolve_decision(runtime, body, deck=False):
             "selectedOption": selected,
         })
     _reconcile(context)
-    token = ledger.entry_digest(entry)
     return {
         "ok": True, "id": item_id, "context": context.context_id,
-        "undoAvailable": deck, "undoToken": token if deck else None,
-        "undoWindowSec": UNDO_WINDOW_SECONDS if deck else 0,
+        "undoAvailable": False, "undoToken": None, "undoWindowSec": 0,
     }
 
 
@@ -519,52 +547,6 @@ def answer_card(runtime, body):
         return {"ok": True, "id": item_id, "context": context.context_id,
                 "undoAvailable": False}
     raise ApiError(400, "unknown card type")
-
-
-def undo_card(runtime, body):
-    context = runtime.context(body.get("context"))
-    item_id = _text(_required(body, "id"), "id", 160)
-    token = _text(_required(body, "undoToken"), "undoToken", 64)
-    if not re.fullmatch(r"[0-9a-f]{64}", token):
-        raise ApiError(400, "undoToken must be a lowercase sha256 digest")
-    current = context.store.load()
-    item = _find(current.get("decisions", {}).get("resolved", []), item_id)
-    provenance = item.get("resolutionLedgerProvenance") if item else None
-    if item is None or not isinstance(provenance, dict) or provenance.get("entrySha256") != token:
-        raise ApiError(409, "resolution is not available for this undo token")
-    line = provenance.get("line")
-    entries = ledger.parse_lines(ledger.snapshot_lines(context.home), context.config)
-    if not isinstance(line, int) or not 1 <= line <= len(entries):
-        raise ApiError(409, "resolution provenance is unavailable")
-    try:
-        recorded = datetime.datetime.fromisoformat(entries[line - 1]["ts"].replace("Z", "+00:00"))
-        age = (datetime.datetime.now(datetime.timezone.utc) - recorded).total_seconds()
-    except (KeyError, TypeError, ValueError):
-        raise ApiError(409, "resolution timestamp is unavailable")
-    if age > UNDO_WINDOW_SECONDS:
-        raise ApiError(409, "undo window has expired")
-
-    def mutate(board):
-        decisions = board.setdefault("decisions", {})
-        resolved = decisions.setdefault("resolved", [])
-        index = next((i for i, candidate in enumerate(resolved)
-                      if isinstance(candidate, dict) and candidate.get("id") == item_id), None)
-        if index is None:
-            raise ApiError(409, "decision is no longer resolved")
-        restored = resolved.pop(index)
-        for key in (
-                "resolvedDate", "resolution", "resolutionEvidence", "resolvedNote",
-                "resolutionLedgerProvenance", "selectedOption", "tombstone"):
-            restored.pop(key, None)
-        restored["state"] = "open"
-        decisions.setdefault("items", []).insert(0, restored)
-
-    context.store.update(mutate)
-    _append_ui(context, "deck_undo", {
-        "schemaVersion": 1, "id": item_id, "resolutionEntrySha256": token,
-    })
-    _reconcile(context)
-    return {"ok": True, "id": item_id, "context": context.context_id}
 
 
 def _validate_local_projection_references(body, projection):
@@ -702,7 +684,6 @@ POST_ROUTES = {
     "/api/tasks/reorder": lambda runtime, body: reorder(runtime, body, "ownerTasks"),
     "/api/tasks/done": toggle_task,
     "/api/cards/answer": answer_card,
-    "/api/cards/undo": undo_card,
 }
 
 LOCAL_POST_ROUTES = {
@@ -833,6 +814,10 @@ class Handler(BaseHTTPRequestHandler):
                 context_id = _context_from_query(parsed)
                 self._send_json(build_local_state_view(self.runtime, context_id))
                 return
+            if parsed.path == "/api/links":
+                context_id = _context_from_query(parsed)
+                self._send_json(build_resolved_links_view(self.runtime, context_id))
+                return
             if parsed.path.startswith("/api/items/"):
                 context_id = _context_from_query(parsed)
                 self._send_json(build_item_view(
@@ -866,11 +851,11 @@ class Handler(BaseHTTPRequestHandler):
             if route is None:
                 self._send_json({"error": "not found"}, status=404)
                 return
-            if not is_local and self.runtime.read_only:
-                self._send_json({"error": "workspace is read-only"}, status=403)
-                return
             body = self._json_body(raw)
             context_id = body.get("context") if isinstance(body.get("context"), str) else None
+            if not is_local and self.runtime.context(context_id).read_only:
+                self._send_json({"error": "workspace is read-only"}, status=403)
+                return
             with _WRITE_LOCK:
                 if is_local:
                     context_id = _validate_local_state_command_body(

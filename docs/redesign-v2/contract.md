@@ -536,8 +536,10 @@ sort. `watched` is a secondary filter and never changes `primaryHome`.
   `native-application`.
 
 The UI must not execute projection link targets directly. The server/native
-opener allowlists `http`, `https`, the same-origin `/deck` route, and validated
-local-file roots. Unsupported or unsafe links render as unavailable text.
+opener allowlists public `http` and `https` destinations and the exact
+context-bound same-origin `/deck` route. Userinfo, private, loopback,
+link-local, same-origin API, and unsupported targets render as unavailable.
+No local-file root is enabled by the redesign V2 Today surface.
 
 ### 4.3 Stable identifiers
 
@@ -1046,7 +1048,8 @@ The inspector renders, in order:
 10. safe source links; and
 11. collapsed runtime/provenance internals.
 
-Copy Context is trusted-template plain text, at most 4,000 characters, and
+Copy Context begins `HFLedger context (non-authoritative)`, is trusted-template
+plain text, at most 4,000 characters, and
 contains title/id, why-here, home/provenance, both clocks, one next action, at
 most eight evidence lines, named gaps, and at most five safe links. It excludes
 local notes, raw files, secrets, raw collector errors/excerpts, hidden payloads,

@@ -71,6 +71,11 @@ The shipped registry is:
 | `agent` | `built`, `skipped`, `work_started`, `work_checkpoint`, `work_blocked`, `work_verified`, `work_shipped`, `work_abandoned` | audit-only |
 | `owner-ui` | `decision_resolved`, `decision_snoozed` | reconcile |
 | `owner-ui` | `task_done`, `board_reordered`, `deck_answer`, `deck_undo`, `deck_need_info` | audit-only |
+
+`deck_undo` remains registered only so historical ledgers continue to parse.
+The served Decision Deck has no undo route or active writer for this legacy
+record. A recorded decision outcome is changed only through a separately
+admitted, replayable protocol event.
 | `owner-capture` | `owner_completed`, `owner_skipped` | reconcile |
 | `reconciler` | `completion_propagated`, `ticket_reconciled` | audit-only |
 

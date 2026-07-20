@@ -41,6 +41,7 @@ const $ = (selector) => document.querySelector(selector);
 const state = {
   data: null,
   orientation: null,
+  resolvedLinks: new Map(),
   context: (!TESTING && typeof location !== "undefined")
     ? (new URLSearchParams(location.search).get("context") || "") : "",
   local: null,
@@ -141,16 +142,33 @@ function safeAccent(value) {
   return /^#[0-9a-f]{6}$/i.test(text) ? text : "#6956e8";
 }
 
-function safeLinkTarget(link, baseHref) {
-  if (!link || typeof link !== "object") return null;
-  const target = safeText(link.target, 2048);
+function publicWebHost(hostname) {
+  const host = String(hostname || "").replace(/^\[|\]$/g, "").toLocaleLowerCase();
+  if (!host || host === "localhost" || [".home", ".internal", ".lan", ".local", ".localhost"].some((suffix) => host.endsWith(suffix))) return false;
+  const octets = host.split(".");
+  if (octets.length === 4 && octets.every((value) => /^\d{1,3}$/.test(value) && Number(value) <= 255)) {
+    const [first, second] = octets.map(Number);
+    if (first === 0 || first === 10 || first === 127 || first >= 224 ||
+        (first === 169 && second === 254) || (first === 172 && second >= 16 && second <= 31) ||
+        (first === 192 && second === 168)) return false;
+  }
+  if (host.includes(":") && (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd") || /^fe[89ab]/.test(host))) return false;
+  return true;
+}
+
+function safeLinkTarget(resolution, baseHref) {
+  if (!resolution || typeof resolution !== "object" || resolution.resolved !== true) return null;
+  const target = safeText(resolution.target, 2048);
   if (!target) return null;
   const base = baseHref || (typeof location !== "undefined" ? location.href : "http://127.0.0.1/");
   try {
     const parsed = new URL(target, base);
     const origin = new URL(base).origin;
-    if (parsed.origin === origin) return parsed.pathname === "/deck" ? parsed.href : null;
-    if (parsed.protocol === "https:" || parsed.protocol === "http:") return parsed.href;
+    if (parsed.username || parsed.password) return null;
+    if (parsed.origin === origin) {
+      return parsed.pathname === "/deck" && !parsed.hash ? parsed.href : null;
+    }
+    if ((parsed.protocol === "https:" || parsed.protocol === "http:") && publicWebHost(parsed.hostname)) return parsed.href;
   } catch (_) {
     return null;
   }
@@ -160,7 +178,7 @@ function safeLinkTarget(link, baseHref) {
 function buildCopyContext(item, orientation = state.orientation) {
   if (!item) return "";
   const projected = safePlainText(item.copyContext?.text, 4000);
-  if (projected) return projected;
+  if (projected.startsWith("HFLedger context (non-authoritative)\n")) return projected;
   const evidenceById = new Map((orientation?.evidence || []).map((record) => [record.id, record]));
   const lines = [
     "HFLedger context (non-authoritative)",
@@ -193,6 +211,25 @@ async function request(path, options = {}) {
     throw error;
   }
   return body;
+}
+
+async function fetchResolvedLinks() {
+  state.resolvedLinks = new Map();
+  if (!state.context) return;
+  const response = await request(`/api/links?context=${encodeURIComponent(state.context)}`);
+  if (response?.version !== 1 || response?.context !== state.context || !Array.isArray(response?.links)) {
+    throw new Error("The projected-link resolver returned an invalid response.");
+  }
+  const projectedIds = new Set((state.orientation?.links || []).map((link) => link.id));
+  response.links.forEach((record) => {
+    const id = safeText(record?.id, 160);
+    if (!id || !projectedIds.has(id) || state.resolvedLinks.has(id)) return;
+    state.resolvedLinks.set(id, {
+      id,
+      resolved: record?.resolved === true,
+      target: record?.resolved === true ? safeText(record.target, 2048) : "",
+    });
+  });
 }
 
 function normalizeLocalResponse(response) {
@@ -1034,13 +1071,14 @@ function renderItemInspector(target, item) {
   const links = node("div", "source-links");
   const allLinks = linkMap();
   (item.linkIds || []).slice(0, 12).map((id) => allLinks.get(id)).filter(Boolean).forEach((link) => {
-    const target_ = safeLinkTarget(link);
+    const resolution = state.resolvedLinks.get(link.id);
+    const target_ = safeLinkTarget(resolution);
     if (!target_) {
       const unavailable = node("span", "source-link unavailable-link", `${link.label || "Source"} unavailable`);
       links.append(unavailable);
       return;
     }
-    links.append(button("source-link", `${link.label || "Open source"} ↗`, () => openSafeTarget(target_)));
+    links.append(button("source-link", `${link.label || "Open source"} ↗`, () => openSafeTarget(resolution)));
   });
   if (!links.childElementCount) links.append(node("span", "inspector-muted", "No safe source link was supplied."));
   wrapper.append(inspectorSection("Sources", links));
@@ -1082,9 +1120,10 @@ function buildNextAction(item) {
   if (action.kind === "copy-context") return button("control-button primary-control", action.label || "Copy Context", () => copyContext(item));
   if (!["open-source", "open-decision"].includes(action.kind)) return null;
   const link = linkMap().get(action.linkId);
-  const target = safeLinkTarget(link);
+  const resolution = state.resolvedLinks.get(action.linkId);
+  const target = safeLinkTarget(resolution);
   if (!target) return null;
-  return button("control-button primary-control", action.label || link?.label || "Open authoritative source", () => openSafeTarget(target));
+  return button("control-button primary-control", action.label || link?.label || "Open authoritative source", () => openSafeTarget(resolution));
 }
 
 function renderCoverageInspector(target) {
@@ -1229,8 +1268,8 @@ async function copyContext(item = selectedItem()) {
   } catch (error) { announce(error.message || "Context could not be copied."); }
 }
 
-function openSafeTarget(target) {
-  const safe = safeLinkTarget({ target });
+function openSafeTarget(resolution) {
+  const safe = safeLinkTarget(resolution);
   if (!safe) return announce("This source link is unavailable because its target is unsupported.");
   const parsed = new URL(safe, location.href);
   if (parsed.origin === location.origin && parsed.pathname === "/deck") location.assign(parsed.href);
@@ -1359,6 +1398,7 @@ async function loadBoard({ preserve = false } = {}) {
     state.data = data;
     state.orientation = data.orientationV2;
     state.context = safeText(data.activeContext, 120) || state.context || safeText(data.contexts?.[0]?.id, 120);
+    await fetchResolvedLinks();
     await fetchLocalState();
     restoreLocalPreferences();
     renderShell();

@@ -353,8 +353,7 @@ class LocalStateRouteTests(ServerCase):
 
     def test_every_local_command_bypasses_read_only_and_preserves_authority(self):
         self.decision()
-        self.httpd.runtime.read_only = True
-        self.httpd.runtime.ui["readOnly"] = True
+        self.httpd.runtime.context().read_only = True
         before_board = self.board_bytes()
         before_ledger = list(read_ledger(self.home))
         _response, board, _connection = self.get("/api/board")
@@ -410,8 +409,7 @@ class LocalStateRouteTests(ServerCase):
 
     def test_local_attention_triage_is_reflected_in_fresh_projection(self):
         self.decision()
-        self.httpd.runtime.read_only = True
-        self.httpd.runtime.ui["readOnly"] = True
+        self.httpd.runtime.context().read_only = True
         before_board = self.board_bytes()
         before_ledger = list(read_ledger(self.home))
 
@@ -617,8 +615,7 @@ class LocalStateRouteTests(ServerCase):
 class BoardMutationTests(ServerCase):
     def test_read_only_runtime_rejects_every_mutation_without_writes(self):
         package = self.decision()
-        self.httpd.runtime.read_only = True
-        self.httpd.runtime.ui["readOnly"] = True
+        self.httpd.runtime.context().read_only = True
         before_board, before_ledger = self.board_bytes(), list(read_ledger(self.home))
         response, body, _connection = self.post(
             "/api/decisions/resolve", {"id": package["id"], "resolution": "No."})
@@ -790,8 +787,9 @@ class DeckMutationTests(ServerCase):
             "id": package["id"], "srcHash": card["srcHash"], "action": "accept"
         })
         self.assertEqual(response.status, 200)
-        self.assertTrue(body["undoAvailable"])
-        self.assertEqual(len(body["undoToken"]), 64)
+        self.assertFalse(body["undoAvailable"])
+        self.assertIsNone(body["undoToken"])
+        self.assertEqual(body["undoWindowSec"], 0)
         actions = [json.loads(line)["action"] for line in read_ledger(self.home)]
         self.assertEqual(actions[-2:], ["decision_resolved", "deck_answer"])
         resolved = load_board(self.home)["decisions"]["resolved"][0]
@@ -867,42 +865,27 @@ class DeckMutationTests(ServerCase):
         self.assertEqual(load_board(self.home)["decisions"]["resolved"][0]["completionDisposition"],
                          "skipped")
 
-    def test_token_bound_undo_restores_ui_resolution(self):
+    def test_deck_undo_route_is_not_active(self):
         package = self.decision()
         card = self.card()
-        _response, answer, _connection = self.post("/api/cards/answer", {
+        response, answer, _connection = self.post("/api/cards/answer", {
             "id": package["id"], "srcHash": card["srcHash"], "action": "accept",
-        })
-        response, body, _connection = self.post("/api/cards/undo", {
-            "id": package["id"], "undoToken": answer["undoToken"],
         })
         self.assertEqual(response.status, 200)
-        self.assertTrue(body["ok"])
-        board = load_board(self.home)
-        self.assertEqual(board["decisions"]["resolved"], [])
-        restored = board["decisions"]["items"][0]
-        self.assertEqual(restored["state"], "open")
-        self.assertNotIn("resolutionLedgerProvenance", restored)
-        self.assertEqual(json.loads(read_ledger(self.home)[-1])["action"], "deck_undo")
-
-    def test_wrong_or_expired_undo_token_is_rejected(self):
-        package = self.decision()
-        card = self.card()
-        _response, answer, _connection = self.post("/api/cards/answer", {
-            "id": package["id"], "srcHash": card["srcHash"], "action": "accept",
-        })
-        before = self.board_bytes()
-        response, _body, _connection = self.post("/api/cards/undo", {
+        self.assertFalse(answer["undoAvailable"])
+        before_board, before_ledger = self.board_bytes(), list(read_ledger(self.home))
+        response, body, _connection = self.post("/api/cards/undo", {
             "id": package["id"], "undoToken": "0" * 64,
         })
-        self.assertEqual(response.status, 409)
-        self.assertEqual(self.board_bytes(), before)
-        with mock.patch.object(server, "UNDO_WINDOW_SECONDS", -1):
-            response, _body, _connection = self.post("/api/cards/undo", {
-                "id": package["id"], "undoToken": answer["undoToken"],
-            })
-        self.assertEqual(response.status, 409)
-        self.assertEqual(self.board_bytes(), before)
+        self.assertEqual(response.status, 404)
+        self.assertEqual(body, {"error": "not found"})
+        self.assertEqual(self.board_bytes(), before_board)
+        self.assertEqual(read_ledger(self.home), before_ledger)
+        self.assertNotIn("/api/cards/undo", server.POST_ROUTES)
+        self.assertEqual(
+            ledger.action_mode(self.config, "owner-ui", "deck_undo"),
+            "audit-only",
+        )
 
 
 class RequestBoundaryTests(ServerCase):

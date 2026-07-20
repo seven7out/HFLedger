@@ -8,6 +8,7 @@ import re
 import unicodedata
 
 from . import evidence, ledger
+from .link_safety import resolve_projected_link
 
 
 VERSION = 1
@@ -647,7 +648,8 @@ def build(board, entries, config, now=None, stale_days=DEFAULT_STALE_DAYS):
 class _V2Builder:
     """Pure normalizer and projection assembler for the locked version-2 contract."""
 
-    def __init__(self, board, entries, config, now, adapter, local_state, collector_report):
+    def __init__(self, board, entries, config, now, adapter, local_state,
+                 collector_report, context_id):
         if not isinstance(board, dict):
             raise ValueError("orientation v2 board must be a validated object")
         if not isinstance(entries, list):
@@ -663,6 +665,9 @@ class _V2Builder:
         self.adapter = adapter
         self.local_state = local_state if isinstance(local_state, dict) else {}
         self.collector_report = collector_report
+        if not isinstance(context_id, str) or not context_id:
+            raise ValueError("orientation v2 context_id must be non-empty text")
+        self.context_id = context_id
         self.ids = _IdRegistry()
         self.sources = {}
         self.items = {}
@@ -1417,7 +1422,8 @@ class _V2Builder:
                 claim_kind="shipment", claim_state="shipped")
         if entity_kind in ("decision", "manual-action"):
             link_id = self._add_link(
-                "board:main", "board-item", "/deck?context=main", "Open Decision Deck", True)
+                "board:main", "board-item", "/deck?context=%s" % self.context_id,
+                "Open Decision Deck", True)
             if link_id and link_id not in item["_linkIds"]:
                 item["_linkIds"].append(link_id)
         repository = item.get("_repository")
@@ -2658,7 +2664,7 @@ class _V2Builder:
 
     def _copy_context(self, item, next_action, evidence_records, links):
         lines = [
-            "HFLedger context",
+            "HFLedger context (non-authoritative)",
             "Item: %s" % item["title"],
             "Stable reference: %s" % item["sourceItemRef"],
             "Why here: %s" % item["_whyHere"],
@@ -2675,8 +2681,13 @@ class _V2Builder:
         for absence in item["_coverage"]["namedAbsences"]:
             lines.append("Missing observation: %s is %s (%s)" % (
                 absence["sourceId"], absence["state"], absence["reasonCode"]))
-        for link in [value for value in links if value.get("copyable")][:5]:
-            lines.append("Source: %s — %s" % (link["label"], link["target"]))
+        safe_links = []
+        for link in links:
+            target = resolve_projected_link(link, self.context_id)
+            if link.get("copyable") and target is not None:
+                safe_links.append((link, target))
+        for link, target in safe_links[:5]:
+            lines.append("Source: %s — %s" % (link["label"], target))
         selected = []
         size = 0
         truncated = False
@@ -2876,7 +2887,8 @@ class _V2Builder:
 
 
 def build_v2(validated_board, validated_ledger_entries, validated_config, now_utc,
-             normalized_adapter_bundle=None, local_view_state=None, collector_report=None):
+             normalized_adapter_bundle=None, local_view_state=None, collector_report=None,
+             context_id="main"):
     """Build the deterministic, versioned orientation projection locked for redesign v2.
 
     All inputs are caller-supplied validated values. The function performs no I/O,
@@ -2884,5 +2896,5 @@ def build_v2(validated_board, validated_ledger_entries, validated_config, now_ut
     """
     return _V2Builder(
         validated_board, validated_ledger_entries, validated_config, now_utc,
-        normalized_adapter_bundle, local_view_state, collector_report,
+        normalized_adapter_bundle, local_view_state, collector_report, context_id,
     ).build()

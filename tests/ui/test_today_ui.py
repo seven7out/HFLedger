@@ -10,7 +10,6 @@ ROOT = Path(__file__).resolve().parents[2]
 HTML = ROOT / "app" / "static" / "index.html"
 JS = ROOT / "app" / "static" / "app.js"
 CSS = ROOT / "app" / "static" / "app.css"
-CONTRACT_COMMIT = "af47b59032765a2dea3785504faa53028a45d058"
 DECK_MARKER = "/* Decision deck */"
 
 
@@ -47,20 +46,13 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertIn("textContent", script)
         self.assertIn('window.addEventListener("hfledger:native-command"', script)
 
-    def test_decision_deck_styles_are_byte_identical_to_contract_base(self):
-        baseline = subprocess.run(
-            ["git", "show", f"{CONTRACT_COMMIT}:app/static/app.css"],
-            cwd=ROOT,
-            check=True,
-            text=True,
-            stdout=subprocess.PIPE,
-        ).stdout
+    def test_decision_deck_keeps_the_bounded_surface_without_undo_controls(self):
         current = CSS.read_text(encoding="utf-8")
-        self.assertIn(DECK_MARKER, baseline)
-        self.assertEqual(
-            current[current.index(DECK_MARKER):],
-            baseline[baseline.index(DECK_MARKER):],
-        )
+        deck_rules = current[current.index(DECK_MARKER):]
+        for required in (".deck-shell", ".decision-card", ".deck-toast"):
+            self.assertIn(required, deck_rules)
+        self.assertNotIn(".undo-bar", deck_rules)
+        self.assertNotIn("#undo-timer", deck_rules)
 
     def test_visual_contract_removes_dashboard_patterns(self):
         markup = HTML.read_text(encoding="utf-8")

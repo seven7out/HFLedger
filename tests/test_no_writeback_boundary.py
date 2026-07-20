@@ -18,6 +18,7 @@ import unittest
 
 from app import server
 from core import ledger, orientation, reconcile, schema, store
+from core.link_safety import resolve_projected_link
 from tests.helpers import decision_package, new_home
 
 
@@ -296,10 +297,6 @@ class NoWriteBackBoundaryTests(unittest.TestCase):
                 "context": "main", "id": self.package["id"],
                 "srcHash": src_hash, "action": "accept",
             },
-            "/api/cards/undo": {
-                "context": "main", "id": self.package["id"],
-                "undoToken": "0" * 64,
-            },
         }
         self.assertEqual(
             set(route_bodies), set(server.POST_ROUTES),
@@ -463,6 +460,15 @@ class NoWriteBackBoundaryTests(unittest.TestCase):
         self.assertEqual(link["kind"], "board-item")
         self.assertEqual(link["target"], "/deck?context=main")
 
+        response, resolver = self._request("GET", "/api/links?context=main")
+        self.assertEqual(response.status, 200)
+        deck_resolution = next(
+            value for value in resolver["links"] if value["id"] == link["id"])
+        self.assertEqual(deck_resolution, {
+            "id": link["id"], "resolved": True,
+            "target": "/deck?context=main",
+        })
+
         node_script = r"""
 const fs = require("node:fs");
 globalThis.__HFLEDGER_TESTING__ = true;
@@ -471,20 +477,21 @@ const input = JSON.parse(fs.readFileSync(0, "utf8"));
 const ui = globalThis.HFLedgerUI;
 process.stdout.write(JSON.stringify({
   copied: ui.buildCopyContext(input.item, input.orientation),
-  targets: input.targets.map((target) => ui.safeLinkTarget(
-    {target}, "http://127.0.0.1:43123/?context=main")),
+  targets: input.resolutions.map((resolution) => ui.safeLinkTarget(
+    resolution, "http://127.0.0.1:43123/?context=main")),
 }));
 """
         inputs = {
             "item": self.item,
             "orientation": self.orientation,
-            "targets": [
-                link["target"],
-                "https://example.invalid/fictional-source",
-                "/api/decisions/resolve",
-                "/api/local-state/command",
-                "javascript:alert(1)",
-                "file:///tmp/fictional-ledger.jsonl",
+            "resolutions": [
+                deck_resolution,
+                {"resolved": True, "target": "https://example.invalid/fictional-source"},
+                {"resolved": False},
+                {"resolved": False},
+                {"resolved": False},
+                # A raw projected target is not a resolver result.
+                {"target": "https://example.invalid/unresolved"},
             ],
         }
         before = self._authority_snapshot()
@@ -539,6 +546,55 @@ process.stdout.write(JSON.stringify({
         post_targets = re.findall(
             r'request\("([^\"]+)"\s*,\s*\{\s*method:\s*"POST"', script)
         self.assertEqual(post_targets, ["/api/local-state/command"])
+
+    def test_projected_link_resolver_rejects_local_and_credentialed_targets(self):
+        def web(target):
+            return {
+                "id": "link-0123456789abcdef01234567",
+                "kind": "web", "target": target,
+            }
+
+        accepted = (
+            "https://example.invalid/fictional-source",
+            "http://93.184.216.34/fictional-source",
+        )
+        for target in accepted:
+            with self.subTest(accepted=target):
+                self.assertEqual(resolve_projected_link(web(target), "main"), target)
+
+        rejected = (
+            "https://user:secret@example.invalid/source",
+            "http://127.0.0.1:9000/api/run",
+            "http://[::1]/api/run",
+            "http://10.0.0.2/source",
+            "http://192.168.1.5/source",
+            "http://169.254.169.254/latest/meta-data",
+            "http://127.1/api/run",
+            "http://0177.0.0.1/api/run",
+            "http://0x7f.0.0.1/api/run",
+            "http://0300.0250.0001.0001/source",
+            "http://169.254.1/latest/meta-data",
+            "http://2130706433/api/run",
+            "http://service.local/source",
+            "http://single-label/source",
+            "/api/decisions/resolve",
+            "javascript:alert(1)",
+            "file:///tmp/fictional-ledger.jsonl",
+        )
+        for target in rejected:
+            with self.subTest(rejected=target):
+                self.assertIsNone(resolve_projected_link(web(target), "main"))
+
+        self.assertEqual(resolve_projected_link({
+            "kind": "board-item", "target": "/deck?context=secondary",
+        }, "secondary"), "/deck?context=secondary")
+        for target in (
+                "/deck?context=main", "/deck?context=secondary&context=secondary",
+                "/api/cards?context=secondary"):
+            with self.subTest(board_target=target):
+                self.assertIsNone(resolve_projected_link({
+                    "kind": "board-item", "target": target,
+                }, "secondary"))
 
     def test_native_ipc_and_today_controls_have_a_closed_navigation_local_set(self):
         native = NATIVE_LIB.read_text(encoding="utf-8")
@@ -606,7 +662,6 @@ process.stdout.write(JSON.stringify({
             self.assertNotIn(deferred_control, combined_today)
         self.assertNotRegex(native.lower(), r"quick[ _-]?look|qlpreview")
 
-    @unittest.expectedFailure
     def test_each_context_enforces_its_own_read_only_policy(self):
         """Desired: a writable primary must not unlock a read-only context."""
         with tempfile.TemporaryDirectory(
@@ -681,7 +736,6 @@ process.stdout.write(JSON.stringify({
             finally:
                 self._stop_server(httpd, thread)
 
-    @unittest.expectedFailure
     def test_decision_handoff_preserves_the_selected_context(self):
         """Desired: Today and the deck honor the same explicit context."""
         with tempfile.TemporaryDirectory(
@@ -736,9 +790,8 @@ process.stdout.write(JSON.stringify({
             finally:
                 self._stop_server(httpd, thread)
 
-    @unittest.expectedFailure
-    def test_deck_undo_is_replay_equivalent_to_its_ledger(self):
-        """Desired: replaying the ledger reproduces an undone decision plane."""
+    def test_decision_deck_has_no_non_replayable_undo_path(self):
+        """A deck answer is replayable and exposes no board-only undo writer."""
         with tempfile.TemporaryDirectory(
                 prefix="hfledger-fictional-undo-replay-") as temporary:
             root = Path(temporary).resolve()
@@ -771,18 +824,33 @@ process.stdout.write(JSON.stringify({
                     port=port,
                 )
                 self.assertEqual(response.status, 200)
-                self.assertTrue(answer["undoAvailable"])
-                response, undone = self._request(
+                self.assertEqual(answer, {
+                    "ok": True,
+                    "id": package["id"],
+                    "context": "main",
+                    "undoAvailable": False,
+                    "undoToken": None,
+                    "undoWindowSec": 0,
+                })
+                before = {
+                    name: (source / name).read_bytes()
+                    for name in ("board.json", "ledger.jsonl", "config.json")
+                }
+                response, unavailable = self._request(
                     "POST",
                     "/api/cards/undo",
                     {
                         "context": "main", "id": package["id"],
-                        "undoToken": answer["undoToken"],
+                        "undoToken": "0" * 64,
                     },
                     port=port,
                 )
-                self.assertEqual(response.status, 200)
-                self.assertTrue(undone["ok"])
+                self.assertEqual(response.status, 404)
+                self.assertEqual(unavailable, {"error": "not found"})
+                self.assertEqual(before, {
+                    name: (source / name).read_bytes()
+                    for name in ("board.json", "ledger.jsonl", "config.json")
+                })
             finally:
                 self._stop_server(httpd, thread)
 
@@ -806,8 +874,9 @@ process.stdout.write(JSON.stringify({
                 }
 
             self.assertEqual(decision_plane(rebuilt), decision_plane(actual))
+            self.assertNotIn("/api/cards/undo", server.POST_ROUTES)
+            self.assertNotIn("/api/cards/undo", DECK_JS.read_text(encoding="utf-8"))
 
-    @unittest.expectedFailure
     def test_copy_context_is_durably_advisory_and_filters_unsafe_copyable_links(self):
         """Desired: the copied artifact carries its boundary without UI chrome."""
         board = schema.default_board("Fictional copy-context kiln")

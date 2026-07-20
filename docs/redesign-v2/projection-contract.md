@@ -725,7 +725,7 @@ headers, command lines, or file contents.
 
 `copyContext.text` is generated in this fixed section order:
 
-1. `HFLedger context`
+1. `HFLedger context (non-authoritative)`
 2. Item title and stable source reference
 3. `Why here`
 4. Status and primary home
@@ -740,6 +740,8 @@ It is plain text, at most 4,000 characters, and truncated only at section or
 whole-line boundaries. It contains no local preference note, raw evidence file
 content, secret, full collector error, or hidden provenance payload. Copy
 Context is assistance for an agent, not authority to perform the next action.
+Only links that pass the same exact projected-link resolver used for opening
+are included in the copied bytes.
 
 ## 13. Current HFLC adapter requirements
 

@@ -1422,6 +1422,17 @@ fn custom_menu_item(
     MenuItem::with_id(app, id, text, enabled, accelerator)
 }
 
+fn guarded_item_menu_accelerator(id: &str) -> Option<&'static str> {
+    debug_assert!(matches!(
+        id,
+        "item.open" | "item.acknowledge" | "item.snooze" | "item.watch"
+    ));
+    // The page owns the bare O/E/S/W shortcuts because it can suppress them
+    // while an editable control or modal has focus. Native menu accelerators
+    // cannot observe that state, so these commands remain click-only here.
+    None
+}
+
 fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, NativeMenuState)> {
     let about = AboutMetadata {
         name: Some("HFLedger".into()),
@@ -1598,17 +1609,29 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
         "item.open",
         "Open Authoritative Source",
         false,
-        Some("O"),
+        guarded_item_menu_accelerator("item.open"),
     )?;
     let acknowledge = custom_menu_item(
         app,
         "item.acknowledge",
         "Acknowledge Locally",
         false,
-        Some("E"),
+        guarded_item_menu_accelerator("item.acknowledge"),
     )?;
-    let snooze = custom_menu_item(app, "item.snooze", "Snooze Locally…", false, Some("S"))?;
-    let watch = custom_menu_item(app, "item.watch", "Watch", false, Some("W"))?;
+    let snooze = custom_menu_item(
+        app,
+        "item.snooze",
+        "Snooze Locally…",
+        false,
+        guarded_item_menu_accelerator("item.snooze"),
+    )?;
+    let watch = custom_menu_item(
+        app,
+        "item.watch",
+        "Watch",
+        false,
+        guarded_item_menu_accelerator("item.watch"),
+    )?;
     let item_copy_context = custom_menu_item(
         app,
         "item.copy-context",
@@ -2167,9 +2190,10 @@ pub fn run() {
 mod tests {
     use super::{
         active_context_id, attention_badge_count, decision_count, engine_serve_arguments,
-        event_is_relevant, menu_eligibility, merge_watch_signal, native_command_for_menu_id,
-        project_slug, validate_stored_config, watch_snapshot_is_safe, workspace_id,
-        workspace_watch_plan, NativeCommand, Preferences, StoredConfig, Workspace, WorkspaceKind,
+        event_is_relevant, guarded_item_menu_accelerator, menu_eligibility, merge_watch_signal,
+        native_command_for_menu_id, project_slug, validate_stored_config, watch_snapshot_is_safe,
+        workspace_id, workspace_watch_plan, NativeCommand, Preferences, StoredConfig, Workspace,
+        WorkspaceKind,
     };
     use notify::{Event, EventKind};
     use serde_json::json;
@@ -2380,6 +2404,14 @@ mod tests {
         assert_eq!(native_command_for_menu_id("item.resolve"), None);
         assert_eq!(native_command_for_menu_id("shell.run"), None);
         assert_eq!(native_command_for_menu_id("file.open-path"), None);
+    }
+
+    #[test]
+    fn native_item_menu_leaves_bare_shortcuts_to_the_guarded_page_handler() {
+        for id in ["item.open", "item.acknowledge", "item.snooze", "item.watch"] {
+            assert_eq!(guarded_item_menu_accelerator(id), None, "{id}");
+            assert!(native_command_for_menu_id(id).is_some(), "{id}");
+        }
     }
 
     #[test]

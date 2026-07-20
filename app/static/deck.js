@@ -1,9 +1,16 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
+
+function initialContext() {
+  const query = new URLSearchParams(location.search).getAll("context");
+  if (query.length === 1 && query[0]) return query[0];
+  return localStorage.getItem("ledger-context") || "";
+}
+
 const state = {
-  context: localStorage.getItem("ledger-context") || "",
-  data: null, cards: [], index: 0, busy: false, pointer: null, undo: null
+  context: initialContext(),
+  data: null, cards: [], index: 0, busy: false, pointer: null
 };
 
 function node(tag, className, text) {
@@ -118,29 +125,9 @@ async function answer(action, extra = {}) {
       state.index += 1;
       renderCard(); toast("Request for context recorded.");
     } else {
-      if (result.undoAvailable) showUndo(card, result);
       await loadCards(false);
       toast(action.startsWith("snooze") ? "Card snoozed." : "Outcome recorded.");
     }
-  } catch (error) { toast(error.message); }
-  finally { state.busy = false; }
-}
-
-function showUndo(card, result) {
-  state.undo = { id: card.id, undoToken: result.undoToken };
-  $("#undo-bar").hidden = false;
-  clearTimeout(showUndo.timer);
-  showUndo.timer = setTimeout(() => { $("#undo-bar").hidden = true; state.undo = null; },
-                              result.undoWindowSec * 1000);
-}
-
-async function undo() {
-  if (!state.undo || state.busy) return;
-  state.busy = true;
-  try {
-    await post("/api/cards/undo", state.undo);
-    state.undo = null; $("#undo-bar").hidden = true;
-    await loadCards(false); toast("Outcome restored to the deck.");
   } catch (error) { toast(error.message); }
   finally { state.busy = false; }
 }
@@ -169,6 +156,9 @@ async function loadCards(loading = true) {
     const data = await request(`/api/cards${query}`);
     state.data = data; state.context = data.activeContext; state.cards = data.cards; state.index = 0;
     localStorage.setItem("ledger-context", state.context);
+    const url = new URL(location.href);
+    url.searchParams.set("context", state.context);
+    history.replaceState(null, "", url);
     renderShell(data); renderCard();
   } catch (error) {
     $("#deck-error").textContent = error.message; showView("deck-error");
@@ -178,8 +168,6 @@ async function loadCards(loading = true) {
 $("#deck-context").addEventListener("change", (event) => {
   state.context = event.target.value; localStorage.setItem("ledger-context", state.context); loadCards();
 });
-$("#undo-button").addEventListener("click", undo);
-
 const cardElement = $("#active-card");
 cardElement.addEventListener("pointerdown", (event) => {
   if (event.target.closest("button")) return;

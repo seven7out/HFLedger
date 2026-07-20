@@ -25,11 +25,17 @@ test("bounds untrusted text without interpreting markup", () => {
 
 test("accepts only explicit safe source destinations", () => {
   const base = "http://127.0.0.1:43123/?context=main";
-  assert.equal(ui.safeLinkTarget({ target: "/deck?context=main" }, base), "http://127.0.0.1:43123/deck?context=main");
-  assert.equal(ui.safeLinkTarget({ target: "https://example.invalid/task/7" }, base), "https://example.invalid/task/7");
-  assert.equal(ui.safeLinkTarget({ target: "/api/local-state" }, base), null);
-  assert.equal(ui.safeLinkTarget({ target: "javascript:alert(1)" }, base), null);
-  assert.equal(ui.safeLinkTarget({ target: "file:///private/ledger.jsonl" }, base), null);
+  assert.equal(ui.safeLinkTarget({ resolved: true, target: "/deck?context=main" }, base), "http://127.0.0.1:43123/deck?context=main");
+  assert.equal(ui.safeLinkTarget({ resolved: true, target: "https://example.invalid/task/7" }, base), "https://example.invalid/task/7");
+  assert.equal(ui.safeLinkTarget({ resolved: true, target: "/api/local-state" }, base), null);
+  assert.equal(ui.safeLinkTarget({ resolved: false, target: "https://example.invalid/task/7" }, base), null);
+  assert.equal(ui.safeLinkTarget({ target: "https://example.invalid/unresolved" }, base), null);
+  assert.equal(ui.safeLinkTarget({ resolved: true, target: "https://user:secret@example.invalid/task/7" }, base), null);
+  for (const target of [
+    "http://127.1/api/run", "http://0177.0.0.1/api/run",
+    "http://0x7f.0.0.1/api/run", "http://0300.0250.0001.0001/source",
+    "http://169.254.1/latest/meta-data", "http://2130706433/api/run",
+  ]) assert.equal(ui.safeLinkTarget({ resolved: true, target }, base), null, target);
 });
 
 test("Copy Context stays bounded, plain, and excludes local notes", () => {
@@ -44,7 +50,7 @@ test("Copy Context stays bounded, plain, and excludes local notes", () => {
     evidenceIds: ["evidence-fictional"],
     coverage: { namedAbsences: [{ detail: "Repository observation is unavailable." }] },
     localNote: "SECRET_LOCAL_NOTE",
-    copyContext: { text: "HFLedger context\nItem: fictional\nNext action: inspect" },
+    copyContext: { text: "HFLedger context (non-authoritative)\nItem: fictional\nNext action: inspect" },
   };
   const orientation = {
     evidence: [{
@@ -55,7 +61,7 @@ test("Copy Context stays bounded, plain, and excludes local notes", () => {
     }],
   };
   const context = ui.buildCopyContext(item, orientation);
-  assert.equal(context, "HFLedger context\nItem: fictional\nNext action: inspect");
+  assert.equal(context, "HFLedger context (non-authoritative)\nItem: fictional\nNext action: inspect");
   assert.ok(!context.includes("SECRET_LOCAL_NOTE"));
   assert.ok(context.length <= 4000);
 });
