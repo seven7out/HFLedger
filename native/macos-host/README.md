@@ -111,9 +111,9 @@ The updater is intentionally disabled until a stable release URL and a Tauri
 updater signing public key are approved. Developer ID signing, notarization,
 publishing a draft, and enabling update delivery are separate attended gates.
 
-This branch provides a Quick Look–styled in-app evidence preview without using
-the macOS Quick Look framework or adding native authority. Transition-based
-attention notifications, a rich menu-bar status/popover, analytics, advanced
-disputes, multi-machine skew detection, global search, and custom deep links
-remain deferred. The current app must not present empty controls or
+The app provides a Quick Look–styled in-app evidence preview without using the
+macOS Quick Look framework or adding native authority. Transition-based
+attention notifications, a rich menu-bar status/popover, analytics, broader
+dispute analytics, multi-machine skew detection, global search, and custom deep
+links remain deferred. The current app must not present empty controls or
 documentation that implies those capabilities are shipped.

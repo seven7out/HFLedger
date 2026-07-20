@@ -30,7 +30,7 @@ full inspector remains the deeper dossier.
 validated orientation V2 JSON
         |
         v
-closed item/evidence/link projection lookup
+closed item/evidence projection lookup + server-owned link resolution
         |
         v
 bounded plain-text preview model
@@ -39,12 +39,14 @@ bounded plain-text preview model
 DOM nodes created with textContent
 ```
 
-The preview performs no fetch, filesystem read, file discovery, HTML parsing,
-shell execution, native invoke, collector action, local-state write, or
-authoritative mutation. Its optional Open Source buttons reuse the existing
-`safeLinkTarget` validation and `openSafeTarget` navigation path. Evidence
-references are display-only and can never become navigation targets by
-themselves.
+The preview performs no content fetch, filesystem read, file discovery, HTML
+parsing, shell execution, native invoke, collector action, local-state write,
+or authoritative mutation. The existing page load fetches the read-only
+`/api/links` resolver response once per projection. Optional Open Source buttons
+join that response to projected labels by exact link id, then reuse
+`safeLinkTarget` as defense in depth and `openSafeTarget` for attended
+navigation. Raw projected targets and evidence references are display-only and
+can never become navigation targets by themselves.
 
 ## Evidence allowlist
 
@@ -92,7 +94,7 @@ link, or malformed record receives an explicit unavailable state.
 | --- | --- |
 | Arbitrary file read or missing-file probe | Impossible in this feature. File-shaped references are literal text; there is no file API or native invoke. |
 | Symlink or `../` path escape | No path is resolved. Escape-shaped references remain bounded display text. `file:` links are rejected by the existing link validator. |
-| Remote fetch or untrusted HTML render | The preview makes no request and never assigns HTML. Existing `http`/`https` source links navigate only after a user activates Open Source. |
+| Remote fetch or untrusted HTML render | The preview makes no content request and never assigns HTML. Resolver-approved `http`/`https` source links navigate only after a user activates Open Source. |
 | Script/markup injection | Test corpus preserves tags as visible text and proves no `innerHTML`, `outerHTML`, or `insertAdjacentHTML` path exists. |
 | Huge evidence or UI denial of service | Projection and preview caps are applied before DOM construction; the panel scrolls within a bounded viewport. |
 | False corroboration | Provenance is copied from the projection's closed vocabulary; unsupported values become `unobserved`. |
@@ -112,6 +114,7 @@ Focused automated checks:
 The focused suite covers no selection, explicit allowlist behavior, invalid
 provenance, malformed/missing evidence, huge claims, unsupported kinds,
 untrusted markup, missing/path-escape-shaped references, unsafe `file:` links,
+missing/unresolved resolver records, refusal to trust a raw projected target,
 keyboard ordering, selection updates, focus return, and the light/dark/reduced
 motion CSS contracts.
 

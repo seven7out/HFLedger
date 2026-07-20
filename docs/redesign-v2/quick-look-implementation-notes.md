@@ -10,8 +10,9 @@
 - A Quick Look–styled in-app overlay over orientation V2 JSON is preferable to
   native macOS Quick Look because the product is previewing bounded projected
   evidence text, not asking the OS to open files.
-- Existing validated item source links remain the only permitted Open Source
-  path; evidence references themselves are display-only.
+- Existing item source-link identifiers plus the server-owned `/api/links`
+  resolution response are the only permitted Open Source path; raw projected
+  targets and evidence references themselves are display-only.
 
 ## Decisions
 
@@ -21,6 +22,9 @@
 - Treat every projection field as untrusted display data and create preview
   content with text nodes only.
 - Keep the full inspector unchanged as the deeper evidence view.
+- Join projected link labels to resolver records by exact link id. Quick Look
+  cannot navigate when the resolver record is absent, unresolved, duplicated,
+  or rejected by the client-side defense in depth.
 - Allowlist every closed orientation V2 evidence kind except
   `untrusted-excerpt` and `other`. Unknown kinds and empty claims use a fixed
   unavailable state and do not render raw claim text.
@@ -46,6 +50,9 @@
   because its active workspace could be private. The built bundle was signed and
   release-verified, while interaction dogfood used only the fictional Ovenlight
   live fixture in the served app UI.
+- Integration after Prompt 21's no-write-back remediation replaced the branch's
+  raw projection-target validation with the server-owned link resolver and
+  extended the fictional fixture with the same read-only resolver response.
 
 ## Additional owner asks filed
 

@@ -2473,12 +2473,11 @@ pub fn run() {
 mod tests {
     use super::{
         active_context_id, attention_badge_count, decision_count, decode_stored_config,
-        engine_serve_arguments, event_is_relevant, guarded_item_menu_accelerator,
-        menu_eligibility, merge_watch_signal, native_command_for_menu_id, project_slug,
-        text_size_after, validate_stored_config, watch_snapshot_is_safe, workspace_id,
-        workspace_watch_plan, write_config_unlocked, AppPaths, AppSnapshot, HostStatus,
-        NativeCommand, Preferences, StoredConfig, TextSize, TextSizeAction, Workspace,
-        WorkspaceKind, CONFIG_VERSION,
+        engine_serve_arguments, event_is_relevant, guarded_item_menu_accelerator, menu_eligibility,
+        merge_watch_signal, native_command_for_menu_id, project_slug, text_size_after,
+        validate_stored_config, watch_snapshot_is_safe, workspace_id, workspace_watch_plan,
+        write_config_unlocked, AppPaths, AppSnapshot, HostStatus, NativeCommand, Preferences,
+        StoredConfig, TextSize, TextSizeAction, Workspace, WorkspaceKind, CONFIG_VERSION,
     };
     use notify::{Event, EventKind};
     use serde_json::json;

@@ -164,7 +164,10 @@ function publicWebHost(hostname) {
         (first === 169 && second === 254) || (first === 172 && second >= 16 && second <= 31) ||
         (first === 192 && second === 168)) return false;
   }
-  if (host.includes(":") && (host === "::" || host === "::1" || host.startsWith("fc") || host.startsWith("fd") || /^fe[89ab]/.test(host))) return false;
+  if (host.includes(":") && (
+    host === "::" || host === "::1" || host.startsWith("::ffff:") ||
+    host.startsWith("fc") || host.startsWith("fd") || /^fe[89ab]/.test(host)
+  )) return false;
   return true;
 }
 

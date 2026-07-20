@@ -575,6 +575,8 @@ process.stdout.write(JSON.stringify({
             "http://0300.0250.0001.0001/source",
             "http://169.254.1/latest/meta-data",
             "http://2130706433/api/run",
+            "http://[::ffff:127.0.0.1]/api/run",
+            "http://[::ffff:7f00:1]/api/run",
             "http://service.local/source",
             "http://single-label/source",
             "/api/decisions/resolve",

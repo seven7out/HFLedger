@@ -245,14 +245,15 @@ JSON framing/body limits, explicit static allowlisting, CSP/frame/MIME/referrer
 headers, text-only rendering of user-authored prose, closed route registries,
 stale-card hashes, locked board/ledger writers, and atomic replacement.
 
-The deferred Quick Look branch adds only a Quick Look–styled in-app evidence
-preview over the existing orientation V2 projection. It does not use macOS
-Quick Look, read referenced files, fetch remote content, interpret markup, or
-add a server/native capability. Unsupported evidence uses a fixed unavailable
-state, while the existing inspector remains the deeper dossier.
+Quick Look adds only a Quick Look–styled in-app evidence preview over the
+existing orientation V2 projection. It does not use macOS Quick Look, read
+referenced files, fetch remote content, interpret markup, or add native
+authority. Open Source requires the existing server-owned read-only link
+resolver; unsupported evidence uses a fixed unavailable state, while the
+existing inspector remains the deeper dossier.
 
 V1 does not ship transition-based attention notifications, a rich menu-bar
-status UI, effectiveness analytics, advanced dispute discovery,
+status UI, effectiveness analytics, broader dispute analytics,
 multi-machine skew detection, global search, custom deep links, cloud triage
 sync, authoritative Today write-back, notarized publication, updater delivery,
 remote serving, collector auto-enable, or private authoritative cutover. The UI

@@ -9,11 +9,16 @@ from datetime import datetime, timedelta, timezone
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 import json
 from pathlib import Path
+import sys
 from urllib.parse import parse_qs, urlparse
 
 
 ROOT = Path(__file__).resolve().parents[2]
 STATIC = ROOT / "app" / "static"
+sys.path.insert(0, str(ROOT))
+
+from core.link_safety import resolve_projected_link
+
 NOW = "2026-07-18T18:00:00Z"
 OBSERVED = "2026-07-18T17:55:00Z"
 
@@ -329,6 +334,16 @@ class Handler(SimpleHTTPRequestHandler):
             local = LOCAL.setdefault(context, fresh_local(context))
             return self._json(200, {"revision": local["revision"], "state": local,
                                     "capability": {"mode": "session", "available": True, "schemaVersion": 1, "reason": None}})
+        if parsed.path == "/api/links":
+            context = self._context()
+            links = []
+            for link in projected(context)["links"]:
+                target = resolve_projected_link(link, context)
+                record = {"id": link["id"], "resolved": target is not None}
+                if target is not None:
+                    record["target"] = target
+                links.append(record)
+            return self._json(200, {"version": 1, "context": context, "links": links})
         if parsed.path in {"/", "/index.html"}:
             target = STATIC / "index.html"
         elif parsed.path == "/deck":
