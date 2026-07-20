@@ -44,9 +44,13 @@ score.
 ## Output
 
 Orientation V2 adds a bounded `disputes` object and `totals.disputes`. Each
-dossier adds `disputeIds`. Existing clients ignore these additive fields; the
-existing `disputed` home and `has-dispute` secondary flag continue to carry the
-primary visual behavior.
+dossier adds `disputeIds`, `disputeDetailOmitted`, and
+`disputeEvidenceOmitted`. `disputeDetailOmitted` is true only when the item is
+deterministically disputed but its detail fell beyond the public dossier cap.
+`disputeEvidenceOmitted` is true only when the global evidence cap could not
+retain both endpoints of that item's deterministic witness. Existing clients
+ignore these additive fields; the existing `disputed` home and `has-dispute`
+secondary flag continue to carry the primary visual behavior.
 
 Each dispute contains:
 
@@ -91,9 +95,18 @@ The stable id is SHA-256 over the rule id, exact item id, and sorted conflicting
 evidence ids. Titles and display wording are excluded, so renaming an item does
 not change its dispute identity. Claim text is limited to 500 characters,
 source references to 800, reasons to 280, and handoff labels to 180. The
-projection lists at most 500 disputes after deterministic critical-first
-ordering; classification still evaluates every detected pair. Exceeding the
-bound invalidates a complete screen conclusion.
+projection lists at most 500 disputes. Overflow membership is deterministic by
+severity/rule, item id, then sorted conflicting evidence-id pair; emitted
+dossiers retain the stable id ordering in the public list. Named-rule totals are
+exact combinatorial counts over non-overlapping indexed buckets, and explicit
+rules traverse only declared edges. Every affected item remains classified as
+disputed. Witness endpoints are pinned before the remaining global evidence
+budget is filled by normal recency, so every affected item retains a
+deterministic reciprocal evidence-pair witness whenever the witnesses fit
+within the 4,000-record evidence cap. If witness endpoints alone exceed that
+cap, deterministic item order decides which complete pairs remain and the other
+dossiers set `disputeEvidenceOmitted` rather than claiming traceability.
+Exceeding the bound invalidates a complete screen conclusion.
 
 ## False-positive analysis
 

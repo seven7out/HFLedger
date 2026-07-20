@@ -32,6 +32,13 @@
   selected minimal bundle by Sam's explicit follow-up authorization.
 - Prompt 21A's `verify_release.py` artifact mutation will not be retained;
   verification must observe rather than repair the bundle.
+- The Prompt 21 source resolver initially accepted legacy numeric IPv4 forms
+  that browsers normalize into private addresses. The integration rejects the
+  entire legacy numeric-host grammar and retains a client-side check.
+- Prompt 18's isolated implementation compared every evidence pair before the
+  projection cap. A 2,000-record fictional no-dispute case took about 17
+  seconds, violating the six-second loop. Prompt 18 is being indexed and given
+  a 4,000-record performance regression before acceptance.
 
 ## Sam-asks filed
 

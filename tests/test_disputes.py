@@ -1,6 +1,7 @@
 import copy
 import datetime
 import json
+import time
 import unittest
 
 from core import disputes, orientation, schema
@@ -154,6 +155,105 @@ class DisputeDetectorTests(unittest.TestCase):
         self.assertNotIn("\x00", claim["claim"])
         self.assertIn("<script>", claim["claim"])
 
+    def test_indexed_overflow_keeps_exact_total_and_reordering_stability(self):
+        positives = [record(
+            "evidence-shipped-%03d" % index, "item-a", "ledger:main",
+            "ledger:shipment:%03d" % index, "shipment", "shipped",
+            "2026-07-20T11:00:00+00:00", provenance="agent-reported",
+            kind="completion") for index in range(40)]
+        failures = [record(
+            "evidence-check-%03d" % index, "item-a", "ci:orchard",
+            "check:orchard:%03d" % index, "required-check", "failed",
+            "2026-07-20T11:30:00+00:00", kind="ci") for index in range(40)]
+        values = {value["id"]: value for value in positives + failures}
+        before = copy.deepcopy(values)
+        first = disputes.detect(values, self.items, self.sources, maximum=25)
+        second = disputes.detect(
+            dict(reversed(list(values.items()))), self.items, self.sources, maximum=25)
+
+        self.assertEqual(values, before)
+        self.assertEqual(first, second)
+        self.assertEqual(first["total"], 1600)
+        self.assertEqual(len(first["items"]), 25)
+        self.assertEqual(first["cap"], 25)
+        self.assertTrue(first["truncated"])
+        selected_pairs = sorted(tuple(
+            claim["evidenceId"] for claim in dispute["conflictingClaims"])
+            for dispute in first["items"])
+        expected_pairs = sorted(
+            tuple(sorted((positive["id"], failure["id"])))
+            for positive in positives for failure in failures)[:25]
+        self.assertEqual(selected_pairs, expected_pairs)
+
+    def test_explicit_edges_are_direct_deduplicated_and_yield_to_typed_rules(self):
+        first = record(
+            "evidence-explicit-a", "item-a", "board:main", "board:explicit:a",
+            "activity", "reported", "2026-07-20T11:00:00+00:00",
+            contradicts=["evidence-explicit-b"])
+        second = record(
+            "evidence-explicit-b", "item-a", "ledger:main", "ledger:explicit:b",
+            "activity", "reported", "2026-07-20T11:05:00+00:00",
+            provenance="agent-reported", contradicts=["evidence-explicit-a"])
+        opened = record(
+            "evidence-open", "item-a", "forge:orchard", "repo:orchard/pr:7",
+            "shipment", "open", "2026-07-20T11:30:00+00:00",
+            kind="pull-request", contradicts=["evidence-shipped"])
+        shipped = copy.deepcopy(self.shipped)
+        shipped["contradictsEvidenceIds"] = ["evidence-open"]
+
+        result = self.detect(first, second, shipped, opened)
+        self.assertEqual(result["total"], 2)
+        self.assertEqual(
+            [value["ruleId"] for value in result["items"]],
+            ["explicit-evidence-conflict", "reported-shipment-open"])
+
+    def test_resolver_reports_complete_membership_past_public_cap(self):
+        positives = [record(
+            "evidence-shipped-%03d" % index, "item-a", "ledger:main",
+            "ledger:shipment:%03d" % index, "shipment", "shipped",
+            "2026-07-20T11:00:00+00:00", provenance="agent-reported",
+            kind="completion") for index in range(30)]
+        failures = [record(
+            "evidence-check-%03d" % index, "item-a", "ci:orchard",
+            "check:orchard:%03d" % index, "required-check", "failed",
+            "2026-07-20T11:30:00+00:00", kind="ci") for index in range(30)]
+        values = {value["id"]: value for value in positives + failures}
+
+        result = disputes.resolve(values, self.items, self.sources, maximum=7)
+        self.assertEqual(result["output"]["total"], 900)
+        self.assertEqual(len(result["output"]["items"]), 7)
+        self.assertEqual(result["affectedItemIds"], ["item-a"])
+        self.assertEqual(
+            set(result["conflictingEvidenceIds"]), set(values))
+        self.assertEqual(
+            result["witnessPairsByItem"]["item-a"],
+            ["evidence-check-000", "evidence-shipped-000"])
+
+    def test_dense_reciprocal_explicit_edges_complete_under_six_seconds(self):
+        count = 1000
+        records = [record(
+            "evidence-explicit-%04d" % index, "item-a", "board:main",
+            "board:explicit:%04d" % index, "activity", "reported",
+            "2026-07-20T11:00:00+00:00") for index in range(count)]
+        evidence_ids = [value["id"] for value in records]
+        for value in records:
+            value["contradictsEvidenceIds"] = [
+                evidence_id for evidence_id in evidence_ids
+                if evidence_id != value["id"]
+            ]
+        values = {value["id"]: value for value in records}
+
+        started = time.monotonic()
+        result = disputes.resolve(values, self.items, self.sources, maximum=19)
+        elapsed = time.monotonic() - started
+
+        self.assertLess(elapsed, 6.0)
+        self.assertEqual(result["output"]["total"], count * (count - 1) // 2)
+        self.assertEqual(len(result["output"]["items"]), 19)
+        self.assertTrue(result["output"]["truncated"])
+        self.assertEqual(len(result["conflictingEvidenceIds"]), count)
+        self.assertEqual(result["witnessPairsByItem"]["item-a"], evidence_ids[:2])
+
 
 class OrientationDisputeIntegrationTests(unittest.TestCase):
     def setUp(self):
@@ -214,6 +314,7 @@ class OrientationDisputeIntegrationTests(unittest.TestCase):
                          second["disputes"]["items"][0]["id"])
         self.assertEqual(first["items"][0]["disputeIds"],
                          [first["disputes"]["items"][0]["id"]])
+        self.assertFalse(first["items"][0]["disputeDetailOmitted"])
 
     def test_unmatched_completion_is_needs_you_with_a_dispute_secondary_flag(self):
         self.board["unmatchedCompletions"] = [{
@@ -230,6 +331,162 @@ class OrientationDisputeIntegrationTests(unittest.TestCase):
         self.assertIn("has-dispute", item["secondaryFlags"])
         self.assertEqual(result["disputes"]["items"][0]["ruleId"], "unmatched-completion")
         self.assertEqual(result["totals"]["disputes"], 1)
+
+    def test_four_thousand_single_item_records_complete_under_six_seconds(self):
+        self.board["queue"] = [{
+            "id": "task:wide", "title": "Wide fictional item",
+            "status": "In Progress", "updated": "2026-07-20T11:00:00+00:00",
+        }]
+        source_record = {
+            "id": "adapter:wide", "kind": "collector",
+            "label": "Fictional bulk source", "state": "healthy",
+            "configured": True, "requiredForScreen": False,
+            "lastAttemptAt": "2026-07-20T11:58:00+00:00",
+            "lastSuccessfulObservationAt": "2026-07-20T11:58:00+00:00",
+            "newestObservedChangeAt": "2026-07-20T11:50:00+00:00",
+            "staleAfterSeconds": 3600, "observationCount": 4000,
+            "scopeHealth": [{
+                "id": "bulk", "state": "healthy",
+                "lastSuccessfulObservationAt": "2026-07-20T11:58:00+00:00",
+                "reasonCodes": [],
+            }],
+            "reasonCodes": [], "dataClassification": "untrusted-observations",
+            "grantsAuthority": False,
+        }
+        evidence = [{
+            "sourceId": "adapter:wide", "sourceRef": "bulk:%04d" % index,
+            "itemSourceRef": "task:wide", "kind": "completion",
+            "claim": "Fictional shipment observation %04d." % index,
+            "observedAt": "2026-07-20T11:58:00+00:00",
+            "itemChangedAt": "2026-07-20T11:50:00+00:00",
+            "provenance": "agent-reported", "claimKind": "shipment",
+            "claimState": "shipped",
+        } for index in range(4000)]
+        adapter = {
+            "schemaVersion": 1, "adapterId": "wide-performance",
+            "sources": [source_record], "items": [], "runs": [], "changes": [],
+            "evidence": evidence, "links": [], "diagnostics": [],
+        }
+
+        started = time.monotonic()
+        result = self.build(adapter)
+        elapsed = time.monotonic() - started
+
+        self.assertLess(elapsed, 6.0)
+        self.assertEqual(result["disputes"], {
+            "items": [], "total": 0, "cap": disputes.MAX_DISPUTES,
+            "truncated": False,
+        })
+        self.assertEqual(result["totals"]["evidence"], 4000)
+
+    def test_projection_classifies_every_affected_item_past_dossier_cap(self):
+        self.board["queue"] = [{
+            "id": "task:overflow:%03d" % index,
+            "title": "Fictional shipped item %03d" % index,
+            "status": "Done", "updated": "2026-07-20T11:00:00+00:00",
+        } for index in range(disputes.MAX_DISPUTES + 1)]
+        failures = [{
+            "sourceId": "ci:orchard", "sourceRef": "check:overflow:%03d" % index,
+            "itemSourceRef": "task:overflow:%03d" % index, "kind": "ci",
+            "claim": "The exact fictional required check is failing.",
+            "observedAt": "2026-07-20T11:58:00+00:00",
+            "itemChangedAt": "2026-07-20T11:50:00+00:00",
+            "provenance": "verified", "claimKind": "required-check",
+            "claimState": "failed",
+        } for index in range(disputes.MAX_DISPUTES + 1)]
+
+        result = self.build(self.adapter([], failures))
+
+        self.assertEqual(result["disputes"]["total"], disputes.MAX_DISPUTES + 1)
+        self.assertEqual(len(result["disputes"]["items"]), disputes.MAX_DISPUTES)
+        self.assertTrue(result["disputes"]["truncated"])
+        self.assertTrue(all(item["primaryHome"] == "disputed" for item in result["items"]))
+        omitted = [item for item in result["items"] if not item["disputeIds"]]
+        self.assertEqual(len(omitted), 1)
+        self.assertTrue(omitted[0]["disputeDetailOmitted"])
+        self.assertTrue(all(
+            not item["disputeDetailOmitted"]
+            for item in result["items"] if item["disputeIds"]
+        ))
+        disputed_evidence = [
+            record for record in result["evidence"]
+            if record["provenance"] == "disputed"
+        ]
+        self.assertEqual(len(disputed_evidence), 2 * (disputes.MAX_DISPUTES + 1))
+        omitted_evidence = [
+            record for record in disputed_evidence
+            if record["itemId"] == omitted[0]["id"]
+        ]
+        self.assertEqual(len(omitted_evidence), 2)
+        self.assertEqual(
+            omitted_evidence[0]["contradictsEvidenceIds"],
+            [omitted_evidence[1]["id"]])
+        self.assertEqual(
+            omitted_evidence[1]["contradictsEvidenceIds"],
+            [omitted_evidence[0]["id"]])
+
+    def test_evidence_cap_pins_every_dispute_witness_when_endpoints_fit(self):
+        item_count = 1400
+        self.board["queue"] = [{
+            "id": "task:pinned:%04d" % index,
+            "title": "Fictional pinned item %04d" % index,
+            "status": "Done", "updated": "2026-07-20T11:00:00+00:00",
+        } for index in range(item_count)]
+        failures = [{
+            "sourceId": "ci:orchard", "sourceRef": "check:pinned:%04d" % index,
+            "itemSourceRef": "task:pinned:%04d" % index, "kind": "ci",
+            "claim": "The exact fictional required check is failing.",
+            "observedAt": "2026-07-20T11:58:00+00:00",
+            "itemChangedAt": "2026-07-20T11:50:00+00:00",
+            "provenance": "verified", "claimKind": "required-check",
+            "claimState": "failed",
+        } for index in range(item_count)]
+
+        result = self.build(self.adapter([], failures))
+
+        self.assertEqual(result["disputes"]["total"], item_count)
+        self.assertEqual(result["totals"]["evidence"], orientation.V2_MAX_EVIDENCE)
+        self.assertEqual(len(result["items"]), item_count)
+        evidence_by_id = {record["id"]: record for record in result["evidence"]}
+        for item in result["items"]:
+            self.assertEqual(item["primaryHome"], "disputed")
+            self.assertFalse(item["disputeEvidenceOmitted"])
+            item_evidence = set(item["evidenceIds"])
+            reciprocal = [
+                (evidence_id, other_id)
+                for evidence_id in item_evidence
+                for other_id in evidence_by_id[evidence_id]["contradictsEvidenceIds"]
+                if other_id in item_evidence
+                and evidence_id in evidence_by_id[other_id]["contradictsEvidenceIds"]
+            ]
+            self.assertTrue(reciprocal)
+
+    def test_evidence_cap_marks_items_when_witness_endpoints_exceed_cap(self):
+        item_count = orientation.V2_MAX_EVIDENCE // 2 + 1
+        self.board["queue"] = [{
+            "id": "task:over-cap:%04d" % index,
+            "title": "Fictional over-cap item %04d" % index,
+            "status": "Done", "updated": "2026-07-20T11:00:00+00:00",
+        } for index in range(item_count)]
+        failures = [{
+            "sourceId": "ci:orchard", "sourceRef": "check:over-cap:%04d" % index,
+            "itemSourceRef": "task:over-cap:%04d" % index, "kind": "ci",
+            "claim": "The exact fictional required check is failing.",
+            "observedAt": "2026-07-20T11:58:00+00:00",
+            "itemChangedAt": "2026-07-20T11:50:00+00:00",
+            "provenance": "verified", "claimKind": "required-check",
+            "claimState": "failed",
+        } for index in range(item_count)]
+
+        result = self.build(self.adapter([], failures))
+
+        omitted = [
+            item for item in result["items"] if item["disputeEvidenceOmitted"]
+        ]
+        self.assertEqual(result["totals"]["evidence"], orientation.V2_MAX_EVIDENCE)
+        self.assertEqual(len(omitted), 1)
+        self.assertEqual(omitted[0]["primaryHome"], "disputed")
+        self.assertEqual(omitted[0]["evidenceIds"], [])
 
 
 if __name__ == "__main__":

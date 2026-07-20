@@ -681,6 +681,7 @@ class _V2Builder:
         self.dispute_output = {
             "items": [], "total": 0, "cap": disputes.MAX_DISPUTES, "truncated": False,
         }
+        self.dispute_witness_pairs = {}
         self._truncated = False
         self._adapter_valid = True
         self._collector_valid = True
@@ -927,6 +928,7 @@ class _V2Builder:
             "_verifiedShipment": False,
             "_disputed": False,
             "_disputeIds": [],
+            "_disputeEvidenceOmitted": False,
             "_hasUntrusted": bool(raw.get("hasUntrustedContext")),
             "_confirmationRequired": bool(raw.get("confirmationRequired")),
             "_reasonCode": None,
@@ -1883,37 +1885,52 @@ class _V2Builder:
                     timestamp_estimated=estimated)
 
     def _link_conflicts(self):
-        evidence_count = len(self.evidence_records)
-        pair_limit = max(1, evidence_count * max(0, evidence_count - 1) // 2)
-        all_detected = disputes.detect(
-            self.evidence_records, self.items, self.sources, maximum=pair_limit)
-        all_disputes = all_detected["items"]
-        detected = {
-            "items": all_disputes[:disputes.MAX_DISPUTES],
-            "total": len(all_disputes),
-            "cap": disputes.MAX_DISPUTES,
-            "truncated": len(all_disputes) > disputes.MAX_DISPUTES,
+        resolution = disputes.resolve(
+            self.evidence_records, self.items, self.sources,
+            maximum=disputes.MAX_DISPUTES)
+        detected = resolution["output"]
+        self.dispute_witness_pairs = {
+            item_id: tuple(evidence_ids)
+            for item_id, evidence_ids in resolution["witnessPairsByItem"].items()
         }
-        public_ids = {record["id"] for record in detected["items"]}
-        for dispute in all_disputes:
-            item = self.items.get(dispute["itemId"])
-            if item is None:
-                continue
-            item["_disputed"] = True
-            item["_verifiedShipment"] = False
-            if dispute["id"] in public_ids and dispute["id"] not in item["_disputeIds"]:
-                item["_disputeIds"].append(dispute["id"])
-            evidence_ids = [
+        public_ids_by_item = {}
+        for dispute in detected["items"]:
+            public_ids_by_item.setdefault(dispute["itemId"], []).append(dispute["id"])
+        for item_id in resolution["affectedItemIds"]:
+            item = self.items.get(item_id)
+            if item is not None:
+                item["_disputed"] = True
+                item["_verifiedShipment"] = False
+                item["_disputeIds"] = sorted(set(
+                    item["_disputeIds"] + public_ids_by_item.get(item_id, [])))
+        for evidence_id in resolution["conflictingEvidenceIds"]:
+            record = self.evidence_records.get(evidence_id)
+            if record is not None:
+                record["provenance"] = "disputed"
+        # Public dossier pairs remain linked, and the resolver supplies one
+        # deterministic reciprocal witness for every affected item beyond the cap.
+        linked_pairs = set()
+        for dispute in detected["items"]:
+            evidence_ids = tuple(sorted(
                 claim["evidenceId"] for claim in dispute["conflictingClaims"]
                 if claim["evidenceId"] in self.evidence_records
-            ]
+            ))
+            if len(evidence_ids) == 2:
+                linked_pairs.add(evidence_ids)
+        for evidence_ids in resolution["witnessPairsByItem"].values():
+            pair = tuple(sorted(
+                evidence_id for evidence_id in evidence_ids
+                if evidence_id in self.evidence_records
+            ))
+            if len(pair) == 2:
+                linked_pairs.add(pair)
+        for evidence_ids in sorted(linked_pairs):
             for evidence_id in evidence_ids:
                 record = self.evidence_records[evidence_id]
                 for other_id in evidence_ids:
                     if other_id != evidence_id and other_id not in record["contradictsEvidenceIds"]:
                         record["contradictsEvidenceIds"].append(other_id)
                 record["contradictsEvidenceIds"].sort()
-                record["provenance"] = "disputed"
         if detected["truncated"]:
             self._diagnostic(
                 "disputes-truncated",
@@ -2543,7 +2560,22 @@ class _V2Builder:
         for records, limit, label, sort_key in limits:
             if len(records) <= limit:
                 continue
-            keep = {value["id"] for value in sorted(records.values(), key=sort_key)[:limit]}
+            if label == "evidence":
+                keep = set()
+                for item_id in sorted(self.dispute_witness_pairs):
+                    pair = {
+                        evidence_id for evidence_id in self.dispute_witness_pairs[item_id]
+                        if evidence_id in records
+                    }
+                    additions = pair - keep
+                    if len(keep) + len(additions) <= limit:
+                        keep.update(additions)
+                for value in sorted(records.values(), key=sort_key):
+                    if len(keep) >= limit:
+                        break
+                    keep.add(value["id"])
+            else:
+                keep = {value["id"] for value in sorted(records.values(), key=sort_key)[:limit]}
             for key in list(records):
                 if key not in keep:
                     del records[key]
@@ -2559,10 +2591,22 @@ class _V2Builder:
         for change_id in list(self.changes):
             if self.changes[change_id]["runId"] not in self.runs:
                 del self.changes[change_id]
-        for item in self.items.values():
-            item["_evidenceIds"] = [
+        for item_id, item in self.items.items():
+            witness = tuple(
+                evidence_id for evidence_id in self.dispute_witness_pairs.get(item_id, ())
+                if evidence_id in self.evidence_records
+            )
+            has_witness = len(witness) == 2
+            item["_disputeEvidenceOmitted"] = bool(
+                item["_disputed"] and not has_witness)
+            surviving_evidence = [
                 value for value in item["_evidenceIds"] if value in self.evidence_records
-            ][:V2_MAX_ITEM_EVIDENCE]
+            ]
+            if has_witness:
+                surviving_evidence = list(witness) + [
+                    value for value in surviving_evidence if value not in witness
+                ]
+            item["_evidenceIds"] = surviving_evidence[:V2_MAX_ITEM_EVIDENCE]
             item["_changeIds"] = [
                 value for value in item["_changeIds"] if value in self.changes
             ][:V2_MAX_ITEM_CHANGES]
@@ -2786,6 +2830,9 @@ class _V2Builder:
             "coverage": item["_coverage"],
             "nextAction": next_action,
             "disputeIds": sorted(item["_disputeIds"]),
+            "disputeDetailOmitted": bool(
+                item["_disputed"] and not item["_disputeIds"]),
+            "disputeEvidenceOmitted": item["_disputeEvidenceOmitted"],
             "evidenceIds": [value["id"] for value in evidence_records[:V2_MAX_ITEM_EVIDENCE]],
             "changeIds": [value["id"] for value in change_records[:V2_MAX_ITEM_CHANGES]],
             "linkIds": [value["id"] for value in links],
