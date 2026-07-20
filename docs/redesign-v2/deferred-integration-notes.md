@@ -37,8 +37,16 @@
   entire legacy numeric-host grammar and retains a client-side check.
 - Prompt 18's isolated implementation compared every evidence pair before the
   projection cap. A 2,000-record fictional no-dispute case took about 17
-  seconds, violating the six-second loop. Prompt 18 is being indexed and given
-  a 4,000-record performance regression before acceptance.
+  seconds, violating the six-second loop. The accepted implementation uses
+  typed indexes and direct explicit-edge traversal; the 4,000-record regression
+  completes in about 0.4 seconds.
+- Prompt 18 keeps exact totals and complete affected-item classification beyond
+  the 500-dossier cap. Reciprocal witness pairs are pinned within the global
+  4,000-evidence cap, with an explicit omission flag only when the witness set
+  itself cannot fit.
+- Prompt 16 source buttons were ported from raw projection-target checks to the
+  server-owned resolver. The fictional browser fixture now exposes the same
+  read-only resolver response.
 
 ## Sam-asks filed
 
