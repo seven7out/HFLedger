@@ -279,7 +279,8 @@ class ViewAndStaticTests(ServerCase):
             "/deck.js": "text/javascript",
             "/manifest.webmanifest": "application/manifest+json",
             "/service-worker.js": "text/javascript",
-            "/icon.svg": "image/svg+xml",
+            "/icon.png": "image/png",
+            "/logo.png": "image/png",
         }
         for path, content_type in expected.items():
             connection = self.connection()

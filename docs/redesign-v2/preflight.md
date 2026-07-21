@@ -89,7 +89,7 @@ native/macos-host/src-tauri/icons/icon.icns
 native/macos-host/src-tauri/src/lib.rs
 native/macos-host/src-tauri/src/main.rs
 native/macos-host/src-tauri/tauri.conf.json
-native/macos-host/src/icon.svg
+native/macos-host/src/icon.png
 native/macos-host/src/index.html
 native/macos-host/src/main.js
 native/macos-host/src/styles.css

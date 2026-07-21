@@ -51,7 +51,8 @@ STATIC_ASSETS = {
     "/deck.js": ("deck.js", "text/javascript; charset=utf-8", "no-cache"),
     "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json", "no-cache"),
     "/service-worker.js": ("service-worker.js", "text/javascript; charset=utf-8", "no-cache"),
-    "/icon.svg": ("icon.svg", "image/svg+xml", "public, max-age=86400"),
+    "/icon.png": ("icon.png", "image/png", "public, max-age=86400"),
+    "/logo.png": ("logo.png", "image/png", "public, max-age=86400"),
 }
 _WRITE_LOCK = threading.RLock()
 

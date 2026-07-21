@@ -262,19 +262,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 .app-mark {
-  width: 18px;
-  height: 19px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  align-items: end;
-  gap: 2px;
+  width: 21px;
+  height: 21px;
+  display: block;
+  object-fit: contain;
   margin-right: 2px;
 }
-
-.app-mark i { display: block; border-radius: 2px; background: #6956e8; }
-.app-mark i:nth-child(1) { height: 58%; opacity: .55; }
-.app-mark i:nth-child(2) { height: 100%; }
-.app-mark i:nth-child(3) { height: 76%; opacity: .78; }
 
 .window-title {
   min-width: 0;
