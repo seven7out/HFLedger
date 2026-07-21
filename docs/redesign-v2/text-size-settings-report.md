@@ -52,7 +52,7 @@ The ad-hoc candidate was installed at `/Applications/HFLedger.app`; the previous
 - Forced loopback port 17172 busy during restart. The same global Comfortable preference and selected fictional workspace reopened on 17174; releasing the reservation returned the next launch to 17172.
 - Switched between the existing observer and fictional workspaces, closed/reopened the board, and restarted the app. The global preference persisted.
 - Hashes for both the bundled fictional copy and the private observer `board.json`/`ledger.jsonl` were identical before and after settings, menu, restart, workspace, port, and deck operations. The disposable deck workspace was removed after QA.
-- Restored final installed state to the prior `hflc-observer` workspace with Comfortable selected and the original two registered workspaces.
+- Restored final installed state to the prior private observer workspace with Comfortable selected and the original two registered workspaces.
 
 ## Fictional-data screenshots
 

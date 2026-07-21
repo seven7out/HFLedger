@@ -29,7 +29,7 @@
 ## Deviations
 
 - Prompt 21A completed after the first Prompt 22 review and was added to the
-  selected minimal bundle by Sam's explicit follow-up authorization.
+  selected minimal bundle by the product owner's explicit follow-up authorization.
 - Prompt 21A's `verify_release.py` artifact mutation will not be retained;
   verification must observe rather than repair the bundle.
 - The Prompt 21 source resolver initially accepted legacy numeric IPv4 forms
@@ -48,7 +48,7 @@
   server-owned resolver. The fictional browser fixture now exposes the same
   read-only resolver response.
 
-## Sam-asks filed
+## Owner decisions recorded
 
-- `sam-e03c5d9653e81a25` — resolved in chat: Sam selected the minimal path plus
-  Prompt 21A and authorized bounded no-write-back remediation.
+- The private decision record selected the minimal path plus Prompt 21A and
+  authorized bounded no-write-back remediation.

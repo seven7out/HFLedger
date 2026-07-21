@@ -4,7 +4,7 @@ Date: July 18, 2026
 
 This preflight preserves the already-built HFLedger Today/evidence and native
 Mac milestone before redesign-v2 contract work begins. It does not authorize
-Wave 2 implementation, publish the repository, change a live HFLC writer, or
+Wave 2 implementation, publish the repository, change a live installation writer, or
 move `task-hfledger-redesign-v2` out of `Needs Spec`.
 
 ## Repository state
@@ -151,7 +151,7 @@ All reviewed changes belong to one already-built productization milestone:
    features. Dependency locks, icons, and the GitHub workflow are source or
    reproducibility inputs, not generated local outputs.
 
-The milestone agrees with the HFLC board evidence for
+The milestone agrees with private board evidence for
 `task-hfledger-orientation-v1`, `task-hfledger-private-observer-v1`,
 `task-hfledger-native-today-integration`, and the completed Mac productization
 children. No redesign-v2 production implementation is present in this base.
@@ -171,17 +171,17 @@ native/macos-host/src-tauri/target/     Rust/app/DMG build output (~7.2 GB)
 ~/Library/Application Support/com.hfledger.desktop/  private app state/workspaces
 ```
 
-The HFLC hub, private observer projection, shadow-migration data, research
+The private hub, observer projection, shadow-migration data, research
 captures, and the external prompt packet are outside this public repository and
 were not staged. The repository contains only the fictional Ovenlight example.
 
 The complete tracked diff and every new source/configuration file were
-reviewed. Scans found no private keys, credential values, HFLC content, Sam/user
+reviewed. Scans found no private keys, credential values, installation content, owner/user
 names, absolute user-home literals, or machine-specific source paths.
 Secret-related matches are limited to GitHub Actions secret references,
 release documentation warning against committed credentials, and an explicit
 negative test for an unsupported evidence kind. `verify_release.py` also
-rejects user-home and HFLC markers in the built bundle.
+rejects user-home and installation-specific markers in the built bundle.
 
 ## Checks and build evidence
 
@@ -237,7 +237,7 @@ shared checkout.
   than redesign v2. It does not yet provide the ranked Attention inbox,
   run-grouped change journal, two-clock provenance dossier, or durable local
   seen/snooze/watch state.
-- The public repository must stay generic. Private HFLC sections and legacy
+- The public repository must stay generic. Private installation sections and legacy
   decision compatibility remain in private adapters and cannot become public
   protocol assumptions or fixtures.
 - Read-only observers may project validated state but every authoritative HTTP
@@ -247,5 +247,5 @@ shared checkout.
   diagnostics. Release verification must continue preventing those paths or
   private workspace data from entering a public artifact.
 - Developer ID credentials, notarization, repository push, GitHub release
-  creation, updater activation, authoritative HFLC cutover, MacBook Air work,
+  creation, updater activation, authoritative installation cutover, second-Mac work,
   and Android work remain attended/protected gates and are outside this base.

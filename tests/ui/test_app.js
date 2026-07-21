@@ -67,6 +67,12 @@ test("Copy Context stays bounded, plain, and excludes local notes", () => {
   assert.ok(context.length <= 4000);
 });
 
+test("does not duplicate Copy Context when it is already the primary action", () => {
+  assert.equal(ui.needsSupplementalCopyContext({ nextAction: { kind: "copy-context" } }), false);
+  assert.equal(ui.needsSupplementalCopyContext({ nextAction: { kind: "open-source" } }), true);
+  assert.equal(ui.needsSupplementalCopyContext({}), true);
+});
+
 test("uses only the five closed provenance labels", () => {
   assert.equal(ui.provenanceLabel("verified"), "Verified");
   assert.equal(ui.provenanceLabel("agent-reported"), "Agent-reported");

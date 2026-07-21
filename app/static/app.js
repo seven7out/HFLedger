@@ -1132,7 +1132,9 @@ function renderItemInspector(target, item) {
   const actionButton = buildNextAction(item);
   if (actionButton) actionWrap.append(actionButton);
   else actionWrap.append(node("p", "unsupported-action", "No next action is supported by the observed evidence."));
-  actionWrap.append(button("control-button copy-context-button", "Copy Context", () => copyContext(item)));
+  if (needsSupplementalCopyContext(item)) {
+    actionWrap.append(button("control-button copy-context-button", "Copy Context", () => copyContext(item)));
+  }
   wrapper.append(inspectorSection("Next Action", actionWrap));
 
   const localActions = node("div", "local-actions");
@@ -1356,6 +1358,10 @@ function buildNextAction(item) {
   const target = safeLinkTarget(resolution);
   if (!target) return null;
   return button("control-button primary-control", action.label || link?.label || "Open authoritative source", () => openSafeTarget(resolution));
+}
+
+function needsSupplementalCopyContext(item) {
+  return item?.nextAction?.kind !== "copy-context";
 }
 
 function renderCoverageInspector(target) {
@@ -1911,6 +1917,7 @@ globalThis.HFLedgerUI = Object.freeze({
   safeAccent,
   safeLinkTarget,
   buildCopyContext,
+  needsSupplementalCopyContext,
   provenanceLabel,
   normalizeLocalResponse,
   buildQuickLookModel,

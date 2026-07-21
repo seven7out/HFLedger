@@ -175,7 +175,25 @@ and [Extra Large Decision Deck](screenshots/text-size-extra-large-decision-deck.
 
 ## Release boundary
 
-This branch is local-only. No collector was enabled, no private authoritative
-cutover occurred, and no release artifact was uploaded. Developer ID signing,
-notarization, publication, Git push, and updater delivery remain separate
-attended gates and were not performed.
+This branch has not been released. No collector was enabled, no private
+authoritative cutover occurred, and no release artifact was uploaded. Developer
+ID signing, notarization, default-branch merge, release publication, and updater
+delivery remain separate attended gates and were not performed.
+
+## Attended install and branch handoff
+
+An attended follow-up on July 20, 2026 reran the complete release contract with
+the external privacy gate enabled, built and ad-hoc signed the Mac app, and
+installed it over the prior local app bundle. The registered observer reopened
+successfully, and its authoritative configuration, board, and ledger remained
+byte-identical across replacement and relaunch.
+
+Installed-window review found and fixed one presentation defect: when Copy
+Context was already the projected primary action, the inspector rendered a
+second Copy Context control. A pure predicate and regression test now keep one
+control in that state while retaining the supplemental control for source and
+decision handoffs.
+
+The public integration branch handoff remains separate from a default-branch
+merge or release. No Developer ID credential, notarization, tag, release asset,
+updater delivery, collector activation, or authoritative cutover is included.

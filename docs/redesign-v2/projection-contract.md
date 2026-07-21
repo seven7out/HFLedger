@@ -85,7 +85,7 @@ The public engine understands only generic normalized records:
 }
 ```
 
-The public schema must never acquire fields named after HFLC, `/sweep`, Grind,
+The public schema must never acquire fields named after one private deployment or its maintenance commands,
 Sentry, a private repository, or a private board section. An installation
 adapter may map those concepts to the generic shapes in this document. The
 adapter must emit source identity, exact source locators, timestamps, and item
@@ -743,7 +743,7 @@ Context is assistance for an agent, not authority to perform the next action.
 Only links that pass the same exact projected-link resolver used for opening
 are included in the copied bytes.
 
-## 13. Current HFLC adapter requirements
+## 13. Current private-adapter requirements
 
 The current private board contains useful input in `changelog`, `sessionLog`,
 `grindActivity`, `verificationTrack`, `unmatchedCompletions`, and
@@ -892,6 +892,6 @@ have migrated.
 4. Item-change and source-observation clocks stay separate; quiet requires a
    complete observation window, so current latest-only collector data is
    insufficient by itself.
-5. Private HFLC sections normalize through a closed adapter; legacy prose that
+5. Private installation sections normalize through a closed adapter; legacy prose that
    lacks exact ids or timestamps remains visible as bounded context but cannot
    become public protocol truth.

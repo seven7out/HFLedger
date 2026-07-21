@@ -190,7 +190,7 @@ NEW SINCE LAST VISIT                                                   5
 
 ▾ Sweep · Yesterday, 7:20 PM · 1 change
   • External review began
-    Haresh was recorded as the next reviewer                         1d  Inferred
+    The designated reviewer was recorded as next                    1d  Inferred
 
 QUIET CONCERNS                                                    1 of 7
 ○ Storage follow-up is silent

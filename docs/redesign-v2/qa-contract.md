@@ -467,8 +467,8 @@ artifacts, and release manifest.
 
 The built-in denylist rejects:
 
-- absolute home or volume roots such as `/Users/`, `/home/`, `/Volumes/`, and
-  `C:\\Users\\`, including remapped source paths that failed to strip cleanly;
+- absolute user-home or mounted-volume roots, including remapped source paths
+  that failed to strip cleanly;
 - private hub/workspace directory markers, real `board.json`, `ledger.jsonl`,
   collector reports, app settings, logs, backups, `.env`, `.pem`, `.p12`, and
   keychain exports unless the file is an explicitly allowlisted fictional

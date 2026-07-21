@@ -5,7 +5,7 @@
 - **Repository and territory:** public HFLedger repository, isolated branch
   `deferred/redesign-v2-disputes`, exact accepted V1 base
   `ea00fc1801f3e426c92ccb4e02d8644edd75558f`.
-- **Prior work reviewed before implementation:** HFLC operating contract,
+- **Prior work reviewed before implementation:** private installation operating contract,
   Prompt 18, Ready-for-Build admission task
   `task-hfledger-redesign-v2-disputes`, canonical redesign contract, accepted
   dogfood report, repository status, branches, and worktrees.

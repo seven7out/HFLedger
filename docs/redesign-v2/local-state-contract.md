@@ -798,7 +798,7 @@ scope.
   must not.
 - Provide deterministic cursor compatibility/version data and a way to determine
   whether an exact seen key is subsumed.
-- Never require the local store to parse HFLC-private sections or fuzzy-match
+- Never require the local store to parse installation-private sections or fuzzy-match
   titles.
 
 ### Loopback server agent
@@ -862,7 +862,7 @@ The contract is satisfied only when:
 7. workspace removal and manual backups never delete or silently transport
    local state;
 8. the file, API, logs, diagnostics, app bundle, and tests contain no copied
-   evidence prose, file content, secret, private source path, or real HFLC data;
+   evidence prose, file content, secret, private source path, or real installation data;
    and
 9. no local-state code path can answer a decision, complete a task, append an
    event, change `board.json`, or change `ledger.jsonl`.
