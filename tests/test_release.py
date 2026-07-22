@@ -23,8 +23,9 @@ class DemoQuickstartTests(unittest.TestCase):
         with open(os.path.join(ROOT, "app", "static", "manifest.webmanifest"),
                   encoding="utf-8") as handle:
             manifest = json.load(handle)
-        self.assertEqual(manifest["name"], "HFLedger Decision Deck")
+        self.assertEqual(manifest["name"], "HFLedger")
         self.assertEqual(manifest["short_name"], "HFLedger")
+        self.assertEqual(manifest["start_url"], "/")
         self.assertTrue(os.path.isfile(CLI))
         with open(DECISION_DECK_SCREENSHOT, "rb") as handle:
             self.assertEqual(handle.read(3), b"\xff\xd8\xff")
