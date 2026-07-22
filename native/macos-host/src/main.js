@@ -4,12 +4,14 @@ const elements = Object.fromEntries([
   "error-banner", "error-message", "success-banner", "restart", "stop", "backup",
   "reveal-workspace", "pref-notifications", "pref-login", "pref-restore",
   "preferences-panel", "pref-text-size", "text-size-status",
+  "onboarding-panel", "recovery-panel", "recovery-message", "workspaces-panel",
   "diagnostics-dialog", "diagnostics-output",
   "commands-dialog", "command-search", "command-empty", "command-grid",
 ].map((id) => [id, document.getElementById(id)]));
 
 let snapshot = null;
 let busy = false;
+let settingsMode = null;
 
 function setBusy(value) {
   busy = value;
@@ -157,11 +159,26 @@ function renderPreferences() {
   elements["pref-text-size"].value = snapshot.preferences.textSize;
 }
 
+function renderSettingsMode() {
+  if (!snapshot) return;
+  const inferred = !snapshot.workspaces.length
+    ? "onboarding"
+    : (snapshot.host.error ? "recovery" : "settings");
+  const mode = settingsMode || inferred;
+  elements["onboarding-panel"].hidden = mode !== "onboarding";
+  elements["recovery-panel"].hidden = mode !== "recovery";
+  if (mode === "recovery") {
+    elements["recovery-message"].textContent = snapshot.host.error
+      || elements["recovery-message"].textContent;
+  }
+}
+
 function render() {
   elements.version.textContent = `HFLedger for Mac ${snapshot.version} · local data only`;
   renderWorkspaces();
   renderHost(snapshot.host);
   renderPreferences();
+  renderSettingsMode();
 }
 
 async function refresh() {
@@ -209,7 +226,10 @@ async function saveTextSize() {
 
 document.getElementById("dismiss-error").addEventListener("click", () => { elements["error-banner"].hidden = true; });
 document.getElementById("repair-settings").addEventListener("click", () => action(
-  () => invoke("repair_settings"),
+  async () => {
+    await invoke("repair_settings");
+    settingsMode = "onboarding";
+  },
   "App settings were rebuilt. The unreadable original was preserved for recovery.",
 ));
 
@@ -218,15 +238,39 @@ document.getElementById("create-form").addEventListener("submit", async (event) 
   const input = document.getElementById("project-name");
   const project = input.value.trim();
   if (!project) return;
-  const created = await action(() => invoke("create_workspace", { project }), (workspace) => `${workspace.label} was created and validated.`);
+  const created = await action(async () => {
+    const workspace = await invoke("create_workspace", { project });
+    await invoke("start_workspace", { workspaceId: workspace.id });
+    return workspace;
+  }, (workspace) => `${workspace.label} was created and opened.`);
   if (created) input.value = "";
 });
 
 document.getElementById("add-existing").addEventListener("click", async () => {
   const folder = await invoke("choose_workspace_folder");
   if (!folder) return;
-  await action(() => invoke("add_existing_workspace", { path: folder }), (workspace) => `${workspace.label} was validated and added.`);
+  await action(async () => {
+    const workspace = await invoke("add_existing_workspace", { path: folder });
+    await invoke("start_workspace", { workspaceId: workspace.id });
+    return workspace;
+  }, (workspace) => `${workspace.label} was validated and opened.`);
 });
+
+document.getElementById("open-demo").addEventListener("click", () => action(
+  () => invoke("open_fictional_demo"),
+  "The fictional demo is open. No real project data was loaded.",
+));
+document.getElementById("onboarding-demo").addEventListener("click", () => document.getElementById("open-demo").click());
+document.getElementById("onboarding-add").addEventListener("click", () => document.getElementById("add-existing").click());
+document.getElementById("onboarding-create").addEventListener("click", () => {
+  document.getElementById("create-form").scrollIntoView({ block: "center" });
+  document.getElementById("project-name").focus({ preventScroll: true });
+});
+document.getElementById("recovery-workspaces").addEventListener("click", () => {
+  elements["workspaces-panel"].scrollIntoView({ block: "start" });
+  elements["workspaces-panel"].focus({ preventScroll: true });
+});
+document.getElementById("recovery-diagnostics").addEventListener("click", () => document.getElementById("show-diagnostics").click());
 
 elements.restart.addEventListener("click", () => action(() => invoke("restart_workspace")));
 elements.stop.addEventListener("click", () => action(() => invoke("stop_workspace"), "Local engine stopped."));
@@ -251,9 +295,19 @@ window.addEventListener("hfledger:text-size-changed", (event) => {
   }
 });
 
-window.addEventListener("hfledger:show-settings", () => {
-  elements["preferences-panel"].scrollIntoView({ block: "center" });
-  elements["pref-text-size"].focus({ preventScroll: true });
+window.addEventListener("hfledger:settings-mode", (event) => {
+  settingsMode = event.detail?.mode || "settings";
+  if (settingsMode === "recovery" && event.detail?.message) {
+    elements["recovery-message"].textContent = event.detail.message;
+  }
+  renderSettingsMode();
+  if (settingsMode === "settings") {
+    elements["preferences-panel"].scrollIntoView({ block: "center" });
+    elements["pref-text-size"].focus({ preventScroll: true });
+  } else if (settingsMode === "workspaces") {
+    elements["workspaces-panel"].scrollIntoView({ block: "start" });
+    elements["workspaces-panel"].focus({ preventScroll: true });
+  }
 });
 
 window.addEventListener("hfledger:settings-error", (event) => {

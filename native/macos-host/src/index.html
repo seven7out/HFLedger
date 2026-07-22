@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HFLedger</title>
+    <title>HFLedger Settings</title>
     <link rel="stylesheet" href="styles.css">
     <script src="main.js" defer></script>
   </head>
@@ -14,7 +14,7 @@
           <img src="icon.png" width="50" height="50" alt="">
           <div>
             <p class="eyebrow">Local-first control room</p>
-            <h1>HFLedger</h1>
+            <h1>HFLedger Settings</h1>
           </div>
         </div>
         <div class="header-actions">
@@ -32,14 +32,38 @@
       </div>
       <div id="success-banner" class="banner success" role="status" hidden></div>
 
+      <section id="onboarding-panel" class="mode-panel" aria-labelledby="onboarding-title" hidden>
+        <p class="eyebrow">Get started</p>
+        <h2 id="onboarding-title">Set up your first workspace</h2>
+        <p>Open an existing HFLedger folder, create a private workspace, or explicitly try the included fictional demo.</p>
+        <div class="mode-actions">
+          <button id="onboarding-add" class="button primary">Open existing folder…</button>
+          <button id="onboarding-create" class="button secondary">Create a workspace</button>
+          <button id="onboarding-demo" class="button quiet">Try fictional demo</button>
+        </div>
+      </section>
+
+      <section id="recovery-panel" class="mode-panel recovery-panel" aria-labelledby="recovery-title" hidden>
+        <p class="eyebrow">Recovery</p>
+        <h2 id="recovery-title">Today could not open</h2>
+        <p id="recovery-message">Choose another registered workspace or inspect the local diagnostics.</p>
+        <div class="mode-actions">
+          <button id="recovery-workspaces" class="button primary">Review workspaces</button>
+          <button id="recovery-diagnostics" class="button quiet">Show diagnostics</button>
+        </div>
+      </section>
+
       <main class="content-grid">
-        <section class="primary-column">
+        <section id="workspaces-panel" class="primary-column" tabindex="-1">
           <div class="section-heading">
             <div>
               <p class="eyebrow">Workspaces</p>
-              <h2>Choose what to open</h2>
+              <h2>Manage local workspaces</h2>
             </div>
-            <button id="add-existing" class="button secondary">Open existing folder…</button>
+            <div class="section-actions">
+              <button id="open-demo" class="button quiet">Open fictional demo</button>
+              <button id="add-existing" class="button secondary">Open existing folder…</button>
+            </div>
           </div>
 
           <div id="workspace-list" class="workspace-list" aria-live="polite"></div>

@@ -155,7 +155,8 @@ every authoritative mutation route returns `403` before invoking a writer.
 
 - **First visit:** shows the latest 20 valid changes as Recent activity and
   offers to set a local starting point. It does not fabricate a previous visit.
-- **No workspace:** says “No ledger is open” and routes to the launcher.
+- **No workspace:** says “No ledger is open” and routes to the native
+  Workspaces section in Settings.
 - **Empty success:** names the exact observation time and coverage that support
   the empty result.
 - **Filter empty:** says the current filter has no matches; it is distinct from

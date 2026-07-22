@@ -347,6 +347,32 @@ impl Default for StoredConfig {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PrimarySurfacePlan {
+    ShowExistingToday,
+    StartToday(String),
+    Onboarding,
+    Recovery,
+}
+
+fn primary_surface_plan(
+    config: &StoredConfig,
+    board_window_exists: bool,
+    host_ready: bool,
+) -> PrimarySurfacePlan {
+    if board_window_exists && host_ready {
+        return PrimarySurfacePlan::ShowExistingToday;
+    }
+    if config.workspaces.is_empty() {
+        return PrimarySurfacePlan::Onboarding;
+    }
+    config
+        .selected_workspace_id
+        .clone()
+        .map(PrimarySurfacePlan::StartToday)
+        .unwrap_or(PrimarySurfacePlan::Recovery)
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HostStatus {
@@ -645,33 +671,9 @@ fn initialize_app(app: &tauri::App, state: &HostRuntime) -> Result<StoredConfig,
         reject_symlink(&app_paths.config)?;
         return read_config(state);
     }
-    let mut config = StoredConfig::default();
-    config.workspaces.push(Workspace {
-        id: "demo".into(),
-        label: "Ovenlight Bakery Tools".into(),
-        path: demo_path.display().to_string(),
-        kind: WorkspaceKind::Demo,
-    });
-    config.selected_workspace_id = Some("demo".into());
+    let config = StoredConfig::default();
     write_config(state, &config)?;
     Ok(config)
-}
-
-fn demo_config(state: &HostRuntime) -> Result<StoredConfig, String> {
-    let app_paths = paths(state)?;
-    let demo_path = app_paths.app_data.join("fictional-demo");
-    let (canonical, label) = validate_workspace(state, &demo_path)?;
-    Ok(StoredConfig {
-        version: CONFIG_VERSION,
-        workspaces: vec![Workspace {
-            id: "demo".into(),
-            label,
-            path: canonical.display().to_string(),
-            kind: WorkspaceKind::Demo,
-        }],
-        selected_workspace_id: Some("demo".into()),
-        preferences: Preferences::default(),
-    })
 }
 
 fn run_engine(state: &HostRuntime, arguments: &[OsString]) -> Result<Output, String> {
@@ -1141,19 +1143,90 @@ fn current_host_status(state: &HostRuntime) -> HostStatus {
     }
 }
 
-fn show_launcher(app: &AppHandle) {
+fn set_startup_error(state: &HostRuntime, error: impl Into<String>) {
+    if let Ok(mut startup_error) = state.startup_error.lock() {
+        *startup_error = Some(error.into());
+    }
+}
+
+fn show_settings_surface(app: &AppHandle, mode: &str, message: Option<&str>) {
     if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_title(match mode {
+            "onboarding" => "Set Up HFLedger",
+            "recovery" => "HFLedger Recovery",
+            _ => "HFLedger Settings",
+        });
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+        let mode = serde_json::to_string(mode).unwrap_or_else(|_| "\"settings\"".into());
+        let message =
+            serde_json::to_string(message.unwrap_or_default()).unwrap_or_else(|_| "\"\"".into());
+        let _ = window.eval(format!(
+            "window.dispatchEvent(new CustomEvent('hfledger:settings-mode',{{detail:{{mode:{mode},message:{message}}}}}));"
+        ));
     }
     let _ = apply_stored_text_size(app, false);
 }
 
-fn show_launcher_settings(app: &AppHandle) {
-    show_launcher(app);
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.eval("window.dispatchEvent(new CustomEvent('hfledger:show-settings'));");
+fn show_settings(app: &AppHandle) {
+    show_settings_surface(app, "settings", None);
+}
+
+fn show_workspace_settings(app: &AppHandle) {
+    show_settings_surface(app, "workspaces", None);
+}
+
+fn show_onboarding(app: &AppHandle) {
+    show_settings_surface(app, "onboarding", None);
+}
+
+fn show_recovery(app: &AppHandle, error: &str) {
+    set_startup_error(&app.state::<HostRuntime>(), error);
+    show_settings_surface(app, "recovery", Some(error));
+}
+
+fn show_existing_today(app: &AppHandle) -> bool {
+    let Some(board) = app.get_webview_window("board") else {
+        return false;
+    };
+    let _ = board.show();
+    let _ = board.unminimize();
+    let _ = board.set_focus();
+    let _ = apply_stored_text_size(app, false);
+    set_board_menu_available(&app.state::<HostRuntime>(), true);
+    true
+}
+
+fn restore_primary_surface(app: &AppHandle) {
+    let state = app.state::<HostRuntime>();
+    let config = match read_config(&state) {
+        Ok(config) => config,
+        Err(error) => {
+            show_recovery(app, &error);
+            return;
+        }
+    };
+    let host_ready = current_host_status(&state).ready;
+    let plan = primary_surface_plan(
+        &config,
+        app.get_webview_window("board").is_some(),
+        host_ready,
+    );
+    match plan {
+        PrimarySurfacePlan::ShowExistingToday => {
+            let _ = show_existing_today(app);
+        }
+        PrimarySurfacePlan::StartToday(workspace_id) => {
+            if let Err(error) = start_workspace_inner(app, &state, &workspace_id) {
+                show_recovery(app, &error);
+            }
+        }
+        PrimarySurfacePlan::Onboarding => show_onboarding(app),
+        PrimarySurfacePlan::Recovery => show_recovery(
+            app,
+            "No workspace is selected. Choose a valid workspace in Settings.",
+        ),
     }
 }
 
@@ -1179,8 +1252,8 @@ fn show_board_window(app: &AppHandle, workspace: &Workspace, port: u16) -> Resul
             .build()
             .map_err(|error| format!("could not create the board window: {error}"))?;
     }
-    if let Some(launcher) = app.get_webview_window("main") {
-        let _ = launcher.hide();
+    if let Some(settings) = app.get_webview_window("main") {
+        let _ = settings.hide();
     }
     apply_stored_text_size(app, false)?;
     set_board_menu_available(&app.state::<HostRuntime>(), true);
@@ -1327,7 +1400,7 @@ fn persist_text_size(app: &AppHandle, action: TextSizeAction) -> Result<TextSize
 }
 
 fn report_text_size_error(app: &AppHandle) {
-    show_launcher_settings(app);
+    show_settings(app);
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.eval(
             "window.dispatchEvent(new CustomEvent('hfledger:settings-error',{detail:{message:'Text size could not be saved. The previous size was restored.'}}));",
@@ -1352,7 +1425,7 @@ fn app_snapshot(state: State<'_, HostRuntime>) -> Result<AppSnapshot, String> {
 #[tauri::command]
 fn repair_settings(state: State<'_, HostRuntime>) -> Result<(), String> {
     let app_paths = paths(&state)?;
-    let repaired = demo_config(&state)?;
+    let repaired = StoredConfig::default();
     if app_paths.config.exists() {
         reject_symlink(&app_paths.config)?;
         let stamp = Local::now().format("%Y-%m-%d_%H-%M-%S-%3f");
@@ -1362,6 +1435,36 @@ fn repair_settings(state: State<'_, HostRuntime>) -> Result<(), String> {
         private_permissions(&preserved, 0o600)?;
     }
     write_config(&state, &repaired)
+}
+
+#[tauri::command]
+fn open_fictional_demo(
+    app: AppHandle,
+    state: State<'_, HostRuntime>,
+) -> Result<HostStatus, String> {
+    let mut config = read_config(&state)?;
+    let workspace = if let Some(existing) = config
+        .workspaces
+        .iter()
+        .find(|workspace| workspace.kind == WorkspaceKind::Demo)
+        .cloned()
+    {
+        existing
+    } else {
+        let demo_path = paths(&state)?.app_data.join("fictional-demo");
+        let (canonical, label) = validate_workspace(&state, &demo_path)?;
+        let workspace = Workspace {
+            id: "demo".into(),
+            label,
+            path: canonical.display().to_string(),
+            kind: WorkspaceKind::Demo,
+        };
+        config.workspaces.push(workspace.clone());
+        workspace
+    };
+    config.selected_workspace_id = Some(workspace.id.clone());
+    write_config(&state, &config)?;
+    start_workspace_inner(&app, &state, &workspace.id)
 }
 
 #[tauri::command]
@@ -1658,11 +1761,6 @@ fn diagnostics(state: State<'_, HostRuntime>) -> Result<DiagnosticReport, String
         log_path: app_paths.logs.join("engine.log").display().to_string(),
         backup_path: app_paths.backups.display().to_string(),
     })
-}
-
-#[tauri::command]
-fn open_launcher(app: AppHandle) {
-    show_launcher(&app);
 }
 
 #[tauri::command]
@@ -2262,8 +2360,8 @@ fn native_command_for_menu_id(id: &str) -> Option<NativeCommand> {
     }
 }
 
-fn show_launcher_dialog(app: &AppHandle, button_id: &str) {
-    show_launcher(app);
+fn show_settings_dialog(app: &AppHandle, button_id: &str) {
+    show_settings(app);
     if let Some(window) = app.get_webview_window("main") {
         let script = match button_id {
             "show-diagnostics" => "document.getElementById('show-diagnostics')?.click();",
@@ -2276,13 +2374,13 @@ fn show_launcher_dialog(app: &AppHandle, button_id: &str) {
 
 fn handle_native_menu(app: &AppHandle, id: &str) {
     match id {
-        "app.settings" => show_launcher_settings(app),
-        "file.open-workspace" => show_launcher(app),
-        "help.diagnostics" => show_launcher_dialog(app, "show-diagnostics"),
+        "app.settings" => show_settings(app),
+        "file.open-workspace" => show_workspace_settings(app),
+        "help.diagnostics" => show_settings_dialog(app, "show-diagnostics"),
         "help.commands" | "help.keyboard" | "help.privacy"
             if app.get_webview_window("board").is_none() =>
         {
-            show_launcher_dialog(app, "show-commands")
+            show_settings_dialog(app, "show-commands")
         }
         "view.increase-text-size" => {
             if persist_text_size(app, TextSizeAction::Increase).is_err() {
@@ -2322,23 +2420,17 @@ fn build_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .tooltip("HFLedger")
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
-            "show" => show_launcher(app),
+            "show" => restore_primary_surface(app),
             "restart" => {
                 let state = app.state::<HostRuntime>();
                 if let Err(error) = restart_workspace(app.clone(), state) {
-                    if let Ok(mut startup_error) = app.state::<HostRuntime>().startup_error.lock() {
-                        *startup_error = Some(error);
-                    }
-                    show_launcher(app);
+                    show_recovery(app, &error);
                 }
             }
             "backup" => {
                 let state = app.state::<HostRuntime>();
                 if let Err(error) = create_backup(app.clone(), state) {
-                    if let Ok(mut startup_error) = app.state::<HostRuntime>().startup_error.lock() {
-                        *startup_error = Some(error);
-                    }
-                    show_launcher(app);
+                    show_recovery(app, &error);
                 }
             }
             "quit" => app.exit(0),
@@ -2353,7 +2445,7 @@ fn build_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     ..
                 }
             ) {
-                show_launcher(tray.app_handle());
+                restore_primary_surface(tray.app_handle());
             }
         })
         .build(app)?;
@@ -2365,7 +2457,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(
             |app, _arguments, _cwd| {
-                show_launcher(app);
+                restore_primary_surface(app);
             },
         ))
         .plugin(tauri_plugin_notification::init())
@@ -2402,16 +2494,10 @@ pub fn run() {
                     }
                     build_tray(app)?;
                     start_native_chrome_monitor(app.handle().clone());
-                    if config.preferences.restore_board_window {
-                        if let Some(workspace_id) = config.selected_workspace_id {
-                            let _ = start_workspace_inner(app.handle(), &state, &workspace_id);
-                        }
-                    }
+                    restore_primary_surface(app.handle());
                 }
                 Err(error) => {
-                    if let Ok(mut startup_error) = state.startup_error.lock() {
-                        *startup_error = Some(error);
-                    }
+                    show_recovery(app.handle(), &error);
                 }
             }
             Ok(())
@@ -2422,14 +2508,16 @@ pub fn run() {
                     api.prevent_close();
                     let _ = window.hide();
                 } else if window.label() == "board" {
+                    api.prevent_close();
+                    let _ = window.hide();
                     set_board_menu_available(&window.app_handle().state::<HostRuntime>(), false);
-                    show_launcher(window.app_handle());
                 }
             }
         })
         .invoke_handler(tauri::generate_handler![
             app_snapshot,
             repair_settings,
+            open_fictional_demo,
             host_status,
             choose_workspace_folder,
             add_existing_workspace,
@@ -2444,7 +2532,6 @@ pub fn run() {
             reveal_logs,
             reveal_backups,
             diagnostics,
-            open_launcher,
             quit_app,
         ])
         .build(tauri::generate_context!())
@@ -2456,14 +2543,7 @@ pub fn run() {
         }
         #[cfg(target_os = "macos")]
         RunEvent::Reopen { .. } => {
-            if let Some(board) = app_handle.get_webview_window("board") {
-                let _ = board.show();
-                let _ = board.unminimize();
-                let _ = board.set_focus();
-                let _ = apply_stored_text_size(app_handle, false);
-            } else {
-                show_launcher(app_handle);
-            }
+            restore_primary_surface(app_handle);
         }
         _ => {}
     });
@@ -2474,10 +2554,11 @@ mod tests {
     use super::{
         active_context_id, attention_badge_count, decision_count, decode_stored_config,
         engine_serve_arguments, event_is_relevant, guarded_item_menu_accelerator, menu_eligibility,
-        merge_watch_signal, native_command_for_menu_id, project_slug, text_size_after,
-        validate_stored_config, watch_snapshot_is_safe, workspace_id, workspace_watch_plan,
-        write_config_unlocked, AppPaths, AppSnapshot, HostStatus, NativeCommand, Preferences,
-        StoredConfig, TextSize, TextSizeAction, Workspace, WorkspaceKind, CONFIG_VERSION,
+        merge_watch_signal, native_command_for_menu_id, primary_surface_plan, project_slug,
+        text_size_after, validate_stored_config, watch_snapshot_is_safe, workspace_id,
+        workspace_watch_plan, write_config_unlocked, AppPaths, AppSnapshot, HostStatus,
+        NativeCommand, Preferences, PrimarySurfacePlan, StoredConfig, TextSize, TextSizeAction,
+        Workspace, WorkspaceKind, CONFIG_VERSION,
     };
     use notify::{Event, EventKind};
     use serde_json::json;
@@ -2801,6 +2882,49 @@ mod tests {
             preferences: Preferences::default(),
         };
         assert!(validate_stored_config(&invalid_id).is_err());
+    }
+
+    #[test]
+    fn primary_surface_plan_covers_launch_reopen_onboarding_and_recovery() {
+        let selected = StoredConfig {
+            version: CONFIG_VERSION,
+            workspaces: vec![Workspace {
+                id: "workspace-fictional".into(),
+                label: "Fictional ledger".into(),
+                path: "/tmp/fictional-ledger".into(),
+                kind: WorkspaceKind::Existing,
+            }],
+            selected_workspace_id: Some("workspace-fictional".into()),
+            preferences: Preferences::default(),
+        };
+        assert_eq!(
+            primary_surface_plan(&selected, false, false),
+            PrimarySurfacePlan::StartToday("workspace-fictional".into()),
+            "cold launch and a destroyed board webview reconstruct Today"
+        );
+        assert_eq!(
+            primary_surface_plan(&selected, true, true),
+            PrimarySurfacePlan::ShowExistingToday,
+            "Dock reopen reuses a healthy existing Today webview"
+        );
+        assert_eq!(
+            primary_surface_plan(&selected, true, false),
+            PrimarySurfacePlan::StartToday("workspace-fictional".into()),
+            "a stale webview cannot mask a stopped or failed engine"
+        );
+        assert_eq!(
+            primary_surface_plan(&StoredConfig::default(), false, false),
+            PrimarySurfacePlan::Onboarding,
+            "first run never silently registers the fictional demo"
+        );
+
+        let mut unselected = selected;
+        unselected.selected_workspace_id = None;
+        assert_eq!(
+            primary_surface_plan(&unselected, false, false),
+            PrimarySurfacePlan::Recovery,
+            "registered workspaces without a selection require recovery"
+        );
     }
 
     #[test]

@@ -609,7 +609,7 @@ process.stdout.write(JSON.stringify({
 
         router = native[
             native.index("fn native_command_for_menu_id"):
-            native.index("fn show_launcher_dialog")
+            native.index("fn show_settings_dialog")
         ]
         native_menu_ids = set(re.findall(r'"([a-z][a-z0-9.-]+)"', router))
         self.assertEqual(native_menu_ids, {

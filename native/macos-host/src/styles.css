@@ -31,7 +31,7 @@ body {
 body:has(dialog[open]) { overflow: hidden; }
 
 .app-shell { width: min(1160px, 100%); min-height: 100vh; margin: auto; padding: 28px 34px 22px; }
-.app-header, .section-heading, .dialog-heading, footer, .brand, .host-pill, .dialog-actions, .header-actions, .command-card-heading { display: flex; align-items: center; }
+.app-header, .section-heading, .dialog-heading, footer, .brand, .host-pill, .dialog-actions, .header-actions, .section-actions, .mode-actions, .command-card-heading { display: flex; align-items: center; }
 .app-header, .section-heading, .dialog-heading, footer { justify-content: space-between; }
 .app-header { margin-bottom: 24px; }
 .brand { gap: 13px; }
@@ -56,8 +56,16 @@ p { color: var(--muted); line-height: 1.45; }
 .banner.success { color: var(--good); border-color: rgba(126, 217, 180, .2); background: rgba(126, 217, 180, .07); }
 .banner-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 
+.mode-panel { margin: -4px 0 22px; padding: 20px; border: 1px solid rgba(168, 156, 255, .28); border-radius: 14px; background: rgba(168, 156, 255, .075); }
+.mode-panel h2 { margin-bottom: 7px; }
+.mode-panel p:not(.eyebrow) { max-width: 720px; margin-bottom: 15px; font-size: 13px; }
+.mode-actions, .section-actions { flex-wrap: wrap; gap: 8px; }
+.recovery-panel { border-color: rgba(255, 170, 166, .25); background: rgba(255, 170, 166, .055); }
+
 .content-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(270px, .83fr); gap: 26px; }
 .primary-column, .side-column { min-width: 0; }
+.primary-column:focus { outline: none; }
+.primary-column:focus-visible { border-radius: 12px; box-shadow: 0 0 0 3px rgba(168, 156, 255, .22); }
 .section-heading { margin-bottom: 14px; }
 
 .workspace-list { display: grid; gap: 10px; }

@@ -13,7 +13,8 @@
     "windows": [
       {
         "label": "main",
-        "title": "HFLedger",
+        "title": "HFLedger Settings",
+        "visible": false,
         "width": 980,
         "height": 720,
         "minWidth": 760,

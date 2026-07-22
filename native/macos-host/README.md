@@ -2,8 +2,8 @@
 
 This directory packages the existing HFLedger engine and canonical HTML board
 as a native Tauri 2 macOS application. The app remains local-first: it manages
-explicit workspaces, starts a loopback-only engine, and opens the board in a
-separate native window.
+explicit workspaces, starts a loopback-only engine, and opens the selected
+workspace directly in its native Today window.
 
 ## What is native
 
@@ -86,7 +86,8 @@ not silently open conventional project or ledger locations.
 Settings are closed-schema, atomically replaced, and mode `0600`; app-owned
 directories are mode `0700`.
 
-The included Ovenlight workspace is fictional and persists across app upgrades.
+The included Ovenlight workspace is fictional, is registered only after the
+user explicitly chooses it, and persists across app upgrades once registered.
 Removing a workspace from future app settings must never delete its data.
 
 Private UI state lives under the app data directory in a separate mode-`0700`
