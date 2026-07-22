@@ -29,7 +29,7 @@
           <select id="context-select" aria-label="Active context"></select>
         </label>
         <button id="filter-toggle" class="toolbar-button" type="button" aria-keyshortcuts="Meta+F"
-                aria-controls="view-filter" aria-expanded="false">Filter</button>
+                aria-controls="filter-panel" aria-expanded="false">Filter</button>
         <button id="commands-button" class="toolbar-button" type="button" aria-keyshortcuts="Meta+K"
                 aria-haspopup="dialog" aria-controls="command-dialog">Commands</button>
         <button id="inspector-toggle" class="toolbar-button pane-button" type="button"
@@ -85,12 +85,45 @@
             <p id="view-subtitle" class="view-subtitle">Reading the validated ledger…</p>
           </div>
           <div class="view-tools">
-            <label id="filter-wrap" class="filter-wrap" hidden>
-              <span class="visually-hidden">Filter current view</span>
-              <input id="view-filter" type="search" maxlength="120" autocomplete="off"
-                     placeholder="Filter this view…" aria-label="Filter current view">
-              <button id="filter-clear" type="button" aria-label="Clear filter">×</button>
-            </label>
+            <div id="filter-panel" class="filter-panel" hidden>
+              <label class="facet-control">
+                <span>Priority</span>
+                <select id="priority-filter" aria-label="Filter by priority">
+                  <option value="">All</option>
+                  <option value="P0">P0 Immediate</option>
+                  <option value="P1">P1 Next</option>
+                  <option value="P2">P2 Normal</option>
+                  <option value="none">Unprioritized</option>
+                </select>
+              </label>
+              <label class="facet-control">
+                <span>Type</span>
+                <select id="work-type-filter" aria-label="Filter by work type">
+                  <option value="">All</option>
+                  <option value="security">Security</option>
+                  <option value="feature">New Feature</option>
+                  <option value="bug-fix">Bug Fix</option>
+                  <option value="improvement">Improvement</option>
+                  <option value="maintenance">Maintenance</option>
+                  <option value="documentation">Documentation</option>
+                  <option value="research">Research</option>
+                  <option value="none">Unclassified</option>
+                </select>
+              </label>
+              <label class="facet-control">
+                <span>Sort</span>
+                <select id="metadata-sort" aria-label="Sort current view">
+                  <option value="ledger">Ledger order</option>
+                  <option value="priority">Priority</option>
+                </select>
+              </label>
+              <label id="filter-wrap" class="filter-wrap">
+                <span class="visually-hidden">Filter current view</span>
+                <input id="view-filter" type="search" maxlength="120" autocomplete="off"
+                       placeholder="Filter this view…" aria-label="Filter current view">
+                <button id="filter-clear" type="button" aria-label="Clear all filters">×</button>
+              </label>
+            </div>
             <span id="refresh-state" class="refresh-state" role="status" aria-live="polite"></span>
           </div>
         </header>

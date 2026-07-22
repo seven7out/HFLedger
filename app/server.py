@@ -16,7 +16,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from core import admission, ledger, local_state, orientation, reconcile  # noqa: E402
+from core import admission, item_metadata, ledger, local_state, orientation, reconcile  # noqa: E402
 from core.link_safety import resolve_projected_link  # noqa: E402
 from core.store import BoardStore, BoardValidationError, load_config, resolve_home  # noqa: E402
 
@@ -39,6 +39,7 @@ LOCAL_STATE_ERROR_CODES = frozenset((
 PROJECTION_VALIDATED_LOCAL_COMMANDS = frozenset((
     "record-successful-visit", "mark-changes-seen", "acknowledge-attention",
     "snooze-attention", "set-watch", "set-navigation",
+    "set-item-metadata", "clear-item-metadata",
 ))
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 STATIC_ASSETS = {
@@ -601,6 +602,14 @@ def _validate_local_projection_references(body, projection):
         if (isinstance(item_id, str) and ITEM_ID_RE.fullmatch(item_id) and
                 item_id not in items):
             raise local_state.LocalStateError("unknown-item", 404)
+    elif command in ("set-item-metadata", "clear-item-metadata"):
+        item_id = arguments.get("itemId")
+        if isinstance(item_id, str) and ITEM_ID_RE.fullmatch(item_id):
+            item = items.get(item_id)
+            if item is None:
+                raise local_state.LocalStateError("unknown-item", 404)
+            if item.get("entityKind") not in ("queue-task", "inbox-item"):
+                raise local_state.LocalStateError("unsupported-mode", 400)
 
 
 def _validate_local_state_command_body(allowed_context_ids, body):
@@ -629,6 +638,8 @@ def _validate_local_state_command_body(allowed_context_ids, body):
         "snooze-attention": ("itemId",),
         "clear-attention-triage": ("itemId",),
         "set-watch": ("itemId",),
+        "set-item-metadata": ("itemId",),
+        "clear-item-metadata": ("itemId",),
     }
     attention_fields = {
         "acknowledge-attention": ("attentionKey",),
@@ -658,6 +669,12 @@ def _validate_local_state_command_body(allowed_context_ids, body):
             (not isinstance(selected_item, str) or
              ITEM_ID_RE.fullmatch(selected_item) is None)):
         raise local_state.LocalStateError("invalid-arguments", 400)
+    if command == "set-item-metadata":
+        priority = arguments.get("priority")
+        work_type = arguments.get("workType")
+        if (priority not in item_metadata.PRIORITIES + (None,) or
+                work_type not in item_metadata.WORK_TYPES + (None,)):
+            raise local_state.LocalStateError("invalid-arguments", 400)
     if command == "record-successful-visit":
         cursor = arguments.get("cursor")
         if (not isinstance(cursor, str) or not 1 <= len(cursor) <= 256 or

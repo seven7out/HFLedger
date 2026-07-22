@@ -2,6 +2,14 @@
 
 Status: Wave 1 design contract
 
+Current implementation note (2026-07-21): the private document is now schema
+version 2. Version 2 adds bounded per-item priority/work-type annotations and
+the `set-item-metadata` / `clear-item-metadata` commands while preserving every
+no-authoritative-write invariant below. Existing version 1 documents migrate
+atomically with a `before-v1-<utc>.json` recovery snapshot. See
+[`item-metadata.md`](item-metadata.md) for the extension contract; the version
+1 examples below remain the migration source format.
+
 Base: `ca27e60a9bff1f15c4f553edae707df37c47b497`
 
 Scope: local UI state only; no production implementation in this branch

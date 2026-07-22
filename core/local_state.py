@@ -20,16 +20,19 @@ import stat
 import threading
 import time
 
+from . import item_metadata
+
 
 __all__ = ("SCHEMA_VERSION", "LocalStateError", "create_backend")
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MAX_FILE_BYTES = 512 * 1024
 MAX_REVISION = 9_007_199_254_740_991
 MAX_CONTEXTS = 32
 MAX_SEEN_CHANGES = 1000
 MAX_ATTENTION = 500
 MAX_WATCHED = 500
+MAX_ITEM_METADATA = 1000
 MAX_COMMAND_IDS = 200
 MAX_NOTE_CHARS = 280
 MAX_NOTE_BYTES = 1024
@@ -49,6 +52,8 @@ COMMANDS = frozenset((
     "clear-attention-triage",
     "set-watch",
     "set-navigation",
+    "set-item-metadata",
+    "clear-item-metadata",
     "set-pane-widths",
     "set-disclosure",
 ))
@@ -203,6 +208,7 @@ def _default_context(context_id):
         "seenChanges": [],
         "attention": [],
         "watched": [],
+        "itemMetadata": [],
         "navigation": {
             "selectedView": "today",
             "selectedProjectId": None,
@@ -261,7 +267,8 @@ def _validate_document(document, workspace_id=None):
 def _validate_context(context):
     if not _closed(context, (
             "contextId", "lastSuccessfulVisitAt", "viewCursors",
-            "seenChanges", "attention", "watched", "navigation", "layout")):
+            "seenChanges", "attention", "watched", "itemMetadata",
+            "navigation", "layout")):
         raise _InvalidState()
     if not _context_id(context["contextId"]):
         raise _InvalidState()
@@ -346,6 +353,22 @@ def _validate_context(context):
             raise _InvalidState()
         watched_ids.add(record["itemId"])
 
+    metadata_records = context["itemMetadata"]
+    if (not isinstance(metadata_records, list) or
+            len(metadata_records) > MAX_ITEM_METADATA):
+        raise _InvalidState()
+    metadata_ids = set()
+    for record in metadata_records:
+        if (not _closed(record, ("itemId", "priority", "workType", "changedAt")) or
+                not _opaque_id(record["itemId"]) or
+                record["priority"] not in item_metadata.PRIORITIES + (None,) or
+                record["workType"] not in item_metadata.WORK_TYPES + (None,)):
+            raise _InvalidState()
+        _parse_timestamp(record["changedAt"])
+        if record["itemId"] in metadata_ids:
+            raise _InvalidState()
+        metadata_ids.add(record["itemId"])
+
     navigation = context["navigation"]
     if not _closed(navigation, (
             "selectedView", "selectedProjectId", "selectedItemId")):
@@ -394,6 +417,7 @@ def _canonicalize(document):
         context["seenChanges"].sort(key=lambda item: item["changeId"])
         context["attention"].sort(key=lambda item: item["itemId"])
         context["watched"].sort(key=lambda item: item["itemId"])
+        context["itemMetadata"].sort(key=lambda item: item["itemId"])
         context["layout"]["disclosures"].sort(key=lambda item: item["key"])
     return document
 
@@ -432,6 +456,7 @@ def _migrate_v0(document):
             if not isinstance(record, dict) or "itemId" in record:
                 raise _InvalidState()
             record["itemId"] = record.pop("itemKey")
+        context.setdefault("itemMetadata", [])
         navigation = context.get("navigation")
         if not isinstance(navigation, dict):
             raise _InvalidState()
@@ -439,6 +464,22 @@ def _migrate_v0(document):
             raise _InvalidState()
         navigation["selectedProjectId"] = navigation.pop("selectedProjectKey")
         navigation["selectedItemId"] = navigation.pop("selectedItemKey")
+    _validate_document(migrated)
+    return migrated
+
+
+def _migrate_v1(document):
+    migrated = copy.deepcopy(document)
+    if migrated.get("schemaVersion") != 1:
+        raise _InvalidState()
+    migrated["schemaVersion"] = SCHEMA_VERSION
+    contexts = migrated.get("contexts")
+    if not isinstance(contexts, list):
+        raise _InvalidState()
+    for context in contexts:
+        if not isinstance(context, dict) or "itemMetadata" in context:
+            raise _InvalidState()
+        context["itemMetadata"] = []
     _validate_document(migrated)
     return migrated
 
@@ -761,6 +802,40 @@ class _BackendBase(object):
                 record for record in context["watched"]
                 if record["itemId"] != item_id
             ]
+
+    def _command_set_item_metadata(self, context, arguments, now):
+        self._exact_arguments(arguments, ("itemId", "priority", "workType"))
+        item_id = arguments["itemId"]
+        priority = arguments["priority"]
+        work_type = arguments["workType"]
+        if (not _opaque_id(item_id) or
+                priority not in item_metadata.PRIORITIES + (None,) or
+                work_type not in item_metadata.WORK_TYPES + (None,)):
+            raise LocalStateError("invalid-arguments", 400)
+        record = {
+            "itemId": item_id,
+            "priority": priority,
+            "workType": work_type,
+            "changedAt": _format_timestamp(now),
+        }
+        for index, current in enumerate(context["itemMetadata"]):
+            if current["itemId"] == item_id:
+                context["itemMetadata"][index] = record
+                return
+        if len(context["itemMetadata"]) >= MAX_ITEM_METADATA:
+            raise LocalStateError("limit", 400)
+        context["itemMetadata"].append(record)
+
+    def _command_clear_item_metadata(self, context, arguments, now):
+        del now
+        self._exact_arguments(arguments, ("itemId",))
+        item_id = arguments["itemId"]
+        if not _opaque_id(item_id):
+            raise LocalStateError("invalid-arguments", 400)
+        context["itemMetadata"] = [
+            record for record in context["itemMetadata"]
+            if record["itemId"] != item_id
+        ]
 
     def _command_set_navigation(self, context, arguments, now):
         del now
@@ -1143,12 +1218,12 @@ class _FileBackend(_BackendBase):
     def _migrate(self, raw, document):
         try:
             version = document.get("schemaVersion")
-            if version != 0:
+            if version not in (0, 1):
                 raise _InvalidState()
             now = _utc_now(self._now_fn)
             stamp = now.strftime("%Y%m%dT%H%M%SZ")
-            self._write_recovery_bytes("before-v0-%s.json" % stamp, raw)
-            migrated = _migrate_v0(document)
+            self._write_recovery_bytes("before-v%d-%s.json" % (version, stamp), raw)
+            migrated = _migrate_v0(document) if version == 0 else _migrate_v1(document)
             if migrated["workspaceId"] != self._workspace_id:
                 raise _InvalidState()
             self._atomic_write(_encode(migrated))
@@ -1174,7 +1249,7 @@ class _FileBackend(_BackendBase):
         version = document.get("schemaVersion") if isinstance(document, dict) else None
         if isinstance(version, int) and not isinstance(version, bool) and version > SCHEMA_VERSION:
             raise LocalStateError("newer-version", 503)
-        if version == 0:
+        if version in (0, 1):
             return self._migrate(raw, document)
         try:
             _validate_document(document, self._workspace_id)

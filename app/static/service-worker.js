@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE = "ledger-ui-v2";
+const CACHE = "ledger-ui-v3";
 const SHELL = ["/", "/deck", "/app.css", "/app.js", "/deck.js", "/icon.png", "/logo.png", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

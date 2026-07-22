@@ -42,11 +42,11 @@ class MemoryLocalStateTests(unittest.TestCase):
         self.assertEqual(self.backend.capability(), {
             "mode": "session",
             "available": True,
-            "schemaVersion": 1,
+            "schemaVersion": local_state.SCHEMA_VERSION,
             "reason": None,
         })
         state = self.backend.get("main")
-        self.assertEqual(state["schemaVersion"], 1)
+        self.assertEqual(state["schemaVersion"], local_state.SCHEMA_VERSION)
         self.assertEqual(state["revision"], 0)
         self.assertIsNone(state["warning"])
         context = state["context"]
@@ -57,6 +57,7 @@ class MemoryLocalStateTests(unittest.TestCase):
         self.assertEqual(context["navigation"]["selectedView"], "today")
         self.assertEqual(context["layout"]["sidebarWidth"], 210)
         self.assertEqual(context["layout"]["inspectorWidth"], 360)
+        self.assertEqual(context["itemMetadata"], [])
 
     def test_partial_or_invalid_configuration_is_rejected(self):
         cases = (
@@ -118,9 +119,15 @@ class MemoryLocalStateTests(unittest.TestCase):
                         "set-watch", {
                             "itemId": "item-fictional-watch", "watched": True,
                         })
+        state = command(self.backend, "main", state["revision"],
+                        "set-item-metadata", {
+                            "itemId": "item-fictional-watch",
+                            "priority": "P1",
+                            "workType": "improvement",
+                        })
 
         context = state["context"]
-        self.assertEqual(state["revision"], 9)
+        self.assertEqual(state["revision"], 10)
         self.assertEqual(len(context["watched"]), 1)
         self.assertEqual({record["changeId"] for record in context["seenChanges"]}, {
             "change-fictional-a", "change-fictional-b", "change-fictional-c"})
@@ -133,6 +140,12 @@ class MemoryLocalStateTests(unittest.TestCase):
         self.assertEqual(context["layout"]["inspectorWidth"], 560)
         self.assertEqual(context["layout"]["disclosures"], [
             {"key": "inspector.runtime", "expanded": True}])
+        self.assertEqual(context["itemMetadata"], [{
+            "itemId": "item-fictional-watch",
+            "priority": "P1",
+            "workType": "improvement",
+            "changedAt": "2026-07-18T20:00:00Z",
+        }])
 
         state = command(self.backend, "main", state["revision"],
                         "clear-attention-triage", {
@@ -140,7 +153,11 @@ class MemoryLocalStateTests(unittest.TestCase):
         state = command(self.backend, "main", state["revision"],
                         "set-watch", {
                             "itemId": "item-fictional-watch", "watched": False})
+        state = command(self.backend, "main", state["revision"],
+                        "clear-item-metadata", {
+                            "itemId": "item-fictional-watch"})
         self.assertEqual(state["context"]["watched"], [])
+        self.assertEqual(state["context"]["itemMetadata"], [])
         self.assertEqual(
             [record["itemId"] for record in state["context"]["attention"]],
             ["item-fictional-snooze"])
@@ -170,6 +187,10 @@ class MemoryLocalStateTests(unittest.TestCase):
             ("set-navigation", {"selectedView": "today",
                                 "selectedProjectId": "not-legal"}),
             ("set-disclosure", {"key": "run.dynamic-id", "expanded": True}),
+            ("set-item-metadata", {"itemId": "item-a", "priority": "urgent",
+                                   "workType": "bug-fix"}),
+            ("set-item-metadata", {"itemId": "item-a", "priority": "P1",
+                                   "workType": "custom"}),
         )
         for name, arguments in cases:
             with self.subTest(name=name):
@@ -320,7 +341,7 @@ class DurableLocalStateTests(unittest.TestCase):
         self.assertEqual(backend.capability(), {
             "mode": "durable",
             "available": True,
-            "schemaVersion": 1,
+            "schemaVersion": local_state.SCHEMA_VERSION,
             "reason": None,
         })
         paths = self.paths()
@@ -500,14 +521,17 @@ class DurableLocalStateTests(unittest.TestCase):
     def test_newer_schema_is_byte_identical_and_never_quarantined(self):
         self.backend()
         paths = self.paths()
-        future = b'{"schemaVersion":2,"future":"opaque"}\n'
+        future = (json.dumps({
+            "schemaVersion": local_state.SCHEMA_VERSION + 1,
+            "future": "opaque",
+        }, separators=(",", ":")) + "\n").encode("utf-8")
         with open(paths["state"], "wb") as handle:
             handle.write(future)
         backend = self.backend()
         self.assertEqual(backend.capability(), {
             "mode": "unavailable",
             "available": False,
-            "schemaVersion": 1,
+            "schemaVersion": local_state.SCHEMA_VERSION,
             "reason": "newer-version",
         })
         with open(paths["state"], "rb") as handle:
@@ -547,13 +571,41 @@ class DurableLocalStateTests(unittest.TestCase):
 
         migrated = self.backend()
         state = migrated.get("main")
-        self.assertEqual(state["schemaVersion"], 1)
+        self.assertEqual(state["schemaVersion"], local_state.SCHEMA_VERSION)
         self.assertEqual(state["context"]["seenChanges"][0]["changeId"],
                          "change-legacy")
         self.assertEqual(state["context"]["attention"][0]["itemId"],
                          "item-legacy")
+        self.assertEqual(state["context"]["itemMetadata"], [])
         snapshots = [name for name in os.listdir(paths["recovery"])
                      if name.startswith("before-v0-")]
+        self.assertEqual(len(snapshots), 1)
+        with open(os.path.join(paths["recovery"], snapshots[0]), "rb") as handle:
+            self.assertEqual(handle.read(), legacy)
+
+    def test_v1_state_migrates_without_losing_existing_private_state(self):
+        self.backend()
+        paths = self.paths()
+        document = local_state._default_document(
+            self.workspace_id, ("main",), self.clock())
+        document["schemaVersion"] = 1
+        context = document["contexts"][0]
+        context.pop("itemMetadata")
+        context["watched"] = [{
+            "itemId": "item-v1-watch",
+            "watchedAt": "2026-07-18T20:00:00Z",
+        }]
+        legacy = (json.dumps(document, sort_keys=True) + "\n").encode("utf-8")
+        with open(paths["state"], "wb") as handle:
+            handle.write(legacy)
+
+        migrated = self.backend().get("main")
+        self.assertEqual(migrated["schemaVersion"], local_state.SCHEMA_VERSION)
+        self.assertEqual(migrated["context"]["watched"][0]["itemId"],
+                         "item-v1-watch")
+        self.assertEqual(migrated["context"]["itemMetadata"], [])
+        snapshots = [name for name in os.listdir(paths["recovery"])
+                     if name.startswith("before-v1-")]
         self.assertEqual(len(snapshots), 1)
         with open(os.path.join(paths["recovery"], snapshots[0]), "rb") as handle:
             self.assertEqual(handle.read(), legacy)

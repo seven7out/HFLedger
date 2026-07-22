@@ -322,6 +322,27 @@ class OrientationV2Tests(unittest.TestCase):
         self.assertEqual(by_ref["task:review"]["primaryHome"], "queued")
         self.assertEqual(by_ref["decision:deferred"]["primaryHome"], "parked")
 
+    def test_task_and_idea_metadata_are_closed_normalized_and_diagnostic(self):
+        self.board["queue"] = [{
+            "id": "task:metadata", "title": "Classify timer",
+            "status": "Ready for Build", "priority": "priority p1",
+            "workType": "bug-fix", "updated": "2026-07-20T10:00:00+00:00",
+        }]
+        self.board["inbox"] = [{
+            "id": "idea:metadata", "title": "Invent timer",
+            "status": "Inbox", "priority": "urgent", "workType": "custom",
+            "date": "2026-07-20",
+        }]
+        result = self.build()
+        by_ref = {value["sourceItemRef"]: value for value in result["items"]}
+        self.assertEqual(by_ref["task:metadata"]["priority"], "P1")
+        self.assertEqual(by_ref["task:metadata"]["workType"], "bug-fix")
+        self.assertIsNone(by_ref["idea:metadata"]["priority"])
+        self.assertIsNone(by_ref["idea:metadata"]["workType"])
+        codes = {value["reasonCode"] for value in result["coverage"]["diagnostics"]}
+        self.assertIn("item-priority-invalid", codes)
+        self.assertIn("item-work-type-invalid", codes)
+
     def test_exact_merged_pr_verifies_shipment_and_open_pr_disputes_it(self):
         self.board["queue"] = [{
             "id": "task:ship", "title": "Ship orchard timer", "status": "Done",

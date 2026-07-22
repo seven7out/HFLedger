@@ -42,6 +42,22 @@ const QUICK_LOOK_EVIDENCE_KINDS = Object.freeze([
 ]);
 const QUICK_LOOK_EVIDENCE_KIND_SET = new Set(QUICK_LOOK_EVIDENCE_KINDS);
 const QUICK_LOOK_MAX_EVIDENCE = 8;
+const PRIORITY_LABELS = Object.freeze({
+  P0: "P0 Immediate",
+  P1: "P1 Next",
+  P2: "P2 Normal",
+});
+const WORK_TYPE_LABELS = Object.freeze({
+  security: "Security",
+  feature: "New Feature",
+  "bug-fix": "Bug Fix",
+  improvement: "Improvement",
+  maintenance: "Maintenance",
+  documentation: "Documentation",
+  research: "Research",
+});
+const METADATA_EDITABLE_KINDS = new Set(["queue-task", "inbox-item"]);
+const PRIORITY_RANK = Object.freeze({ P0: 0, P1: 1, P2: 2 });
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -52,13 +68,16 @@ const state = {
   context: (!TESTING && typeof location !== "undefined")
     ? (new URLSearchParams(location.search).get("context") || "") : "",
   local: null,
-  localCapability: { mode: "unavailable", available: false, schemaVersion: 1, reason: "io" },
+  localCapability: { mode: "unavailable", available: false, schemaVersion: 2, reason: "io" },
   localRevision: 0,
   restoredLocalNavigation: false,
   view: "today",
   selectedProject: null,
   homeFilter: null,
   filter: "",
+  priorityFilter: "",
+  workTypeFilter: "",
+  metadataSort: "ledger",
   selection: null,
   visibleRows: [],
   collapsedRuns: new Set(),
@@ -348,7 +367,7 @@ function normalizeLocalResponse(response) {
     capability: {
       mode: safeText(capability?.mode, 32) || "unavailable",
       available: capability?.available === true,
-      schemaVersion: Number(capability?.schemaVersion) || 1,
+      schemaVersion: Number(capability?.schemaVersion) || 2,
       reason: safeText(capability?.reason, 64) || null,
     },
     revision: Number(response?.revision ?? local?.revision ?? 0) || 0,
@@ -360,7 +379,7 @@ async function fetchLocalState() {
   state.localCapability = {
     mode: safeText(advertised.mode, 32) || "unavailable",
     available: advertised.available === true,
-    schemaVersion: Number(advertised.schemaVersion) || 1,
+    schemaVersion: Number(advertised.schemaVersion) || 2,
     reason: safeText(advertised.reason, 64) || null,
   };
   if (!state.localCapability.available || !state.context) {
@@ -375,7 +394,7 @@ async function fetchLocalState() {
     state.localRevision = normalized.revision;
   } catch (error) {
     state.local = null;
-    state.localCapability = { mode: "unavailable", available: false, schemaVersion: 1, reason: "io" };
+    state.localCapability = { mode: "unavailable", available: false, schemaVersion: 2, reason: "io" };
     announce(`Local presentation controls are unavailable: ${error.message}`);
   }
 }
@@ -423,6 +442,75 @@ function localLayout() {
 function localWatched(itemId) {
   const watched = state.local?.watched || state.local?.state?.watched || [];
   return watched.some((entry) => (entry.itemId || entry.itemKey) === itemId);
+}
+
+function localItemMetadata(itemId) {
+  const records = state.local?.itemMetadata || state.local?.state?.itemMetadata || [];
+  return records.find((entry) => entry?.itemId === itemId) || null;
+}
+
+function effectiveItemMetadata(item) {
+  const local = item?.id ? localItemMetadata(item.id) : null;
+  const sourcePriority = Object.hasOwn(PRIORITY_LABELS, item?.priority) ? item.priority : null;
+  const sourceWorkType = Object.hasOwn(WORK_TYPE_LABELS, item?.workType) ? item.workType : null;
+  return {
+    priority: local ? local.priority : sourcePriority,
+    workType: local ? local.workType : sourceWorkType,
+    sourcePriority,
+    sourceWorkType,
+    local: Boolean(local),
+    changedAt: local?.changedAt || null,
+  };
+}
+
+function priorityLabel(value) {
+  return PRIORITY_LABELS[value] || "Unprioritized";
+}
+
+function workTypeLabel(value) {
+  return WORK_TYPE_LABELS[value] || "Unclassified";
+}
+
+function metadataFiltersActive() {
+  return Boolean(state.priorityFilter || state.workTypeFilter);
+}
+
+function filtersActive() {
+  return Boolean(state.filter.trim()) || metadataFiltersActive();
+}
+
+function metadataMatches(item) {
+  const metadata = effectiveItemMetadata(item);
+  const priority = metadata.priority || "none";
+  const workType = metadata.workType || "none";
+  return (!state.priorityFilter || state.priorityFilter === priority) &&
+    (!state.workTypeFilter || state.workTypeFilter === workType);
+}
+
+function compareSelectedMetadata(left, right) {
+    const leftMetadata = effectiveItemMetadata(left);
+    const rightMetadata = effectiveItemMetadata(right);
+    const priorityDelta = (PRIORITY_RANK[leftMetadata.priority] ?? 3) -
+      (PRIORITY_RANK[rightMetadata.priority] ?? 3);
+    if (priorityDelta) return priorityDelta;
+    const typeDelta = workTypeLabel(leftMetadata.workType).localeCompare(workTypeLabel(rightMetadata.workType));
+    if (typeDelta) return typeDelta;
+    return safeText(left?.title || left?.id, 180).localeCompare(safeText(right?.title || right?.id, 180));
+}
+
+function sortBySelectedMetadata(items) {
+  const copy = [...items];
+  return state.metadataSort === "priority" ? copy.sort(compareSelectedMetadata) : copy;
+}
+
+function metadataBadge(kind, value, isLocal = false) {
+  const label = kind === "priority" ? priorityLabel(value) : workTypeLabel(value);
+  const classes = ["metadata-badge"];
+  if (kind === "priority" && value) classes.push(`priority-${value.toLocaleLowerCase()}`);
+  if (isLocal) classes.push("is-local");
+  const badge = node("span", classes.join(" "), label);
+  badge.dataset.metadataKind = kind;
+  return badge;
 }
 
 function announce(message, undo) {
@@ -575,8 +663,7 @@ function setView(view, { project = null, home = null, focus = true, persist = tr
   state.view = view;
   state.selectedProject = view === "project" ? project : null;
   state.homeFilter = view === "all-work" ? home : null;
-  state.filter = "";
-  $("#view-filter").value = "";
+  resetFilterState();
   closeTransientPanes();
   renderCenter();
   updateNavigationSelection();
@@ -611,10 +698,16 @@ function emptyState(title, detail, action) {
   return wrapper;
 }
 
-function rowMatches(item, extra = "") {
+function rowMatches(item, extra = "", includeMetadata = true) {
+  if (includeMetadata && !metadataMatches(item)) return false;
+  const metadata = effectiveItemMetadata(item);
   const filter = state.filter.trim().toLocaleLowerCase();
   if (!filter) return true;
-  return [item?.title, item?.whyHere, item?.project, item?.statusLabel, item?.primaryHome, item?.provenance, extra]
+  return [
+    item?.title, item?.whyHere, item?.project, item?.statusLabel,
+    item?.primaryHome, item?.provenance, priorityLabel(metadata.priority),
+    workTypeLabel(metadata.workType), extra,
+  ]
     .some((value) => safeText(value, 500).toLocaleLowerCase().includes(filter));
 }
 
@@ -637,6 +730,7 @@ function ledgerRow(item, options = {}) {
   const reason = options.reason || item.whyHere || "No deterministic reason was supplied.";
   const changedAt = options.changedAt || item.clocks?.itemChangedAt;
   const glyph = options.glyph || HOME_GLYPHS[item.primaryHome] || "◇";
+  const itemMetadata = effectiveItemMetadata(item);
   const row = node("button", "ledger-row");
   row.type = "button";
   row.setAttribute("role", "option");
@@ -655,6 +749,15 @@ function ledgerRow(item, options = {}) {
   copy.append(node("span", "row-title", options.title || item.title || item.id));
   copy.append(node("span", "row-reason", reason));
   if (item.project) copy.append(node("span", "row-label", item.project));
+  if (METADATA_EDITABLE_KINDS.has(item.entityKind) ||
+      itemMetadata.priority || itemMetadata.workType || itemMetadata.local) {
+    const facets = node("span", "row-facets");
+    facets.append(
+      metadataBadge("priority", itemMetadata.priority, itemMetadata.local),
+      metadataBadge("work-type", itemMetadata.workType, itemMetadata.local),
+    );
+    copy.append(facets);
+  }
   const meta = node("span", "row-meta");
   const time = node("time", "row-time", relativeTime(changedAt, options.timestampEstimated));
   if (changedAt) time.dateTime = changedAt;
@@ -672,6 +775,9 @@ function ledgerRow(item, options = {}) {
     reason,
     changedAt ? `changed ${relativeTime(changedAt, options.timestampEstimated)}` : "change time unknown",
     provenanceLabel(provenance),
+    priorityLabel(itemMetadata.priority),
+    workTypeLabel(itemMetadata.workType),
+    itemMetadata.local ? "assigned locally" : "",
     options.unseen ? "unseen" : "",
     (item.secondaryFlags || []).includes("watched") || localWatched(item.id) ? "watched" : "",
   ].filter(Boolean).join(", "));
@@ -771,18 +877,23 @@ function renderToday() {
 
   const items = itemMap();
   const attentionList = node("div", "ledger-list");
-  (orientation.attention?.items || []).forEach((entry) => {
+  const attentionEntries = [...(orientation.attention?.items || [])];
+  if (state.metadataSort === "priority") {
+    attentionEntries.sort((left, right) => compareSelectedMetadata(
+      items.get(left.itemId) || {}, items.get(right.itemId) || {}));
+  }
+  attentionEntries.forEach((entry) => {
     const item = items.get(entry.itemId);
     if (!item || !rowMatches(item, entry.rankReason)) return;
     attentionList.append(ledgerRow(item, { reason: entry.rankReason || item.whyHere }));
   });
   if (!attentionList.childElementCount) {
     const coverage = orientation.coverage?.screen || {};
-    const title = state.filter ? `No items match “${state.filter}”` : "Nothing needs you right now";
+    const title = filtersActive() ? "No items match the current filters" : "Nothing needs you right now";
     const detail = coverage.qualification || (coverage.state === "complete"
       ? `Nothing needs your attention in the sources observed through ${exactTime(coverage.asOf)}.`
       : "No attention items were found in the sources that could be observed.");
-    const clear = state.filter ? button("text-button", "Clear filter", clearFilter) : null;
+    const clear = filtersActive() ? button("text-button", "Clear filters", clearFilter) : null;
     attentionList.append(emptyState(title, detail, clear));
   }
   const attentionCount = orientation.attention?.truncated
@@ -852,9 +963,9 @@ function renderChanges() {
   (state.orientation?.changes?.groups || []).forEach((group) => list.append(renderRunGroup(group, { allChanges: true })));
   if (!list.childElementCount) {
     list.append(emptyState(
-      state.filter ? `No changes match “${state.filter}”` : "No changes are available",
-      state.filter ? "Clear the current-view filter to see the complete journal." : "No valid run-grouped changes were supplied.",
-      state.filter ? button("text-button", "Clear filter", clearFilter) : null,
+      filtersActive() ? "No changes match the current filters" : "No changes are available",
+      filtersActive() ? "Clear the current-view filters to see the complete journal." : "No valid run-grouped changes were supplied.",
+      filtersActive() ? button("text-button", "Clear filters", clearFilter) : null,
     ));
   }
   fragment.append(list);
@@ -888,7 +999,8 @@ function renderItemGroups(items, { includeControls = false } = {}) {
   items.forEach((item) => grouped.get(item.primaryHome)?.push(item));
   HOME_ORDER.forEach((home) => {
     if (state.homeFilter && state.homeFilter !== home) return;
-    const matching = (grouped.get(home) || []).filter((item) => rowMatches(item));
+    const matching = sortBySelectedMetadata(
+      (grouped.get(home) || []).filter((item) => rowMatches(item)));
     if (!matching.length) return;
     const list = node("div", "ledger-list");
     matching.forEach((item) => list.append(ledgerRow(item)));
@@ -896,9 +1008,9 @@ function renderItemGroups(items, { includeControls = false } = {}) {
   });
   if (!fragment.childElementCount || (includeControls && fragment.childElementCount === 1)) {
     fragment.append(emptyState(
-      state.filter ? `No items match “${state.filter}”` : "No work is available",
-      state.filter ? "Clear the current-view filter to see this library." : "The current projection contains no items for this destination.",
-      state.filter ? button("text-button", "Clear filter", clearFilter) : null,
+      filtersActive() ? "No items match the current filters" : "No work is available",
+      filtersActive() ? "Clear the current-view filters to see this library." : "The current projection contains no items for this destination.",
+      filtersActive() ? button("text-button", "Clear filters", clearFilter) : null,
     ));
   }
   return fragment;
@@ -924,8 +1036,8 @@ function dayLabel(value) {
 function renderShippedLog() {
   const fragment = document.createDocumentFragment();
   const groups = new Map();
-  (state.orientation?.items || [])
-    .filter((item) => item.primaryHome === "shipped-verified" && rowMatches(item))
+  sortBySelectedMetadata((state.orientation?.items || [])
+    .filter((item) => item.primaryHome === "shipped-verified" && rowMatches(item)))
     .forEach((item) => {
       const label = dayLabel(item.clocks?.itemChangedAt);
       if (!groups.has(label)) groups.set(label, []);
@@ -938,9 +1050,9 @@ function renderShippedLog() {
   });
   if (!fragment.childElementCount) {
     fragment.append(emptyState(
-      state.filter ? `No verified shipments match “${state.filter}”` : "No verified shipments are visible",
+      filtersActive() ? "No verified shipments match the current filters" : "No verified shipments are visible",
       "Only independently corroborated outcomes appear in Shipped Log. Other shipment claims remain in All Work.",
-      state.filter ? button("text-button", "Clear filter", clearFilter) : null,
+      filtersActive() ? button("text-button", "Clear filters", clearFilter) : null,
     ));
   }
   return fragment;
@@ -964,7 +1076,14 @@ function renderWatched() {
 function renderProjects() {
   const fragment = document.createDocumentFragment();
   const list = node("div", "project-index");
-  projects().filter((project) => rowMatches({ title: project.name }, `${project.attention} ${project.unseen}`)).forEach((project) => {
+  projects().filter((project) => {
+    const textMatches = rowMatches(
+      { title: project.name }, `${project.attention} ${project.unseen}`, false);
+    const facetMatches = (!state.priorityFilter && !state.workTypeFilter) ||
+      (state.orientation?.items || []).some((item) =>
+        item.project === project.name && metadataMatches(item));
+    return textMatches && facetMatches;
+  }).forEach((project) => {
     const row = button("project-index-row", "", () => setView("project", { project: project.name }));
     row.append(
       node("span", "row-glyph", "◇"),
@@ -990,7 +1109,8 @@ function renderProject() {
   const attention = scoped.filter((item) => ["needs-you", "disputed", "shipped-unverified"].includes(item.primaryHome));
   if (attention.length) {
     const list = node("div", "ledger-list");
-    attention.filter((item) => rowMatches(item)).forEach((item) => list.append(ledgerRow(item)));
+    sortBySelectedMetadata(attention.filter((item) => rowMatches(item)))
+      .forEach((item) => list.append(ledgerRow(item)));
     fragment.append(section("Needs You", attention.length, list));
   }
   const changeIds = new Set(scoped.flatMap((item) => item.changeIds || []));
@@ -1107,6 +1227,71 @@ function renderInspector(descriptor) {
   renderItemInspector(target, item);
 }
 
+function metadataSelect(label, values, selectedValue) {
+  const wrapper = node("label");
+  wrapper.append(node("span", "", label));
+  const select = document.createElement("select");
+  select.setAttribute("aria-label", label);
+  values.forEach(([value, text]) => {
+    const option = node("option", "", text);
+    option.value = value;
+    option.selected = value === (selectedValue || "");
+    select.append(option);
+  });
+  wrapper.append(select);
+  return { wrapper, select };
+}
+
+function itemMetadataEditor(item) {
+  const metadata = effectiveItemMetadata(item);
+  const editor = node("div", "metadata-editor");
+  if (!METADATA_EDITABLE_KINDS.has(item.entityKind)) {
+    const badges = node("div", "row-facets");
+    badges.append(
+      metadataBadge("priority", metadata.priority, metadata.local),
+      metadataBadge("work-type", metadata.workType, metadata.local),
+    );
+    editor.append(badges, node(
+      "p", "metadata-source-note",
+      "Priority and type assignment is available for tasks and ideas. This item keeps source metadata only.",
+    ));
+    return editor;
+  }
+
+  const fields = node("div", "metadata-editor-fields");
+  const priority = metadataSelect("Priority", [
+    ["", "Unprioritized"], ["P0", "P0 Immediate"],
+    ["P1", "P1 Next"], ["P2", "P2 Normal"],
+  ], metadata.priority);
+  const workType = metadataSelect("Work type", [
+    ["", "Unclassified"],
+    ...Object.entries(WORK_TYPE_LABELS),
+  ], metadata.workType);
+  fields.append(priority.wrapper, workType.wrapper);
+
+  const actions = node("div", "metadata-editor-actions");
+  const save = button("control-button primary-control", "Save locally", () =>
+    saveItemMetadata(item, priority.select.value || null, workType.select.value || null));
+  save.disabled = !state.localCapability.available;
+  actions.append(save);
+  if (metadata.local) {
+    const reset = button("control-button", "Use source values", () => clearItemMetadata(item));
+    reset.disabled = !state.localCapability.available;
+    actions.append(reset);
+  }
+
+  const source = `Source: ${priorityLabel(metadata.sourcePriority)} · ${workTypeLabel(metadata.sourceWorkType)}.`;
+  const local = metadata.local
+    ? ` Local assignment saved ${relativeTime(metadata.changedAt)}.`
+    : " No local override is active.";
+  editor.append(
+    fields,
+    actions,
+    node("p", "metadata-source-note", `${source}${local} ${localCapabilityLabel()}`),
+  );
+  return editor;
+}
+
 function renderItemInspector(target, item) {
   const wrapper = node("article", "dossier");
   wrapper.setAttribute("aria-label", `Details for ${safeText(item.title || item.id, 180)}`);
@@ -1123,8 +1308,18 @@ function renderItemInspector(target, item) {
     if (flags.has(flag)) overlays.append(node("span", "local-overlay", flag.replace("-", " ")));
   });
   heading.append(overlays);
+  const itemMetadata = effectiveItemMetadata(item);
+  if (METADATA_EDITABLE_KINDS.has(item.entityKind) || itemMetadata.priority || itemMetadata.workType) {
+    const facets = node("div", "row-facets");
+    facets.append(
+      metadataBadge("priority", itemMetadata.priority, itemMetadata.local),
+      metadataBadge("work-type", itemMetadata.workType, itemMetadata.local),
+    );
+    heading.append(facets);
+  }
   header.append(glyph, heading);
   wrapper.append(header);
+  wrapper.append(inspectorSection("Priority & Type", itemMetadataEditor(item)));
   wrapper.append(inspectorSection("Why It Is Here", item.whyHere || "No deterministic reason was supplied."));
   wrapper.append(inspectorSection("Duration", item.homeSince ? `${HOME_LABELS[item.primaryHome] || "In this state"} for ${durationSince(item.homeSince)}` : "The start of this meaningful state is unknown."));
 
@@ -1467,6 +1662,28 @@ async function setWatch(item = selectedItem(), watched) {
   } catch (error) { announce(error.message); }
 }
 
+async function saveItemMetadata(item = selectedItem(), priority = null, workType = null) {
+  if (!item || !METADATA_EDITABLE_KINDS.has(item.entityKind)) {
+    return announce("Priority and type can be assigned only to tasks and ideas.");
+  }
+  try {
+    await localCommand("set-item-metadata", {
+      itemId: item.id,
+      priority: Object.hasOwn(PRIORITY_LABELS, priority) ? priority : null,
+      workType: Object.hasOwn(WORK_TYPE_LABELS, workType) ? workType : null,
+    });
+    announce("Priority and work type saved privately on this Mac. Source ledger files are unchanged.");
+  } catch (error) { announce(error.message); }
+}
+
+async function clearItemMetadata(item = selectedItem()) {
+  if (!item || !METADATA_EDITABLE_KINDS.has(item.entityKind)) return;
+  try {
+    await localCommand("clear-item-metadata", { itemId: item.id });
+    announce("Local assignment cleared; source priority and work type are visible again.");
+  } catch (error) { announce(error.message); }
+}
+
 function fallbackAfterRemoval(itemId) {
   const index = state.visibleRows.findIndex((entry) =>
     (entry.descriptor.kind === "item" && entry.descriptor.id === itemId) || entry.descriptor.itemId === itemId);
@@ -1528,22 +1745,32 @@ function focusInspector() {
   $("#ledger-inspector").focus({ preventScroll: true });
 }
 
-function clearFilter() {
+function resetFilterState() {
   state.filter = "";
+  state.priorityFilter = "";
+  state.workTypeFilter = "";
+  state.metadataSort = "ledger";
   $("#view-filter").value = "";
+  $("#priority-filter").value = "";
+  $("#work-type-filter").value = "";
+  $("#metadata-sort").value = "ledger";
+}
+
+function clearFilter() {
+  resetFilterState();
   renderCenter();
-  $("#view-filter").focus();
+  if (!$("#filter-panel").hidden) $("#view-filter").focus();
+  else $("#ledger-center").focus({ preventScroll: true });
 }
 
 function toggleFilter(force) {
-  const wrap = $("#filter-wrap");
-  const show = force === undefined ? wrap.hidden : force;
-  wrap.hidden = !show;
+  const panel = $("#filter-panel");
+  const show = force === undefined ? panel.hidden : force;
+  panel.hidden = !show;
   $("#filter-toggle").setAttribute("aria-expanded", String(show));
   if (show) $("#view-filter").focus();
   else {
-    state.filter = "";
-    $("#view-filter").value = "";
+    resetFilterState();
     renderCenter();
   }
 }
@@ -1857,8 +2084,7 @@ function boot() {
     state.view = "today";
     state.selectedProject = null;
     state.selection = null;
-    state.filter = "";
-    $("#view-filter").value = "";
+    resetFilterState();
     const url = new URL(location.href);
     url.searchParams.set("context", state.context);
     history.replaceState(null, "", url);
@@ -1868,6 +2094,18 @@ function boot() {
   $("#filter-clear").addEventListener("click", clearFilter);
   $("#view-filter").addEventListener("input", (event) => {
     state.filter = safeText(event.target.value, 120);
+    renderCenter();
+  });
+  $("#priority-filter").addEventListener("change", (event) => {
+    state.priorityFilter = safeText(event.target.value, 16);
+    renderCenter();
+  });
+  $("#work-type-filter").addEventListener("change", (event) => {
+    state.workTypeFilter = safeText(event.target.value, 32);
+    renderCenter();
+  });
+  $("#metadata-sort").addEventListener("change", (event) => {
+    state.metadataSort = event.target.value === "priority" ? "priority" : "ledger";
     renderCenter();
   });
   $("#commands-button").addEventListener("click", openCommands);
@@ -1920,11 +2158,15 @@ globalThis.HFLedgerUI = Object.freeze({
   needsSupplementalCopyContext,
   provenanceLabel,
   normalizeLocalResponse,
+  priorityLabel,
+  workTypeLabel,
   buildQuickLookModel,
   QUICK_LOOK_EVIDENCE_KINDS,
   QUICK_LOOK_MAX_EVIDENCE,
   HOME_ORDER: Object.freeze([...HOME_ORDER]),
   PRIMARY_VIEWS: Object.freeze([...PRIMARY_VIEWS]),
+  PRIORITY_LABELS,
+  WORK_TYPE_LABELS,
 });
 
 if (!TESTING && typeof document !== "undefined") boot();

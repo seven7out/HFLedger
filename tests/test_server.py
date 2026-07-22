@@ -337,7 +337,7 @@ class LocalStateRouteTests(ServerCase):
     def test_get_returns_context_revision_capability_and_no_store(self):
         response, body, _connection = self.get("/api/local-state?context=main")
         self.assertEqual(response.status, 200)
-        self.assertEqual(body["schemaVersion"], 1)
+        self.assertEqual(body["schemaVersion"], server.local_state.SCHEMA_VERSION)
         self.assertEqual(body["revision"], 0)
         self.assertEqual(body["context"]["contextId"], "main")
         self.assertEqual(body["capability"]["mode"], "session")
@@ -351,6 +351,75 @@ class LocalStateRouteTests(ServerCase):
             "/api/local-state?context=main&path=/tmp/private")
         self.assertEqual(response.status, 400)
         self.assertNotIn("/tmp/private", json.dumps(body))
+
+    def test_task_metadata_is_private_projection_bounded_and_clearable(self):
+        def add_task(board):
+            board["queue"].append({
+                "id": "task-fictional-metadata",
+                "title": "Classify the fictional timer",
+                "status": "Ready for Build",
+                "priority": "P2",
+                "workType": "bug-fix",
+                "updated": "2026-07-20T10:00:00+00:00",
+            })
+            schema.refresh_generated(board)
+
+        self.httpd.runtime.context().store.update(add_task)
+        _response, board, _connection = self.get("/api/board")
+        item = next(
+            value for value in board["orientationV2"]["items"]
+            if value["sourceItemRef"] == "task-fictional-metadata")
+        self.assertEqual(item["entityKind"], "queue-task")
+        self.assertEqual(item["priority"], "P2")
+        self.assertEqual(item["workType"], "bug-fix")
+        before_board = self.board_bytes()
+        before_ledger = list(read_ledger(self.home))
+
+        response, body, _connection = self.command(
+            "set-item-metadata", {
+                "itemId": item["id"],
+                "priority": "P0",
+                "workType": "security",
+            }, 0)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(body["context"]["itemMetadata"], [{
+            "itemId": item["id"],
+            "priority": "P0",
+            "workType": "security",
+            "changedAt": body["context"]["itemMetadata"][0]["changedAt"],
+        }])
+        self.assertEqual(self.board_bytes(), before_board)
+        self.assertEqual(read_ledger(self.home), before_ledger)
+
+        response, body, _connection = self.command(
+            "clear-item-metadata", {"itemId": item["id"]}, 1)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(body["context"]["itemMetadata"], [])
+        self.assertEqual(self.board_bytes(), before_board)
+        self.assertEqual(read_ledger(self.home), before_ledger)
+
+        response, _body, _connection = self.command(
+            "set-item-metadata", {
+                "itemId": item["id"], "priority": "urgent",
+                "workType": "security",
+            }, 2)
+        self.assertEqual(response.status, 400)
+
+        self.decision("test:decision:metadata-boundary")
+        _response, refreshed, _connection = self.get("/api/board")
+        decision = next(
+            value for value in refreshed["orientationV2"]["items"]
+            if value["entityKind"] == "decision")
+        decision_board = self.board_bytes()
+        decision_ledger = list(read_ledger(self.home))
+        response, _body, _connection = self.command(
+            "set-item-metadata", {
+                "itemId": decision["id"], "priority": "P1",
+                "workType": "research",
+            }, 2)
+        self.assertEqual(response.status, 400)
+        self.assertEqual(self.board_bytes(), decision_board)
+        self.assertEqual(read_ledger(self.home), decision_ledger)
 
     def test_every_local_command_bypasses_read_only_and_preserves_authority(self):
         self.decision()

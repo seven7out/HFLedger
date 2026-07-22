@@ -7,7 +7,7 @@ import json
 import re
 import unicodedata
 
-from . import disputes, evidence, ledger
+from . import disputes, evidence, item_metadata, ledger
 from .link_safety import resolve_projected_link
 
 
@@ -181,10 +181,7 @@ def _v2_enum(value, allowed, fallback):
 
 
 def _v2_priority(value):
-    if not isinstance(value, str):
-        return None
-    normalized = value.strip().upper().replace("PRIORITY ", "")
-    return normalized if normalized in ("P0", "P1", "P2") else None
+    return item_metadata.normalize_priority(value)
 
 
 def _v2_bool(value, default=False):
@@ -894,6 +891,19 @@ class _V2Builder:
         stamp, estimated, _field = _v2_first_timestamp(
             raw, ("itemChangedAt", "updated", "completedAt", "created", "added", "date", "recordedAt"))
         deadline, _deadline_estimated = _v2_timestamp(raw.get("deadline"))
+        raw_priority = raw.get("priority") or raw.get("priorityGuess")
+        priority = _v2_priority(raw_priority)
+        work_type = item_metadata.normalize_work_type(raw.get("workType"))
+        if raw_priority is not None and priority is None:
+            self._diagnostic(
+                "item-priority-invalid",
+                "An item priority was outside the closed P0/P1/P2 vocabulary.",
+                [source_id])
+        if raw.get("workType") is not None and work_type is None:
+            self._diagnostic(
+                "item-work-type-invalid",
+                "An item work type was outside the closed vocabulary.",
+                [source_id])
         item = {
             "id": item_id,
             "sourceId": source_id,
@@ -903,7 +913,8 @@ class _V2Builder:
             "project": _v2_text(raw.get("project"), 180, _v2_text(
                 self.board.get("meta", {}).get("project"), 180, "HFLedger workspace")),
             "statusLabel": _v2_text(raw.get("statusLabel") or raw.get("status"), 180, "Unknown"),
-            "priority": _v2_priority(raw.get("priority") or raw.get("priorityGuess")),
+            "priority": priority,
+            "workType": work_type,
             "deadline": _v2_iso(deadline),
             "_itemChangedAt": stamp,
             "_timestampEstimated": estimated,
@@ -1684,7 +1695,7 @@ class _V2Builder:
 
         item_fields = {
             "sourceId", "sourceItemRef", "entityKind", "title", "project", "statusLabel",
-            "status", "priority", "deadline", "itemChangedAt", "homeSince", "impact",
+            "status", "priority", "workType", "deadline", "itemChangedAt", "homeSince", "impact",
             "needsOwner", "lifecycle", "activityExpected", "silenceAfterSeconds", "terminal",
             "parked", "protected", "repository", "pr", "requiredSources", "linkRefs", "links",
             "hasUntrustedContext",
@@ -2818,6 +2829,7 @@ class _V2Builder:
             "whyHere": item["_whyHere"],
             "homeSince": _v2_iso(item["_homeSince"]),
             "priority": item["priority"],
+            "workType": item["workType"],
             "deadline": item["deadline"],
             "provenance": item["_provenance"],
             "attentionKey": item["_attentionKey"],

@@ -82,6 +82,21 @@ test("uses only the five closed provenance labels", () => {
   assert.equal(ui.provenanceLabel("made-up-confidence"), "Unobserved");
 });
 
+test("uses closed priority and work-type labels without guessing aliases", () => {
+  assert.deepEqual(ui.PRIORITY_LABELS, {
+    P0: "P0 Immediate", P1: "P1 Next", P2: "P2 Normal",
+  });
+  assert.equal(ui.priorityLabel("P0"), "P0 Immediate");
+  assert.equal(ui.priorityLabel("urgent"), "Unprioritized");
+  assert.equal(ui.workTypeLabel("security"), "Security");
+  assert.equal(ui.workTypeLabel("bug-fix"), "Bug Fix");
+  assert.equal(ui.workTypeLabel("custom"), "Unclassified");
+  assert.deepEqual(Object.keys(ui.WORK_TYPE_LABELS), [
+    "security", "feature", "bug-fix", "improvement", "maintenance",
+    "documentation", "research",
+  ]);
+});
+
 test("unwraps the server local-state context without losing capability or revision", () => {
   const context = {
     contextId: "main",
@@ -89,10 +104,10 @@ test("unwraps the server local-state context without losing capability or revisi
     navigation: { selectedView: "watched", selectedProjectId: null, selectedItemId: "item-fictional" },
   };
   const normalized = ui.normalizeLocalResponse({
-    schemaVersion: 1,
+    schemaVersion: 2,
     revision: 7,
     context,
-    capability: { mode: "durable", available: true, schemaVersion: 1, reason: null },
+    capability: { mode: "durable", available: true, schemaVersion: 2, reason: null },
   });
   assert.equal(normalized.local, context);
   assert.equal(normalized.revision, 7);

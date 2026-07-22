@@ -152,7 +152,23 @@ class NoWriteBackBoundaryTests(unittest.TestCase):
     def test_every_closed_today_operation_changes_only_durable_local_state(self):
         item_id = self.item["id"]
         attention_key = self.item["attentionKey"]
-        cursor = self.orientation["nextCursor"]
+
+        def add_metadata_task(board):
+            board["queue"].append({
+                "id": "task-fictional-local-metadata",
+                "title": "Classify the fictional kiln timer",
+                "status": "Ready for Build",
+                "updated": "2026-07-20T10:00:00+00:00",
+            })
+            schema.refresh_generated(board)
+
+        self.httpd.runtime.context().store.update(add_metadata_task)
+        response, refreshed = self._request("GET", "/api/board?context=main")
+        self.assertEqual(response.status, 200)
+        cursor = refreshed["orientationV2"]["nextCursor"]
+        metadata_item_id = next(
+            item["id"] for item in refreshed["orientationV2"]["items"]
+            if item["sourceItemRef"] == "task-fictional-local-metadata")
         commands = [
             (
                 "record-successful-visit",
@@ -214,6 +230,25 @@ class NoWriteBackBoundaryTests(unittest.TestCase):
                     [entry["itemId"] for entry in context["watched"]],
                     [item_id],
                 ),
+            ),
+            (
+                "set-item-metadata",
+                {
+                    "itemId": metadata_item_id,
+                    "priority": "P1",
+                    "workType": "improvement",
+                },
+                lambda context: self.assertEqual(context["itemMetadata"], [{
+                    "itemId": metadata_item_id,
+                    "priority": "P1",
+                    "workType": "improvement",
+                    "changedAt": "2026-07-20T12:00:00Z",
+                }]),
+            ),
+            (
+                "clear-item-metadata",
+                {"itemId": metadata_item_id},
+                lambda context: self.assertEqual(context["itemMetadata"], []),
             ),
             (
                 "set-navigation",

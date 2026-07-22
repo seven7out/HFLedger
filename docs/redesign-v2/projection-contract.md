@@ -308,7 +308,10 @@ Enums:
 - `secondaryFlags`: sorted subset of `watched`, `acknowledged`, `snoozed`,
   `protected`, `overdue`, `stale-observer`, and `has-untrusted-context`.
 - `priority`: `P0`, `P1`, `P2`, or `null`. Unknown priority strings do not
-  receive a ranking band.
+  receive a guessed rank.
+- `workType`: `security`, `feature`, `bug-fix`, `improvement`, `maintenance`,
+  `documentation`, `research`, or `null`. Unknown values project as `null`
+  with a bounded diagnostic and never affect protection or readiness.
 - dossier `provenance` is the tier of the evidence that caused the current
   `primaryHome`; it is not an overall confidence rating.
 - `coverage.state`: `complete`, `partial`, or `unobserved`.

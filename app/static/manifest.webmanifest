@@ -1,12 +1,12 @@
 {
-  "name": "HFLedger Decision Deck",
+  "name": "HFLedger",
   "short_name": "HFLedger",
-  "description": "A local owner interface for admitted agent asks.",
-  "start_url": "/deck",
+  "description": "A local evidence-aware workspace for tasks, ideas, and agent activity.",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#171828",
-  "theme_color": "#171828",
+  "background_color": "#f5f5f7",
+  "theme_color": "#f5f5f7",
   "icons": [
     {"src": "/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
   ]
