@@ -2038,46 +2038,49 @@ const COMMANDS = [
   ["item.acknowledge", "Acknowledge Locally", "E"], ["item.snooze", "Snooze Locally", "S"],
   ["item.watch", "Watch or Unwatch", "W"], ["item.copy-context", "Copy Context", "⇧⌘C"],
 ];
-let commandSearchGeneration = 0;
-let commandSearchTimer = null;
+let globalSearchGeneration = 0;
+let globalSearchTimer = null;
 
-async function renderCommands(filter = "") {
-  const generation = ++commandSearchGeneration;
-  const target = $("#command-list");
-  const needle = safeText(filter, 80).toLocaleLowerCase();
+function closeGlobalSearch({ clear = false } = {}) {
+  globalSearchGeneration += 1;
+  window.clearTimeout(globalSearchTimer);
+  const input = $("#global-search-input");
+  const target = $("#global-search-results");
+  target.hidden = true;
   target.replaceChildren();
-  const commands = COMMANDS.filter(([, label]) => label.toLocaleLowerCase().includes(needle));
-  if (commands.length) target.append(node("p", "command-section-label", "Commands"));
-  target.append(...commands.map(([id, label, shortcut]) => {
-    const row = button("command-row", "", () => {
-      $("#command-dialog").close();
-      dispatchCommand(id);
-    });
-    row.append(node("span", "", label), node("kbd", "", shortcut));
-    return row;
-  }));
-  if (!needle) {
-    target.append(node("p", "command-hint", "Type a title, stable item ID, reason, project, runtime, provenance, or safe source reference."));
+  input.setAttribute("aria-expanded", "false");
+  if (clear) input.value = "";
+}
+
+async function renderGlobalSearch(rawQuery = "") {
+  const generation = ++globalSearchGeneration;
+  const input = $("#global-search-input");
+  const target = $("#global-search-results");
+  const query = safeText(rawQuery, 128).trim();
+  target.replaceChildren();
+  if (!query) {
+    closeGlobalSearch();
     return;
   }
-  const pending = node("p", "command-hint", "Searching projected metadata…");
+  target.hidden = false;
+  input.setAttribute("aria-expanded", "true");
+  const pending = node("p", "search-popover-message", "Searching projected metadata…");
   target.append(pending);
   let results = [];
   try {
     const context = state.context ? `&context=${encodeURIComponent(state.context)}` : "";
-    const response = await request(`/api/search?q=${encodeURIComponent(filter)}${context}`);
-    if (generation !== commandSearchGeneration || !$("#command-dialog").open) return;
+    const response = await request(`/api/search?q=${encodeURIComponent(query)}${context}`);
+    if (generation !== globalSearchGeneration || document.activeElement !== input) return;
     results = Array.isArray(response?.results) ? response.results : [];
   } catch (error) {
-    if (generation !== commandSearchGeneration) return;
+    if (generation !== globalSearchGeneration) return;
     pending.textContent = safeText(error.message, 180) || "Search is temporarily unavailable.";
     return;
   }
   pending.remove();
-  if (results.length) target.append(node("p", "command-section-label", "Ledger items"));
   results.forEach((result) => {
-    const row = button("command-row search-result-row", "", () => {
-      $("#command-dialog").close();
+    const row = button("global-search-result", "", () => {
+      closeGlobalSearch({ clear: true });
       navigateToItem(result.itemId, { source: "search" });
     });
     const copy = node("span", "search-result-copy");
@@ -2087,22 +2090,27 @@ async function renderCommands(filter = "") {
     copy.append(node("small", "", `${view} · ${safeText(result.contextId, 32)} · ${safeText(result.statusLabel, 180)} · ${provenance}`));
     row.append(copy, node("span", "search-match", safeText(result.rankBand, 40).replaceAll("-", " ")));
     row.setAttribute("aria-label", `${result.title}, ${view}, ${result.contextId}, ${result.statusLabel}, ${provenance}, ${result.rankBand}`);
+    row.setAttribute("role", "option");
     target.append(row);
   });
-  if (!target.childElementCount) target.append(node("p", "inline-empty", "No commands or ledger items match."));
-  if (!results.length && commands.length) target.append(node("p", "command-hint", "No ledger items match this query."));
+  if (!results.length) target.append(node("p", "search-popover-message", "No ledger items match."));
 }
 
-function scheduleCommandSearch(value) {
-  window.clearTimeout(commandSearchTimer);
-  commandSearchTimer = window.setTimeout(() => renderCommands(value), 140);
+function scheduleGlobalSearch(value) {
+  window.clearTimeout(globalSearchTimer);
+  globalSearchTimer = window.setTimeout(() => renderGlobalSearch(value), 140);
 }
 
-function openCommands() {
-  renderCommands();
-  $("#command-filter").value = "";
-  $("#command-dialog").showModal();
-  $("#command-filter").focus();
+function focusGlobalSearch() {
+  const input = $("#global-search-input");
+  input.focus();
+  input.select();
+  if (input.value.trim()) renderGlobalSearch(input.value);
+}
+
+function openSettings() {
+  closeGlobalSearch();
+  location.assign("/__hfledger/settings");
 }
 
 function dispatchCommand(id) {
@@ -2113,7 +2121,7 @@ function dispatchCommand(id) {
     "view.shipped-log": () => setView("shipped-log"),
     "view.watched": () => setView("watched"),
     "view.filter": () => toggleFilter(true),
-    "view.commands": openCommands,
+    "view.commands": focusGlobalSearch,
     "view.reload": () => loadBoard({ preserve: true }),
     "pane.toggle-sidebar": toggleSidebar,
     "pane.toggle-inspector": toggleInspector,
@@ -2125,7 +2133,6 @@ function dispatchCommand(id) {
       if (item) setWatch(item, !(localWatched(item.id) || (item.secondaryFlags || []).includes("watched")));
     },
     "item.copy-context": () => copyContext(),
-    "help.commands": openCommands,
   };
   if (routes[id]) routes[id]();
   else announce("That command is unavailable in this version.");
@@ -2185,9 +2192,10 @@ function isEditingTarget(target) {
 function handleKeyboard(event) {
   const editing = isEditingTarget(event.target);
   if (event.key === "Escape") {
-    if ($("#command-dialog").open) {
+    if (!$("#global-search-results").hidden || event.target === $("#global-search-input")) {
       event.preventDefault();
-      $("#command-dialog").close();
+      closeGlobalSearch();
+      $("#global-search-input").blur();
       return;
     }
     if ($("#snooze-dialog").open) {
@@ -2213,7 +2221,7 @@ function handleKeyboard(event) {
       return;
     }
     if (event.key.toLocaleLowerCase() === "f") { event.preventDefault(); toggleFilter(true); return; }
-    if (event.key.toLocaleLowerCase() === "k") { event.preventDefault(); openCommands(); return; }
+    if (event.key.toLocaleLowerCase() === "k") { event.preventDefault(); focusGlobalSearch(); return; }
     if (event.key.toLocaleLowerCase() === "r") { event.preventDefault(); loadBoard({ preserve: true }); return; }
     if (event.shiftKey && event.key.toLocaleLowerCase() === "c") { event.preventDefault(); copyContext(); return; }
   }
@@ -2269,8 +2277,29 @@ function boot() {
     state.metadataSort = event.target.value === "priority" ? "priority" : "ledger";
     renderCenter();
   });
-  $("#commands-button").addEventListener("click", openCommands);
-  $("#command-filter").addEventListener("input", (event) => scheduleCommandSearch(event.target.value));
+  $("#global-search-input").addEventListener("input", (event) => scheduleGlobalSearch(event.target.value));
+  $("#global-search-input").addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowDown") return;
+    const first = $("#global-search-results").querySelector(".global-search-result");
+    if (first) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+  $("#global-search-results").addEventListener("keydown", (event) => {
+    if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+    const rows = [...$("#global-search-results").querySelectorAll(".global-search-result")];
+    const index = rows.indexOf(event.target.closest(".global-search-result"));
+    if (index < 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === "ArrowUp" && index === 0) $("#global-search-input").focus();
+    else rows[Math.max(0, Math.min(rows.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))]?.focus();
+  });
+  $("#global-search").addEventListener("focusout", (event) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) closeGlobalSearch();
+  });
+  $("#settings-button").addEventListener("click", openSettings);
   $("#retry-button").addEventListener("click", () => loadBoard());
   $("#diagnostics-button").addEventListener("click", () => selectDescriptor({ kind: "coverage", id: "screen" }));
   $("#open-workspace-button").addEventListener("click", () => announce("Open Workspace is available from the File menu."));
@@ -2292,9 +2321,12 @@ function boot() {
     submitSnooze();
   });
   document.addEventListener("keydown", handleKeyboard);
+  document.addEventListener("pointerdown", (event) => {
+    if (!event.target.closest("#global-search")) closeGlobalSearch();
+  });
   window.addEventListener("hfledger:native-command", (event) => {
     const id = typeof event.detail === "string" ? event.detail : event.detail?.id;
-    if (COMMANDS.some(([command]) => command === id) || ["view.commands", "pane.toggle-sidebar", "pane.toggle-inspector", "help.commands"].includes(id)) dispatchCommand(id);
+    if (COMMANDS.some(([command]) => command === id) || ["view.commands", "pane.toggle-sidebar", "pane.toggle-inspector"].includes(id)) dispatchCommand(id);
   });
   window.addEventListener("hfledger:text-size-changed", (event) => {
     const detail = event.detail || {};

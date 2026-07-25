@@ -28,10 +28,19 @@
           <span class="visually-hidden">Active context</span>
           <select id="context-select" aria-label="Active context"></select>
         </label>
+        <div id="global-search" class="global-search">
+          <label for="global-search-input" class="visually-hidden">Search HFLedger</label>
+          <input id="global-search-input" type="search" maxlength="128"
+                 placeholder="Search HFLedger…" autocomplete="off"
+                 aria-keyshortcuts="Meta+K"
+                 aria-controls="global-search-results" aria-expanded="false">
+          <div id="global-search-results" class="global-search-results"
+               role="listbox" aria-label="HFLedger search results" hidden></div>
+        </div>
         <button id="filter-toggle" class="toolbar-button" type="button" aria-keyshortcuts="Meta+F"
                 aria-controls="filter-panel" aria-expanded="false">Filter</button>
-        <button id="commands-button" class="toolbar-button" type="button" aria-keyshortcuts="Meta+K"
-                aria-haspopup="dialog" aria-controls="command-dialog">Search</button>
+        <button id="settings-button" class="toolbar-button" type="button"
+                aria-keyshortcuts="Meta+,">Settings</button>
         <button id="inspector-toggle" class="toolbar-button pane-button" type="button"
                 aria-label="Show inspector" aria-controls="ledger-inspector" aria-expanded="false">Details</button>
       </div>
@@ -201,20 +210,6 @@
         <button class="control-button" value="cancel">Cancel</button>
         <button class="control-button primary-control" value="default">Snooze locally</button>
       </div>
-    </form>
-  </dialog>
-
-  <dialog id="command-dialog" class="ui-dialog command-dialog">
-    <form method="dialog">
-      <header>
-        <div><p class="dialog-label">Local metadata only</p><h2>Search HFLedger</h2></div>
-        <button class="dialog-close" value="cancel" aria-label="Close">×</button>
-      </header>
-      <label class="command-search">
-        <span class="visually-hidden">Search commands and ledger items</span>
-        <input id="command-filter" type="search" maxlength="80" placeholder="Search commands and ledger items…" autocomplete="off">
-      </label>
-      <div id="command-list" class="command-list"></div>
     </form>
   </dialog>
 

@@ -56,14 +56,16 @@ Within a band, rows sort by folded title, opaque workspace id, context id, and
 normalized item id. Reordering workspaces or projection arrays does not change
 output.
 
-There is one production ranker. The served Command-K surface calls its
-loopback `/api/search` route for the active context. The native Command-K menu
-opens the launcher, which invokes the same bundled engine once across every
-registered workspace and context. Results include opaque workspace/context
-identity, destination, status, provenance, and rank band. Selecting an exact
-result switches the allowlisted workspace/context to All Work and opens the
-existing inspector. Command-F remains the narrower current-view filter. Search
-selection does not open an authoritative source.
+There is one production ranker. The served toolbar search box and Command-K
+shortcut call its loopback `/api/search` route for the active context. In the
+Settings window, the separate Global Search dialog invokes the same bundled
+engine once across every registered workspace and context. Neither search
+surface contains navigation commands, settings, preferences, or command-guide
+cards. Results include opaque workspace/context identity, destination, status,
+provenance, and rank band. Selecting an exact result switches the allowlisted
+workspace/context to All Work and opens the existing inspector. Command-F
+remains the narrower current-view filter. Search selection does not open an
+authoritative source.
 
 Search terms do not enter engine request logs or native child-process
 arguments: loopback request logging redacts the query string and the native

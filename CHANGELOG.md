@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added a dedicated Settings toolbar button, content-only inline app search,
+  and a separate Help surface for the installed command guide.
+- Kept persistent Compact, Comfortable, Large, and Extra Large text-size
+  choices on the existing closed native Settings surface.
 - Added a Today control-tower projection for shipped, in-motion, owner-needed,
   and stalled work across agent runtimes.
 - Added deterministic agent-effectiveness suggestions and explicit evidence

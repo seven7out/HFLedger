@@ -18,7 +18,8 @@
           </div>
         </div>
         <div class="header-actions">
-          <button id="show-commands" class="button quiet command-guide-button" aria-haspopup="dialog">Global search</button>
+          <button id="show-search" class="button quiet" aria-haspopup="dialog">Search</button>
+          <button id="show-help" class="button quiet" aria-haspopup="dialog">Help</button>
           <div class="host-pill" id="host-pill"><span></span><b>Engine stopped</b></div>
         </div>
       </header>
@@ -165,11 +166,11 @@
       </form>
     </dialog>
 
-    <dialog id="commands-dialog" class="commands-dialog">
+    <dialog id="search-dialog" class="search-dialog">
       <div class="dialog-card">
         <div class="dialog-heading">
           <div><p class="eyebrow">Local projected metadata only</p><h2>Global search</h2></div>
-          <button id="close-commands" class="icon-button" type="button" aria-label="Close">×</button>
+          <button id="close-search" class="icon-button" type="button" aria-label="Close">×</button>
         </div>
 
         <label class="command-search">
@@ -179,6 +180,19 @@
 
         <div id="ledger-search-results" class="ledger-search-results" aria-live="polite">
           <p class="search-guidance">Type to search bounded metadata. File contents, secret logs, excerpts, remote pages, paths, and private workspace names are excluded.</p>
+        </div>
+
+        <div class="dialog-actions">
+          <button id="done-search" class="button primary" type="button">Done</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="commands-dialog" class="commands-dialog">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">Installed workflow reference</p><h2>HFLedger help</h2></div>
+          <button id="close-commands" class="icon-button" type="button" aria-label="Close">×</button>
         </div>
 
         <p class="commands-intro">
@@ -196,7 +210,7 @@
         </div>
 
         <div class="command-grid" id="command-grid">
-          <article class="command-card featured" data-command-card data-search="ledger sweep refresh reconcile board cards evidence open threads highest leverage sources daily">
+          <article class="command-card featured">
             <div class="command-card-heading">
               <code>/ledger-sweep</code>
               <span class="command-badge refresh">Refreshes state</span>
@@ -209,7 +223,7 @@
             </dl>
           </article>
 
-          <article class="command-card" data-command-card data-search="ledger status fast read only situation leverage urgent next stale board">
+          <article class="command-card">
             <div class="command-card-heading">
               <code>/ledger-status</code>
               <span class="command-badge read-only">Read only</span>
@@ -222,7 +236,7 @@
             </dl>
           </article>
 
-          <article class="command-card" data-command-card data-search="ledger work autonomous safe ready build queue pull request evidence checkpoint">
+          <article class="command-card">
             <div class="command-card-heading">
               <code>/ledger-work</code>
               <span class="command-badge builds">Builds</span>
@@ -235,7 +249,7 @@
             </dl>
           </article>
 
-          <article class="command-card attended" data-command-card data-search="ledger attend attended protected owner gated builder together review choose approve">
+          <article class="command-card attended">
             <div class="command-card-heading">
               <code>/ledger-attend</code>
               <span class="command-badge attended">You stay involved</span>
@@ -249,7 +263,6 @@
           </article>
         </div>
 
-        <p id="command-empty" class="command-empty" hidden>No commands match that search.</p>
         <div class="dialog-actions">
           <span class="commands-footnote">Command behavior comes from the installed workflow contracts.</span>
           <button id="done-commands" class="button primary" type="button">Done</button>

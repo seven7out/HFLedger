@@ -187,7 +187,7 @@ Window, and Help menus.
 | `S` | Open the local snooze surface. |
 | `W` | Set watch/unwatch through private local state. |
 | Command-F | Filter the current destination only. |
-| Command-K | Search bounded projected metadata and the command reference. |
+| Command-K | Focus app-wide search over bounded projected metadata only. |
 | Command-1…5 | Today, Changes, All Work, Shipped Log, Watched. |
 | Escape | Close the topmost transient surface and restore its originating focus. |
 
@@ -196,6 +196,15 @@ a nearby row or section when a local action hides the selected row; focus never
 falls silently to the document body. Native menu commands cross into the page
 as one allowlisted command id. The board window receives no general Tauri IPC,
 shell, or filesystem capability.
+
+The Today toolbar keeps Search and Settings separate. Search is an inline text
+box whose popover contains only ledger-item matches. Settings uses one exact
+native-intercepted loopback sentinel to open the existing Mac Settings window;
+it does not grant native IPC to the board page. The Settings window retains
+workspace management, engine recovery, notifications, Launch at Login, Reopen
+Last Board, persistent text size, backups, Finder reveals, diagnostics, and
+quit. Its own Global Search dialog is search-only, while the slash-command
+reference lives in a separate Help dialog.
 
 The native host watches only already configured, allowlisted board, ledger,
 collector, and adapter report files. It rejects symlinks, debounces write

@@ -109,7 +109,8 @@ class TodayUIContractTests(unittest.TestCase):
         transient = handler.index('if (event.key === "Escape")')
         editable_guard = handler.index("if (editing) return")
         self.assertLess(transient, editable_guard)
-        self.assertIn('$("#command-dialog").close()', handler[:editable_guard])
+        self.assertIn("closeGlobalSearch()", handler[:editable_guard])
+        self.assertIn('$("#global-search-input").blur()', handler[:editable_guard])
         self.assertIn('$("#snooze-dialog").close()', handler[:editable_guard])
         self.assertIn("state.quickLookOpen", handler[:editable_guard])
 

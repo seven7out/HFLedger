@@ -37,7 +37,6 @@ body:has(dialog[open]) { overflow: hidden; }
 .brand { gap: 13px; }
 .brand img { border-radius: 13px; box-shadow: 0 12px 28px rgba(0, 0, 0, .28); }
 .header-actions { gap: 10px; }
-.command-guide-button { min-height: 34px; }
 
 .eyebrow { margin: 0 0 4px; color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
 h1, h2, h3, p { margin-top: 0; }
@@ -147,9 +146,10 @@ dialog::backdrop { background: rgba(7, 8, 14, .65); backdrop-filter: blur(7px); 
 #diagnostics-output { min-height: 210px; max-height: 420px; margin: 0; padding: 14px; overflow: auto; color: rgba(248, 245, 237, .78); border: 1px solid var(--line); border-radius: 10px; background: #141521; font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
 .dialog-actions { justify-content: flex-end; gap: 8px; margin-top: 14px; }
 
+.search-dialog { width: min(680px, calc(100vw - 44px)); }
 .commands-dialog { width: min(930px, calc(100vw - 44px)); max-height: calc(100vh - 48px); }
 .commands-dialog .dialog-card { max-height: calc(100vh - 50px); overflow: auto; }
-.commands-intro { margin: -4px 0 16px; max-width: 720px; font-size: 12px; }
+.commands-intro { margin: 0 0 16px; max-width: 720px; font-size: 12px; }
 .workflow-rhythm { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 17px; padding: 11px 14px; overflow-x: auto; border: 1px solid rgba(168, 156, 255, .16); border-radius: 11px; background: rgba(168, 156, 255, .055); }
 .workflow-rhythm span { display: grid; justify-items: center; gap: 2px; min-width: 59px; }
 .workflow-rhythm code { color: var(--accent-strong); font-size: 11px; font-weight: 800; }
@@ -158,7 +158,7 @@ dialog::backdrop { background: rgba(7, 8, 14, .65); backdrop-filter: blur(7px); 
 .command-search { display: block; width: 100%; margin-bottom: 14px; }
 .command-search > span { margin-bottom: 6px; }
 .command-search input { display: block; width: 100%; }
-.ledger-search-results { min-height: 54px; max-height: 250px; margin: 0 0 18px; overflow-y: auto; border: 1px solid rgba(168, 156, 255, .18); border-radius: 11px; background: rgba(17, 18, 29, .62); }
+.ledger-search-results { min-height: 54px; max-height: 360px; overflow-y: auto; border: 1px solid rgba(168, 156, 255, .18); border-radius: 11px; background: rgba(17, 18, 29, .62); }
 .search-guidance { margin: 0; padding: 16px; color: rgba(248, 245, 237, .48); font-size: 10px; }
 .ledger-search-result { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; width: 100%; min-height: 58px; padding: 10px 13px; color: var(--ink); border: 0; border-bottom: 1px solid rgba(248, 245, 237, .07); background: transparent; text-align: left; cursor: pointer; }
 .ledger-search-result:last-child { border-bottom: 0; }
@@ -167,7 +167,6 @@ dialog::backdrop { background: rgba(7, 8, 14, .65); backdrop-filter: blur(7px); 
 .ledger-search-result small { grid-column: 1; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .ledger-search-result .rank { grid-column: 2; grid-row: 1 / 3; align-self: center; color: var(--accent-strong); font-size: 8px; letter-spacing: .04em; text-transform: uppercase; }
 .command-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.command-grid.single-result .command-card:not([hidden]) { grid-column: 1 / -1; max-width: 610px; }
 .command-card { min-width: 0; padding: 15px; border: 1px solid var(--line); border-radius: 12px; background: rgba(17, 18, 29, .55); }
 .command-card.featured { border-color: rgba(126, 217, 180, .22); background: rgba(126, 217, 180, .035); }
 .command-card.attended { border-color: rgba(168, 156, 255, .25); background: rgba(168, 156, 255, .045); }
@@ -186,8 +185,8 @@ dialog::backdrop { background: rgba(7, 8, 14, .65); backdrop-filter: blur(7px); 
 .command-badge.plan { color: #d4ceff; border-color: rgba(168, 156, 255, .22); background: rgba(168, 156, 255, .08); }
 .command-badge.builds { color: #ffcf91; border-color: rgba(255, 207, 145, .22); background: rgba(255, 207, 145, .07); }
 .command-badge.attended { color: #ffbfba; border-color: rgba(255, 170, 166, .22); background: rgba(255, 170, 166, .07); }
-.command-empty { padding: 28px; border: 1px dashed var(--line); border-radius: 12px; text-align: center; font-size: 12px; }
 .commands-dialog .dialog-actions { justify-content: space-between; }
+.search-dialog .dialog-actions { justify-content: flex-end; }
 .commands-footnote { color: rgba(248, 245, 237, .48); font-size: 10px; }
 
 @media (max-width: 850px) {

@@ -344,6 +344,35 @@ class Handler(SimpleHTTPRequestHandler):
                     record["target"] = target
                 links.append(record)
             return self._json(200, {"version": 1, "context": context, "links": links})
+        if parsed.path == "/api/search":
+            context = self._context()
+            query = parse_qs(parsed.query).get("q", [""])[0].strip().casefold()
+            results = []
+            for work in projected(context)["items"]:
+                if query and query not in " ".join((
+                        work["title"], work["id"], work["project"],
+                        work["statusLabel"], work["whyHere"],
+                )).casefold():
+                    continue
+                if query:
+                    results.append({
+                        "workspaceId": "workspace-fictional",
+                        "contextId": context,
+                        "itemId": work["id"],
+                        "title": work["title"],
+                        "viewId": "all-work",
+                        "primaryHome": work["primaryHome"],
+                        "project": work["project"],
+                        "statusLabel": work["statusLabel"],
+                        "provenance": work["provenance"],
+                        "rankBand": "metadata-contains",
+                    })
+            return self._json(200, {
+                "version": 1,
+                "results": results[:50],
+                "total": len(results),
+                "truncated": len(results) > 50,
+            })
         if parsed.path in {"/", "/index.html"}:
             target = STATIC / "index.html"
         elif parsed.path == "/deck":

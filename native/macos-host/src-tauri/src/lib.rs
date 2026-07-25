@@ -42,6 +42,7 @@ const DEEP_LINK_PREFIX: &str = "hfledger://item/";
 const DEEP_LINK_MAX_BYTES: usize = 256;
 const WORKSPACE_ID_MAX_BYTES: usize = 160;
 const SEARCH_OUTPUT_MAX_BYTES: usize = 256 * 1024;
+const SETTINGS_NAVIGATION_PATH: &str = "/__hfledger/settings";
 const DEEP_LINK_REJECTION_MESSAGE: &str = "HFLedger could not open that item link.";
 
 macro_rules! native_event_script {
@@ -1448,6 +1449,17 @@ fn restore_primary_surface(app: &AppHandle) {
     }
 }
 
+fn is_board_settings_navigation(url: &tauri::Url, port: u16) -> bool {
+    url.scheme() == "http"
+        && url.host_str() == Some(HOST)
+        && url.port() == Some(port)
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.path() == SETTINGS_NAVIGATION_PATH
+        && url.query().is_none()
+        && url.fragment().is_none()
+}
+
 fn show_board_window(app: &AppHandle, workspace: &Workspace, port: u16) -> Result<(), String> {
     let url = format!("http://{HOST}:{port}/")
         .parse()
@@ -1462,11 +1474,20 @@ fn show_board_window(app: &AppHandle, workspace: &Workspace, port: u16) -> Resul
         let _ = window.unminimize();
         let _ = window.set_focus();
     } else {
+        let settings_app = app.clone();
         WebviewWindowBuilder::new(app, "board", WebviewUrl::External(url))
             .title(&title)
             .inner_size(1280.0, 820.0)
             .min_inner_size(600.0, 560.0)
             .center()
+            .on_navigation(move |target| {
+                if is_board_settings_navigation(target, port) {
+                    show_settings(&settings_app);
+                    false
+                } else {
+                    true
+                }
+            })
             .build()
             .map_err(|error| format!("could not create the board window: {error}"))?;
     }
@@ -3095,7 +3116,8 @@ fn show_settings_dialog(app: &AppHandle, button_id: &str) {
     if let Some(window) = app.get_webview_window("main") {
         let script = match button_id {
             "show-diagnostics" => "document.getElementById('show-diagnostics')?.click();",
-            "show-commands" => "document.getElementById('show-commands')?.click();",
+            "show-search" => "document.getElementById('show-search')?.click();",
+            "show-help" => "document.getElementById('show-help')?.click();",
             _ => return,
         };
         let _ = window.eval(script);
@@ -3107,10 +3129,11 @@ fn handle_native_menu(app: &AppHandle, id: &str) {
         "app.settings" => show_settings(app),
         "file.open-workspace" => show_workspace_settings(app),
         "help.diagnostics" => show_settings_dialog(app, "show-diagnostics"),
-        "view.commands" | "help.commands" | "help.keyboard" | "help.privacy"
-            if app.get_webview_window("board").is_none() =>
-        {
-            show_settings_dialog(app, "show-commands")
+        "view.commands" if app.get_webview_window("board").is_none() => {
+            show_settings_dialog(app, "show-search")
+        }
+        "help.commands" | "help.keyboard" | "help.privacy" => {
+            show_settings_dialog(app, "show-help")
         }
         "view.increase-text-size" => {
             if persist_text_size(app, TextSizeAction::Increase).is_err() {
@@ -3306,14 +3329,15 @@ mod tests {
     use super::{
         active_context_id, allowlisted_deep_link, attention_badge_count, current_host_status,
         decision_count, decode_stored_config, deep_link_board_url, deep_link_window_plan,
-        engine_serve_arguments, event_is_relevant, guarded_item_menu_accelerator, menu_eligibility,
-        merge_watch_signal, native_command_for_menu_id, parse_deep_link, primary_surface_plan,
-        project_slug, recent_duplicate, text_size_after, validate_search_response,
-        validate_stored_config, watch_snapshot_is_safe, workspace_id, workspace_watch_plan,
-        write_config_unlocked, AppPaths, AppSnapshot, DeepLinkIntent, DeepLinkRejection,
-        DeepLinkWindowPlan, HostRuntime, HostStatus, NativeCommand, Preferences,
-        PrimarySurfacePlan, SearchResponse, StoredConfig, TextSize, TextSizeAction, Workspace,
-        WorkspaceKind, CONFIG_VERSION, DEEP_LINK_REJECTION_MESSAGE,
+        engine_serve_arguments, event_is_relevant, guarded_item_menu_accelerator,
+        is_board_settings_navigation, menu_eligibility, merge_watch_signal,
+        native_command_for_menu_id, parse_deep_link, primary_surface_plan, project_slug,
+        recent_duplicate, text_size_after, validate_search_response, validate_stored_config,
+        watch_snapshot_is_safe, workspace_id, workspace_watch_plan, write_config_unlocked,
+        AppPaths, AppSnapshot, DeepLinkIntent, DeepLinkRejection, DeepLinkWindowPlan, HostRuntime,
+        HostStatus, NativeCommand, Preferences, PrimarySurfacePlan, SearchResponse, StoredConfig,
+        TextSize, TextSizeAction, Workspace, WorkspaceKind, CONFIG_VERSION,
+        DEEP_LINK_REJECTION_MESSAGE,
     };
     use notify::{Event, EventKind};
     use serde_json::json;
@@ -3370,6 +3394,29 @@ mod tests {
             workspace,
             item_id,
         )
+    }
+
+    #[test]
+    fn settings_navigation_accepts_only_the_exact_active_loopback_sentinel() {
+        let accepted =
+            tauri::Url::parse("http://127.0.0.1:17171/__hfledger/settings").expect("valid URL");
+        assert!(is_board_settings_navigation(&accepted, 17171));
+
+        for rejected in [
+            "https://127.0.0.1:17171/__hfledger/settings",
+            "http://localhost:17171/__hfledger/settings",
+            "http://127.0.0.1:17172/__hfledger/settings",
+            "http://user@127.0.0.1:17171/__hfledger/settings",
+            "http://127.0.0.1:17171/__hfledger/settings/",
+            "http://127.0.0.1:17171/__hfledger/settings?mode=workspaces",
+            "http://127.0.0.1:17171/__hfledger/settings#preferences",
+        ] {
+            let url = tauri::Url::parse(rejected).expect("valid rejection URL");
+            assert!(
+                !is_board_settings_navigation(&url, 17171),
+                "{rejected} must not open Settings"
+            );
+        }
     }
 
     #[test]

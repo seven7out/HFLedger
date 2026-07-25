@@ -6,7 +6,7 @@ const elements = Object.fromEntries([
   "preferences-panel", "pref-text-size", "text-size-status",
   "onboarding-panel", "recovery-panel", "recovery-message", "workspaces-panel",
   "diagnostics-dialog", "diagnostics-output",
-  "commands-dialog", "command-search", "command-empty", "command-grid", "ledger-search-results",
+  "search-dialog", "commands-dialog", "command-search", "ledger-search-results",
 ].map((id) => [id, document.getElementById(id)]));
 
 let snapshot = null;
@@ -330,19 +330,6 @@ document.getElementById("show-diagnostics").addEventListener("click", async () =
   }
 });
 
-function filterCommands() {
-  const query = elements["command-search"].value.trim().toLowerCase().replace(/^\//, "");
-  let matches = 0;
-  document.querySelectorAll("[data-command-card]").forEach((card) => {
-    const searchable = card.dataset.search.toLowerCase().replaceAll("/", "");
-    const visible = !query || searchable.includes(query);
-    card.hidden = !visible;
-    if (visible) matches += 1;
-  });
-  elements["command-empty"].hidden = matches !== 0;
-  elements["command-grid"].classList.toggle("single-result", matches === 1);
-}
-
 function searchGuidance(message) {
   const paragraph = document.createElement("p");
   paragraph.className = "search-guidance";
@@ -372,7 +359,7 @@ function searchResultRow(result) {
         contextId: result.contextId,
         itemId: result.itemId,
       });
-      elements["commands-dialog"].close();
+      elements["search-dialog"].close();
       await refresh();
     } catch (error) {
       showError(error);
@@ -392,7 +379,7 @@ async function runGlobalSearch(rawQuery, generation = ++searchGeneration, attemp
   searchGuidance("Searching validated local projections…");
   try {
     const response = await invoke("search_workspaces", { query });
-    if (generation !== searchGeneration || !elements["commands-dialog"].open) return;
+    if (generation !== searchGeneration || !elements["search-dialog"].open) return;
     if (!response.results.length) {
       searchGuidance("No projected metadata matched.");
       return;
@@ -415,20 +402,22 @@ function scheduleGlobalSearch() {
   searchTimer = window.setTimeout(() => runGlobalSearch(elements["command-search"].value), 180);
 }
 
-document.getElementById("show-commands").addEventListener("click", () => {
+document.getElementById("show-search").addEventListener("click", () => {
   elements["command-search"].value = "";
-  filterCommands();
   runGlobalSearch("");
-  elements["commands-dialog"].showModal();
+  elements["search-dialog"].showModal();
   window.setTimeout(() => elements["command-search"].focus(), 0);
 });
-document.getElementById("close-commands").addEventListener("click", () => {
+document.getElementById("close-search").addEventListener("click", () => {
   searchGeneration += 1;
-  elements["commands-dialog"].close();
+  elements["search-dialog"].close();
 });
+document.getElementById("done-search").addEventListener("click", () => elements["search-dialog"].close());
+elements["search-dialog"].addEventListener("close", () => { searchGeneration += 1; });
+document.getElementById("show-help").addEventListener("click", () => elements["commands-dialog"].showModal());
+document.getElementById("close-commands").addEventListener("click", () => elements["commands-dialog"].close());
 document.getElementById("done-commands").addEventListener("click", () => elements["commands-dialog"].close());
 elements["command-search"].addEventListener("input", () => {
-  filterCommands();
   scheduleGlobalSearch();
 });
 
