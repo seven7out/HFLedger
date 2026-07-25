@@ -904,14 +904,19 @@ class _V2Builder:
                 "item-work-type-invalid",
                 "An item work type was outside the closed vocabulary.",
                 [source_id])
+        project = (
+            _v2_text(raw.get("project"), 180)
+            if "project" in raw
+            else _v2_text(
+                self.board.get("meta", {}).get("project"), 180, "HFLedger workspace")
+        )
         item = {
             "id": item_id,
             "sourceId": source_id,
             "sourceItemRef": source_ref,
             "entityKind": entity_kind,
             "title": _v2_text(raw.get("title"), 180, "Untitled work"),
-            "project": _v2_text(raw.get("project"), 180, _v2_text(
-                self.board.get("meta", {}).get("project"), 180, "HFLedger workspace")),
+            "project": project,
             "statusLabel": _v2_text(raw.get("statusLabel") or raw.get("status"), 180, "Unknown"),
             "priority": priority,
             "workType": work_type,
@@ -1415,7 +1420,8 @@ class _V2Builder:
 
     def _add_core_item(self, raw, entity_kind, source_ref, change_kind):
         prepared = dict(raw)
-        prepared["project"] = self.board.get("meta", {}).get("project")
+        if "project" not in prepared:
+            prepared["project"] = self.board.get("meta", {}).get("project")
         prepared["statusLabel"] = raw.get("status") or raw.get("state") or "Open"
         prepared["protected"] = raw.get("protected") is True or bool(raw.get("gate"))
         item = self._add_item("board:main", source_ref, entity_kind, prepared)

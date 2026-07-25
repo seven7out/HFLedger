@@ -36,20 +36,20 @@ QUEUE_FIELDS = frozenset((
     "recommendedNextAgent", "links", "protected", "gate", "ownerOnly",
     "ownerAssignment", "dedupeKey", "pr", "mergedNote", "created", "updated",
     "autonomousSafe", "repository", "statusKey", "protectedClass",
-    "priority", "workType",
+    "priority", "workType", "project",
     "doneNote", "completionDisposition", "completionEvidence", "completionSource",
     "completionActor", "completionLedgerProvenance", "tombstone",
 ))
 INBOX_FIELDS = frozenset((
     "id", "title", "rawNote", "source", "date", "category", "priorityGuess",
-    "priority", "workType",
+    "priority", "workType", "project",
     "status", "recommendedNextAgent", "convertedToTaskId", "dedupeKey",
     "completionDisposition", "completionEvidence", "completionSource",
     "completionActor", "completionLedgerProvenance", "tombstone",
 ))
 OWNER_TASK_FIELDS = frozenset((
     "id", "title", "instruction", "status", "done", "dedupeKey", "source",
-    "snoozedUntil", "snoozeReason",
+    "snoozedUntil", "snoozeReason", "project",
     "completionDisposition", "completionEvidence", "completionSource",
     "completionActor", "completionLedgerProvenance", "tombstone",
 ))

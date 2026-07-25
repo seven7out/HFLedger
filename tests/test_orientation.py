@@ -343,6 +343,32 @@ class OrientationV2Tests(unittest.TestCase):
         self.assertIn("item-priority-invalid", codes)
         self.assertIn("item-work-type-invalid", codes)
 
+    def test_core_items_preserve_explicit_project_boundaries(self):
+        self.board["queue"] = [
+            {
+                "id": "task:studio", "title": "Tune studio timer",
+                "status": "Ready for Build", "project": "Fictional Studio",
+            },
+            {
+                "id": "task:community", "title": "Tune community timer",
+                "status": "Ready for Build", "project": "Fictional Community",
+            },
+            {
+                "id": "task:unassigned", "title": "Triage unmapped timer",
+                "status": "Needs Spec", "project": None,
+            },
+        ]
+        self.board["inbox"] = [{
+            "id": "idea:personal", "title": "Invent personal timer",
+            "status": "Inbox", "project": "Fictional Personal",
+        }]
+        result = self.build()
+        by_ref = {value["sourceItemRef"]: value for value in result["items"]}
+        self.assertEqual(by_ref["task:studio"]["project"], "Fictional Studio")
+        self.assertEqual(by_ref["task:community"]["project"], "Fictional Community")
+        self.assertEqual(by_ref["idea:personal"]["project"], "Fictional Personal")
+        self.assertEqual(by_ref["task:unassigned"]["project"], "")
+
     def test_exact_merged_pr_verifies_shipment_and_open_pr_disputes_it(self):
         self.board["queue"] = [{
             "id": "task:ship", "title": "Ship orchard timer", "status": "Done",
