@@ -43,6 +43,9 @@ PROJECTION_VALIDATED_LOCAL_COMMANDS = frozenset((
     "set-item-metadata", "clear-item-metadata",
 ))
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+# The packaged Mac host intercepts this exact navigation before any request is
+# made; the server route exists only so browser-only use never dead-ends there.
+SETTINGS_NAVIGATION_PATH = "/__hfledger/settings"
 STATIC_ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8", "no-store"),
     "/index.html": ("index.html", "text/html; charset=utf-8", "no-store"),
@@ -769,6 +772,14 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def _send_redirect(self, location):
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self._security_headers()
+        self.end_headers()
+
     def _send_asset(self, filename, content_type, cache):
         try:
             with open(os.path.join(STATIC_DIR, filename), "rb") as handle:
@@ -879,6 +890,9 @@ class Handler(BaseHTTPRequestHandler):
             asset = STATIC_ASSETS.get(parsed.path)
             if asset:
                 self._send_asset(*asset)
+                return
+            if parsed.path == SETTINGS_NAVIGATION_PATH and not parsed.query:
+                self._send_redirect("/")
                 return
             self._send_json({"error": "not found"}, status=404)
         except ApiError as exc:

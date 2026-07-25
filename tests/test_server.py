@@ -328,6 +328,30 @@ class ViewAndStaticTests(ServerCase):
         self.assertEqual(response.status, 404)
         self.assertEqual(body, {"error": "not found"})
 
+    def test_settings_sentinel_redirects_browser_use_back_to_the_board(self):
+        connection = self.connection()
+        connection.request("GET", "/__hfledger/settings")
+        response = connection.getresponse()
+        payload = response.read()
+        connection.close()
+        self.assertEqual(response.status, 302)
+        self.assertEqual(response.getheader("Location"), "/")
+        self.assertEqual(response.getheader("Cache-Control"), "no-store")
+        self.assertEqual(response.getheader("X-Frame-Options"), "DENY")
+        self.assertEqual(payload, b"")
+
+    def test_settings_sentinel_variants_stay_not_found(self):
+        for path in (
+            "/__hfledger/settings/",
+            "/__hfledger/settings?mode=workspaces",
+            "/__hfledger/settings/extra",
+            "/__hfledger",
+            "/__HFLEDGER/SETTINGS",
+        ):
+            response, body, _connection = self.get(path)
+            self.assertEqual(response.status, 404, path)
+            self.assertEqual(body, {"error": "not found"}, path)
+
     def test_api_is_no_store_and_has_no_cors_opt_in(self):
         response, _body, _connection = self.get("/api/board")
         self.assertEqual(response.getheader("Cache-Control"), "no-store")

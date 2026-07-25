@@ -65,6 +65,9 @@ class SettingsSearchSeparationTests(unittest.TestCase):
 
         self.assertIn('location.assign("/__hfledger/settings")', script)
         self.assertIn('const SETTINGS_NAVIGATION_PATH: &str = "/__hfledger/settings";', source)
+        server_source = (ROOT / "app" / "server.py").read_text(encoding="utf-8")
+        self.assertIn('SETTINGS_NAVIGATION_PATH = "/__hfledger/settings"', server_source)
+        self.assertIn('self._send_redirect("/")', server_source)
         settings_matcher = source[
             source.index("fn is_board_settings_navigation"):
             source.index("fn show_board_window")
