@@ -12,8 +12,9 @@ native-provisioned UIState document. The inspector and Watched-style copy label
 this explicitly. Deleting private UIState reveals source values again without
 changing any task, idea, decision, evidence, or collector record.
 
-This boundary is intentional. It gives Sam durable per-Mac prioritization and
-classification without turning an observer UI into a second task writer.
+This boundary is intentional. It gives the owner durable per-Mac
+prioritization and classification without turning an observer UI into a second
+task writer.
 
 ## Closed vocabularies
 
