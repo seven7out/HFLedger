@@ -13,7 +13,9 @@ APP_CSS = ROOT / "app" / "static" / "app.css"
 NATIVE = ROOT / "native" / "macos-host"
 SETTINGS_HTML = NATIVE / "src" / "index.html"
 SETTINGS_JS = NATIVE / "src" / "main.js"
+SETTINGS_CSS = NATIVE / "src" / "styles.css"
 RUST = NATIVE / "src-tauri" / "src" / "lib.rs"
+TAURI_CONFIG = NATIVE / "src-tauri" / "tauri.conf.json"
 CAPABILITY = NATIVE / "src-tauri" / "capabilities" / "default.json"
 
 
@@ -109,6 +111,7 @@ class SettingsSearchSeparationTests(unittest.TestCase):
     def test_settings_window_search_and_help_are_separate(self):
         markup = SETTINGS_HTML.read_text(encoding="utf-8")
         client = SETTINGS_JS.read_text(encoding="utf-8")
+        source = RUST.read_text(encoding="utf-8")
         search_dialog = markup[
             markup.index('<dialog id="search-dialog"'):
             markup.index('<dialog id="commands-dialog"')
@@ -125,6 +128,25 @@ class SettingsSearchSeparationTests(unittest.TestCase):
         self.assertNotIn("filterCommands", client)
         self.assertIn('document.getElementById("show-search")', client)
         self.assertIn('document.getElementById("show-help")', client)
+        self.assertEqual(source.count('Some("CmdOrCtrl+K")'), 1)
+        keyboard_menu = source[
+            source.index('let keyboard = custom_menu_item('):
+            source.index('let privacy = custom_menu_item(')
+        ]
+        self.assertIn('"help.keyboard"', keyboard_menu)
+        self.assertIn("None", keyboard_menu)
+
+    def test_settings_window_supports_the_600_pixel_minimum(self):
+        style = SETTINGS_CSS.read_text(encoding="utf-8")
+        config = json.loads(TAURI_CONFIG.read_text(encoding="utf-8"))
+        settings_window = config["app"]["windows"][0]
+
+        self.assertEqual(settings_window["minWidth"], 600)
+        self.assertNotIn("min-width: 760px", style)
+        narrow = style[style.index("@media (max-width: 679px)"):]
+        self.assertIn(".content-grid, .side-column { grid-template-columns: minmax(0, 1fr); }", narrow)
+        self.assertIn(".create-controls, .text-size-setting { grid-template-columns: minmax(0, 1fr); }", narrow)
+        self.assertIn("#pref-text-size { width: 100%; min-width: 0; }", narrow)
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ button, input, select { font: inherit; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; margin: -1px !important; padding: 0 !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 
 body {
-  min-width: 760px;
+  min-width: 0;
   min-height: 100vh;
   margin: 0;
   background:
@@ -194,6 +194,19 @@ dialog::backdrop { background: rgba(7, 8, 14, .65); backdrop-filter: blur(7px); 
   .side-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .side-column .panel:last-child { grid-column: 1 / -1; }
   .command-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 679px) {
+  .app-shell { padding: 20px 16px 16px; }
+  .app-header { align-items: flex-start; gap: 14px; }
+  .header-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .content-grid, .side-column { grid-template-columns: minmax(0, 1fr); }
+  .side-column .panel:last-child { grid-column: auto; }
+  .workspace-card { grid-template-columns: auto minmax(0, 1fr); }
+  .workspace-actions { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .create-controls, .text-size-setting { grid-template-columns: minmax(0, 1fr); }
+  #pref-text-size { width: 100%; min-width: 0; }
+  dialog, .search-dialog, .commands-dialog { width: calc(100vw - 28px); }
 }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

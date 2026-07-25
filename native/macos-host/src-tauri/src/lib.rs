@@ -2795,13 +2795,7 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
     )?;
 
     let help = custom_menu_item(app, "help.commands", "HFLedger Help", true, None)?;
-    let keyboard = custom_menu_item(
-        app,
-        "help.keyboard",
-        "Keyboard Shortcuts",
-        true,
-        Some("CmdOrCtrl+K"),
-    )?;
+    let keyboard = custom_menu_item(app, "help.keyboard", "Keyboard Shortcuts", true, None)?;
     let privacy = custom_menu_item(app, "help.privacy", "Privacy & Read-only Model", true, None)?;
     let diagnostics = custom_menu_item(app, "help.diagnostics", "Show Diagnostics", true, None)?;
     let help_menu = Submenu::with_id_and_items(
