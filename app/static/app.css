@@ -411,12 +411,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   position: relative;
   z-index: 5;
   cursor: col-resize;
+  touch-action: none;
+  user-select: none;
   background: var(--content);
 }
 .pane-resizer::after { content: ""; position: absolute; inset: 0 1px; background: var(--line); }
 .pane-resizer:hover::after,
 .pane-resizer:focus-visible::after,
 .is-resizing .pane-resizer::after { background: color-mix(in srgb, var(--accent) 60%, var(--line)); }
+.is-resizing,
+.is-resizing * { cursor: col-resize !important; user-select: none !important; }
 
 .ledger-center {
   position: relative;

@@ -9,12 +9,99 @@ require(path.resolve(__dirname, "../../app/static/app.js"));
 
 const ui = globalThis.HFLedgerUI;
 
+class FakeEventTarget {
+  constructor() {
+    this.listeners = new Map();
+  }
+
+  addEventListener(type, listener) {
+    if (!this.listeners.has(type)) this.listeners.set(type, []);
+    this.listeners.get(type).push(listener);
+  }
+
+  dispatch(type, init = {}) {
+    const event = { preventDefault() {}, ...init };
+    for (const listener of this.listeners.get(type) || []) listener(event);
+  }
+}
+
+class FakeResizer extends FakeEventTarget {
+  constructor() {
+    super();
+    this.captured = new Set();
+  }
+
+  setPointerCapture(pointerId) {
+    this.captured.add(pointerId);
+  }
+
+  hasPointerCapture(pointerId) {
+    return this.captured.has(pointerId);
+  }
+
+  releasePointerCapture(pointerId) {
+    this.captured.delete(pointerId);
+  }
+}
+
 test("exports the locked navigation and one-home order", () => {
   assert.deepEqual(ui.PRIMARY_VIEWS, ["today", "changes", "all-work", "shipped-log", "watched"]);
   assert.deepEqual(ui.HOME_ORDER, [
     "needs-you", "disputed", "silent-while-observed", "shipped-unverified",
     "in-motion", "queued", "shipped-verified", "parked", "unobserved",
   ]);
+});
+
+test("pane resize continues and cleans up after the pointer leaves the divider", () => {
+  const resizer = new FakeResizer();
+  const windowTarget = new FakeEventTarget();
+  const widths = [];
+  const resizingStates = [];
+  let persistCount = 0;
+
+  ui.bindPaneResizer({
+    resizer,
+    eventTarget: windowTarget,
+    side: "inspector",
+    readWidth: () => 360,
+    setWidth: (width) => widths.push(width),
+    setResizing: (active) => resizingStates.push(active),
+    persist: () => { persistCount += 1; },
+  });
+
+  resizer.dispatch("pointerdown", { pointerId: 7, button: 0, clientX: 1080 });
+  windowTarget.dispatch("pointermove", { pointerId: 7, clientX: 980 });
+  windowTarget.dispatch("pointerup", { pointerId: 7, clientX: 980 });
+  windowTarget.dispatch("pointermove", { pointerId: 7, clientX: 900 });
+
+  assert.deepEqual(widths, [460]);
+  assert.deepEqual(resizingStates, [true, false]);
+  assert.equal(persistCount, 1);
+  assert.equal(resizer.hasPointerCapture(7), false);
+});
+
+test("pane resize cancels cleanly when the window loses the pointer", () => {
+  const resizer = new FakeResizer();
+  const windowTarget = new FakeEventTarget();
+  const resizingStates = [];
+  let persistCount = 0;
+
+  ui.bindPaneResizer({
+    resizer,
+    eventTarget: windowTarget,
+    side: "sidebar",
+    readWidth: () => 210,
+    setWidth() {},
+    setResizing: (active) => resizingStates.push(active),
+    persist: () => { persistCount += 1; },
+  });
+
+  resizer.dispatch("pointerdown", { pointerId: 8, button: 0, clientX: 210 });
+  windowTarget.dispatch("blur");
+
+  assert.deepEqual(resizingStates, [true, false]);
+  assert.equal(persistCount, 1);
+  assert.equal(resizer.hasPointerCapture(8), false);
 });
 
 test("bounds untrusted text without interpreting markup", () => {

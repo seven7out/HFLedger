@@ -30,6 +30,8 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
         for element_id in ("ledger-sidebar", "ledger-center", "ledger-inspector", "coverage-footer"):
             self.assertIn(f'id="{element_id}"', markup)
+        self.assertIn('aria-valuenow="210"', markup)
+        self.assertIn('aria-valuenow="360"', markup)
         self.assertNotIn("resolve-dialog", markup)
         self.assertNotIn("Mark done", markup)
         self.assertNotIn("Record outcome", markup)
@@ -87,11 +89,16 @@ class TodayUIContractTests(unittest.TestCase):
 
     def test_visual_contract_removes_dashboard_patterns(self):
         markup = HTML.read_text(encoding="utf-8")
+        script = JS.read_text(encoding="utf-8")
         style = CSS.read_text(encoding="utf-8")
         for forbidden in ("class=\"hero\"", "id=\"stats\"", "coverage-notices", "today-grid"):
             self.assertNotIn(forbidden, markup)
         served_rules = style[:style.index(DECK_MARKER)]
         self.assertIn("grid-template-columns: var(--sidebar-width)", served_rules)
+        self.assertIn('document.body.style.setProperty("--sidebar-width"', script)
+        self.assertIn('document.body.style.setProperty("--inspector-width"', script)
+        self.assertNotIn('document.documentElement.style.setProperty("--sidebar-width"', script)
+        self.assertNotIn('document.documentElement.style.setProperty("--inspector-width"', script)
         self.assertIn("prefers-color-scheme: dark", served_rules)
         self.assertIn("prefers-reduced-motion: reduce", served_rules)
 

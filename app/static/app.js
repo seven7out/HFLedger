@@ -653,8 +653,16 @@ function updateNavigationSelection() {
 
 function restoreLocalPreferences() {
   const layout = localLayout();
-  if (layout.sidebarWidth) document.documentElement.style.setProperty("--sidebar-width", `${clamp(layout.sidebarWidth, 180, 320)}px`);
-  if (layout.inspectorWidth) document.documentElement.style.setProperty("--inspector-width", `${clamp(layout.inspectorWidth, 320, 560)}px`);
+  if (layout.sidebarWidth) {
+    const sidebarWidth = clamp(layout.sidebarWidth, 180, 320);
+    document.body.style.setProperty("--sidebar-width", `${sidebarWidth}px`);
+    $("#sidebar-resizer").setAttribute("aria-valuenow", String(Math.round(sidebarWidth)));
+  }
+  if (layout.inspectorWidth) {
+    const inspectorWidth = clamp(layout.inspectorWidth, 320, 560);
+    document.body.style.setProperty("--inspector-width", `${inspectorWidth}px`);
+    $("#inspector-resizer").setAttribute("aria-valuenow", String(Math.round(inspectorWidth)));
+  }
   if (state.restoredLocalNavigation) return;
   const navigation = localNavigation();
   const view = safeText(navigation.selectedView, 32);
@@ -1933,41 +1941,88 @@ function toggleInspector() {
   }
 }
 
+function bindPaneResizer({
+  resizer, eventTarget, side, readWidth, setWidth, setResizing, persist,
+}) {
+  let activePointerId = null;
+  let startX = 0;
+  let startWidth = 0;
+  const isActivePointer = (event) => (
+    activePointerId !== null && event.pointerId === activePointerId
+  );
+  const finish = (event) => {
+    if (activePointerId === null) return;
+    if (event?.pointerId !== undefined && event.pointerId !== activePointerId) return;
+    const pointerId = activePointerId;
+    activePointerId = null;
+    try {
+      if (resizer.hasPointerCapture?.(pointerId)) resizer.releasePointerCapture(pointerId);
+    } catch {
+      // Window-level tracking remains authoritative when a webview loses capture.
+    }
+    setResizing(false);
+    persist();
+  };
+
+  resizer.addEventListener("pointerdown", (event) => {
+    if (event.button !== undefined && event.button !== 0) return;
+    event.preventDefault();
+    activePointerId = event.pointerId;
+    startX = event.clientX;
+    startWidth = readWidth();
+    try {
+      resizer.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Some embedded webviews do not support pointer capture reliably.
+    }
+    setResizing(true);
+  });
+  eventTarget.addEventListener("pointermove", (event) => {
+    if (!isActivePointer(event)) return;
+    event.preventDefault();
+    const delta = event.clientX - startX;
+    setWidth(startWidth + (side === "sidebar" ? delta : -delta));
+  });
+  eventTarget.addEventListener("pointerup", finish);
+  eventTarget.addEventListener("pointercancel", finish);
+  eventTarget.addEventListener("blur", () => finish());
+}
+
 function setupResizer(selector, side) {
   const resizer = $(selector);
   const variable = side === "sidebar" ? "--sidebar-width" : "--inspector-width";
   const bounds = side === "sidebar" ? [180, 320] : [320, 560];
-  let startX = 0;
-  let startWidth = 0;
-  const setWidth = (width) => document.documentElement.style.setProperty(variable, `${clamp(width, ...bounds)}px`);
+  const readWidth = () => (
+    side === "sidebar"
+      ? $("#ledger-sidebar").getBoundingClientRect().width
+      : $("#ledger-inspector").getBoundingClientRect().width
+  );
+  const setWidth = (width) => {
+    const boundedWidth = clamp(width, ...bounds);
+    document.body.style.setProperty(variable, `${boundedWidth}px`);
+    resizer.setAttribute("aria-valuenow", String(Math.round(boundedWidth)));
+  };
   const persist = () => {
     if (!state.localCapability.available) return;
-    const styles = getComputedStyle(document.documentElement);
+    const styles = getComputedStyle(document.body);
     const sidebarWidth = Math.round(parseFloat(styles.getPropertyValue("--sidebar-width")) || 210);
     const inspectorWidth = Math.round(parseFloat(styles.getPropertyValue("--inspector-width")) || 360);
     localCommand("set-pane-widths", { sidebarWidth, inspectorWidth }, { reload: false })
       .catch((error) => announce(`Pane size kept for this session. ${error.message}`));
   };
-  resizer.addEventListener("pointerdown", (event) => {
-    startX = event.clientX;
-    startWidth = side === "sidebar" ? $("#ledger-sidebar").getBoundingClientRect().width : $("#ledger-inspector").getBoundingClientRect().width;
-    resizer.setPointerCapture(event.pointerId);
-    document.body.classList.add("is-resizing");
-  });
-  resizer.addEventListener("pointermove", (event) => {
-    if (!resizer.hasPointerCapture(event.pointerId)) return;
-    const delta = event.clientX - startX;
-    setWidth(startWidth + (side === "sidebar" ? delta : -delta));
-  });
-  resizer.addEventListener("pointerup", (event) => {
-    if (resizer.hasPointerCapture(event.pointerId)) resizer.releasePointerCapture(event.pointerId);
-    document.body.classList.remove("is-resizing");
-    persist();
+  bindPaneResizer({
+    resizer,
+    eventTarget: window,
+    side,
+    readWidth,
+    setWidth,
+    setResizing: (active) => document.body.classList.toggle("is-resizing", active),
+    persist,
   });
   resizer.addEventListener("keydown", (event) => {
     if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
     event.preventDefault();
-    const current = parseFloat(getComputedStyle(document.documentElement).getPropertyValue(variable)) || startWidth || bounds[0];
+    const current = parseFloat(getComputedStyle(document.body).getPropertyValue(variable)) || readWidth() || bounds[0];
     const logicalDelta = event.key === "ArrowRight" ? 8 : -8;
     setWidth(current + (side === "sidebar" ? logicalDelta : -logicalDelta));
     persist();
@@ -2275,6 +2330,7 @@ globalThis.HFLedgerUI = Object.freeze({
   QUICK_LOOK_MAX_EVIDENCE,
   parseItemNavigation,
   parseItemNavigationHash,
+  bindPaneResizer,
   HOME_ORDER: Object.freeze([...HOME_ORDER]),
   PRIMARY_VIEWS: Object.freeze([...PRIMARY_VIEWS]),
   PRIORITY_LABELS,
