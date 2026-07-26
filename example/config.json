@@ -8,6 +8,7 @@
     "subtitle": "Fictional bakery agents, with a quieter human lane.",
     "accent": "#c65f3d",
     "port": 7171,
+    "readOnly": false,
     "contexts": [
       {
         "id": "main",
@@ -56,7 +57,13 @@
         "pr_opened": "reconcile",
         "merged": "reconcile",
         "skipped": "audit-only",
-        "decision_added": "reconcile"
+        "decision_added": "reconcile",
+        "work_started": "audit-only",
+        "work_checkpoint": "audit-only",
+        "work_blocked": "audit-only",
+        "work_verified": "audit-only",
+        "work_shipped": "audit-only",
+        "work_abandoned": "audit-only"
       }
     },
     "owner-ui": {

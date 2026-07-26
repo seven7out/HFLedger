@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "workspaceId": "workspace-ovenlight-fixture",
+  "revision": 12,
+  "createdAt": "2026-07-18T15:00:00Z",
+  "updatedAt": "2026-07-18T17:50:00Z",
+  "contexts": [
+    {
+      "contextId": "main",
+      "lastSuccessfulVisitAt": "2026-07-18T17:45:00Z",
+      "viewCursors": [
+        {"view": "today", "cursor": "ov2:fixture-today-12:7a9012ef", "seenAt": "2026-07-18T17:45:00Z"},
+        {"view": "changes", "cursor": "ov2:fixture-changes-12:83bd012a", "seenAt": "2026-07-18T17:45:00Z"},
+        {"view": "all-work", "cursor": null, "seenAt": null},
+        {"view": "shipped-log", "cursor": null, "seenAt": null},
+        {"view": "watched", "cursor": null, "seenAt": null}
+      ],
+      "seenChanges": [
+        {"changeId": "change-111111111111111111111111", "seenAt": "2026-07-18T17:45:00Z"}
+      ],
+      "attention": [
+        {"itemId": "item-111111111111111111111111", "attentionKey": "attention-111111111111111111111111", "state": "acknowledged", "changedAt": "2026-07-18T17:46:00Z", "snoozedUntil": null, "localNote": null},
+        {"itemId": "item-222222222222222222222222", "attentionKey": "attention-222222222222222222222222", "state": "snoozed", "changedAt": "2026-07-18T17:47:00Z", "snoozedUntil": "2026-07-19T17:47:00Z", "localNote": "Recheck after the fictional review window."}
+      ],
+      "watched": [
+        {"itemId": "item-333333333333333333333333", "watchedAt": "2026-07-18T17:48:00Z"}
+      ],
+      "navigation": {
+        "selectedView": "today",
+        "selectedProjectId": null,
+        "selectedItemId": "item-222222222222222222222222"
+      },
+      "layout": {
+        "sidebarWidth": 210,
+        "inspectorWidth": 360,
+        "disclosures": [
+          {"key": "inspector.evidence", "expanded": true},
+          {"key": "inspector.runtime", "expanded": false}
+        ]
+      }
+    }
+  ]
+}

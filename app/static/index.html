@@ -3,142 +3,221 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f6f2ea">
+  <meta name="theme-color" content="#f5f5f7">
   <title>HFLedger</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="/icon.png" type="image/png">
   <link rel="stylesheet" href="/app.css">
 </head>
 <body class="board-page">
-  <header class="topbar">
-    <a class="brand" href="/" aria-label="HFLedger board">
-      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
-      <span><strong id="brand-title">HFLedger</strong><small>owner control room</small></span>
-    </a>
-    <nav class="view-nav" aria-label="Views">
-      <a class="active" href="/">Board</a>
-      <a href="/deck">Decision deck</a>
-    </nav>
-    <label class="context-control">
-      <span>Context</span>
-      <select id="context-select" aria-label="Active context"></select>
-    </label>
-  </header>
-
-  <main class="board-shell">
-    <section class="hero">
-      <div>
-        <p class="eyebrow">Live, local, accountable</p>
-        <h1 id="project-title">Loading your board…</h1>
-        <p id="project-subtitle" class="hero-copy">The owner lane stays small because only admitted asks get through.</p>
+  <div id="app-shell" class="ledger-shell is-loading" aria-busy="true">
+    <header class="ledger-toolbar">
+      <div class="toolbar-leading">
+        <button id="sidebar-toggle" class="toolbar-button pane-button" type="button"
+                aria-label="Show sidebar" aria-controls="ledger-sidebar" aria-expanded="false">☰</button>
+        <img class="app-mark" src="/logo.png" alt="" aria-hidden="true">
+        <div class="window-title">
+          <strong id="brand-title">HFLedger</strong>
+          <span aria-hidden="true">—</span>
+          <span id="workspace-title">Loading ledger…</span>
+        </div>
       </div>
-      <div class="hero-actions">
-        <span id="updated-at" class="updated-at"></span>
-        <button id="refresh-button" class="button secondary" type="button">Refresh</button>
-        <a class="button primary" href="/deck">Open deck <span aria-hidden="true">→</span></a>
+
+      <div class="toolbar-actions">
+        <label id="context-control" class="context-control" hidden>
+          <span class="visually-hidden">Active context</span>
+          <select id="context-select" aria-label="Active context"></select>
+        </label>
+        <div id="global-search" class="global-search">
+          <label for="global-search-input" class="visually-hidden">Search HFLedger</label>
+          <input id="global-search-input" type="search" maxlength="128"
+                 placeholder="Search HFLedger…" autocomplete="off"
+                 aria-keyshortcuts="Meta+K"
+                 aria-controls="global-search-results" aria-expanded="false">
+          <div id="global-search-results" class="global-search-results"
+               role="listbox" aria-label="HFLedger search results" hidden></div>
+        </div>
+        <button id="filter-toggle" class="toolbar-button" type="button" aria-keyshortcuts="Meta+F"
+                aria-controls="filter-panel" aria-expanded="false">Filter</button>
+        <button id="settings-button" class="toolbar-button" type="button"
+                aria-keyshortcuts="Meta+,">Settings</button>
+        <button id="inspector-toggle" class="toolbar-button pane-button" type="button"
+                aria-label="Show inspector" aria-controls="ledger-inspector" aria-expanded="false">Details</button>
       </div>
-    </section>
+    </header>
 
-    <section id="stats" class="stats" aria-label="Board totals"></section>
+    <div class="ledger-body">
+      <aside id="ledger-sidebar" class="ledger-sidebar" aria-label="HFLedger navigation">
+        <div class="sidebar-scroll">
+          <nav id="primary-nav" class="source-list" aria-label="Ledger views">
+            <button class="source-row is-selected" type="button" data-view="today" aria-current="page">
+              <span class="source-icon" aria-hidden="true">⌾</span><span>Today</span>
+              <span id="today-badge" class="nav-badge" hidden></span>
+            </button>
+            <button class="source-row" type="button" data-view="changes">
+              <span class="source-icon" aria-hidden="true">↺</span><span>Changes</span>
+              <span id="changes-badge" class="nav-badge" hidden></span>
+            </button>
+            <button class="source-row" type="button" data-view="all-work">
+              <span class="source-icon" aria-hidden="true">≡</span><span>All Work</span>
+            </button>
+            <button class="source-row" type="button" data-view="shipped-log">
+              <span class="source-icon" aria-hidden="true">✓</span><span>Shipped Log</span>
+            </button>
+            <button class="source-row" type="button" data-view="watched">
+              <span class="source-icon" aria-hidden="true">☆</span><span>Watched</span>
+            </button>
+            <button class="source-row" type="button" data-view="projects">
+              <span class="source-icon" aria-hidden="true">◇</span><span>Projects</span>
+            </button>
+          </nav>
 
-    <div id="loading" class="loading-card" role="status">
-      <span class="spinner" aria-hidden="true"></span>
-      Reading the validated board…
+          <div class="sidebar-group">
+            <p class="sidebar-label">Projects</p>
+            <div id="sidebar-projects" class="project-source-list"></div>
+          </div>
+        </div>
+
+        <button id="coverage-footer" class="coverage-footer" type="button" aria-label="Open coverage details">
+          <span id="coverage-sources">Coverage loading</span>
+          <small id="coverage-observed">Waiting for validated sources</small>
+        </button>
+      </aside>
+
+      <div id="sidebar-resizer" class="pane-resizer sidebar-resizer" role="separator" tabindex="0"
+           aria-label="Resize sidebar" aria-orientation="vertical"
+           aria-valuemin="180" aria-valuenow="210" aria-valuemax="320"></div>
+
+      <main id="ledger-center" class="ledger-center" tabindex="-1">
+        <header class="view-toolbar">
+          <div>
+            <h1 id="view-title">Today</h1>
+            <p id="view-subtitle" class="view-subtitle">Reading the validated ledger…</p>
+          </div>
+          <div class="view-tools">
+            <div id="filter-panel" class="filter-panel" hidden>
+              <label class="facet-control">
+                <span>Priority</span>
+                <select id="priority-filter" aria-label="Filter by priority">
+                  <option value="">All</option>
+                  <option value="P0">P0 Immediate</option>
+                  <option value="P1">P1 Next</option>
+                  <option value="P2">P2 Normal</option>
+                  <option value="none">Unprioritized</option>
+                </select>
+              </label>
+              <label class="facet-control">
+                <span>Type</span>
+                <select id="work-type-filter" aria-label="Filter by work type">
+                  <option value="">All</option>
+                  <option value="security">Security</option>
+                  <option value="feature">New Feature</option>
+                  <option value="bug-fix">Bug Fix</option>
+                  <option value="improvement">Improvement</option>
+                  <option value="maintenance">Maintenance</option>
+                  <option value="documentation">Documentation</option>
+                  <option value="research">Research</option>
+                  <option value="none">Unclassified</option>
+                </select>
+              </label>
+              <label class="facet-control">
+                <span>Sort</span>
+                <select id="metadata-sort" aria-label="Sort current view">
+                  <option value="ledger">Ledger order</option>
+                  <option value="priority">Priority</option>
+                </select>
+              </label>
+              <label id="filter-wrap" class="filter-wrap">
+                <span class="visually-hidden">Filter current view</span>
+                <input id="view-filter" type="search" maxlength="120" autocomplete="off"
+                       placeholder="Filter this view…" aria-label="Filter current view">
+                <button id="filter-clear" type="button" aria-label="Clear all filters">×</button>
+              </label>
+            </div>
+            <span id="refresh-state" class="refresh-state" role="status" aria-live="polite"></span>
+          </div>
+        </header>
+
+        <div id="loading-state" class="initial-loading" role="status">
+          <p>Reading the validated ledger…</p>
+          <div class="skeleton-list" aria-hidden="true">
+            <i></i><i></i><i></i><i></i><i></i>
+          </div>
+        </div>
+
+        <section id="error-state" class="center-state error-state" role="alert" hidden>
+          <h2>HFLedger could not read this ledger</h2>
+          <p id="error-message">The validated board response was unavailable.</p>
+          <div class="state-actions">
+            <button id="retry-button" class="control-button primary-control" type="button">Try Again</button>
+            <button id="diagnostics-button" class="control-button" type="button">Show Diagnostics</button>
+          </div>
+        </section>
+
+        <section id="no-board-state" class="center-state" hidden>
+          <h2>No ledger is open</h2>
+          <p>Choose an initialized HFLedger workspace in Settings.</p>
+          <button id="open-workspace-button" class="control-button primary-control" type="button">Open Workspace…</button>
+        </section>
+
+        <div id="center-content" class="center-content" role="region" aria-live="polite" hidden></div>
+      </main>
+
+      <div id="inspector-resizer" class="pane-resizer inspector-resizer" role="separator" tabindex="0"
+           aria-label="Resize inspector" aria-orientation="vertical"
+           aria-valuemin="320" aria-valuenow="360" aria-valuemax="560"></div>
+
+      <aside id="ledger-inspector" class="ledger-inspector" aria-label="Details" tabindex="-1">
+        <header class="inspector-toolbar">
+          <button id="inspector-back" class="toolbar-button inspector-back" type="button">Back</button>
+          <span>Details</span>
+          <button id="inspector-close" class="toolbar-button inspector-close" type="button" aria-label="Close inspector">×</button>
+        </header>
+        <div id="inspector-content" class="inspector-content">
+          <div class="inspector-empty">
+            <span aria-hidden="true">⌁</span>
+            <h2>No selection</h2>
+            <p>Select a ledger row to inspect its evidence, freshness, and one supported next action.</p>
+          </div>
+        </div>
+      </aside>
     </div>
-    <div id="error" class="error-card" role="alert" hidden></div>
+  </div>
 
-    <div id="board" class="board-grid" hidden>
-      <section class="panel attention-panel">
-        <header class="panel-heading">
-          <div>
-            <p class="eyebrow">Human lane</p>
-            <h2>Decisions & manual actions</h2>
-          </div>
-          <span id="decision-count" class="count-pill"></span>
-        </header>
-        <div id="decision-list" class="card-list"></div>
-      </section>
+  <section id="quick-look-panel" class="quick-look-panel" role="dialog" aria-modal="false"
+           aria-label="Evidence preview" aria-labelledby="quick-look-title"
+           aria-describedby="quick-look-summary" hidden>
+    <div id="quick-look-scrim" class="quick-look-scrim" aria-hidden="true"></div>
+    <div id="quick-look-content" class="quick-look-content"></div>
+  </section>
 
-      <section class="panel owner-panel">
-        <header class="panel-heading">
-          <div>
-            <p class="eyebrow">Owner checklist</p>
-            <h2>Direct tasks</h2>
-          </div>
-          <span id="task-count" class="count-pill"></span>
-        </header>
-        <div id="task-list" class="task-list"></div>
-      </section>
-
-      <section class="panel queue-panel">
-        <header class="panel-heading">
-          <div>
-            <p class="eyebrow">Agent work</p>
-            <h2>Queue</h2>
-          </div>
-          <span id="queue-count" class="count-pill"></span>
-        </header>
-        <div id="queue-list" class="queue-list"></div>
-      </section>
-
-      <section class="panel history-panel">
-        <header class="panel-heading">
-          <div>
-            <p class="eyebrow">Recent outcomes</p>
-            <h2>Resolved</h2>
-          </div>
-        </header>
-        <div id="resolved-list" class="resolved-list"></div>
-      </section>
-    </div>
-  </main>
-
-  <dialog id="resolve-dialog" class="modal">
-    <form id="resolve-form" method="dialog">
-      <div class="modal-head">
-        <div><p class="eyebrow">Record an outcome</p><h2 id="resolve-title">Resolve ask</h2></div>
-        <button class="icon-button" value="cancel" aria-label="Close">×</button>
-      </div>
-      <input id="resolve-id" type="hidden">
-      <input id="resolve-hash" type="hidden">
-      <input id="resolve-type" type="hidden">
-      <label id="option-field" class="field" hidden>
-        <span>Selected option</span>
-        <select id="resolve-option"></select>
-      </label>
-      <label id="resolution-field" class="field">
-        <span>Outcome</span>
-        <textarea id="resolve-text" rows="3" maxlength="4000" required></textarea>
-      </label>
-      <label id="evidence-field" class="field">
-        <span>Evidence</span>
-        <textarea id="resolve-evidence" rows="2" maxlength="4000" required>Recorded in the HFLedger owner interface.</textarea>
-      </label>
-      <div class="modal-actions">
-        <button class="button secondary" value="cancel">Cancel</button>
-        <button id="resolve-submit" class="button primary" value="default">Record outcome</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="snooze-dialog" class="modal compact-modal">
+  <dialog id="snooze-dialog" class="ui-dialog">
     <form id="snooze-form" method="dialog">
-      <div class="modal-head">
-        <div><p class="eyebrow">Keep it open</p><h2 id="snooze-title">Snooze ask</h2></div>
-        <button class="icon-button" value="cancel" aria-label="Close">×</button>
-      </div>
-      <input id="snooze-id" type="hidden">
-      <input id="snooze-hash" type="hidden">
-      <label class="field"><span>Bring it back on</span><input id="snooze-until" type="date" required></label>
-      <label class="field"><span>Reason</span><input id="snooze-reason" maxlength="1000" value="Not ready to decide yet." required></label>
-      <div class="modal-actions">
-        <button class="button secondary" value="cancel">Cancel</button>
-        <button id="snooze-submit" class="button primary" value="default">Snooze</button>
+      <header>
+        <div><p class="dialog-label">Local presentation state</p><h2>Snooze this attention item</h2></div>
+        <button class="dialog-close" value="cancel" aria-label="Close">×</button>
+      </header>
+      <p>This hides the current attention generation on this Mac. It does not change the task or decision.</p>
+      <label class="dialog-field">
+        <span>Show it again</span>
+        <select id="snooze-duration">
+          <option value="1">Tomorrow</option>
+          <option value="7">In one week</option>
+          <option value="30">In 30 days</option>
+        </select>
+      </label>
+      <div class="dialog-actions">
+        <button class="control-button" value="cancel">Cancel</button>
+        <button class="control-button primary-control" value="default">Snooze locally</button>
       </div>
     </form>
   </dialog>
 
-  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden>
+    <span id="toast-message"></span>
+    <button id="toast-undo" type="button" hidden>Undo</button>
+  </div>
+
   <script src="/app.js" defer></script>
 </body>
 </html>

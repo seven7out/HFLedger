@@ -1,0 +1,21 @@
+{
+  "contractVersion": 2,
+  "snapshots": {
+    "disabled": {"sourceState": "disabled", "screenState": "partial", "itemHome": "unobserved", "quiet": false, "alertTitle": "Coverage cannot support a complete Today view"},
+    "never-observed": {"sourceState": "never-observed", "screenState": "invalid", "itemHome": "unobserved", "quiet": false, "alertTitle": "Coverage cannot support a complete Today view"},
+    "unavailable": {"sourceState": "unavailable", "screenState": "invalid", "itemHome": "unobserved", "quiet": false, "alertTitle": "Coverage cannot support a complete Today view"},
+    "degraded": {"sourceState": "degraded", "screenState": "invalid", "itemHome": "unobserved", "quiet": false, "alertTitle": "Coverage cannot support a complete Today view"},
+    "stale": {"sourceState": "stale", "screenState": "invalid", "itemHome": "unobserved", "quiet": false, "alertTitle": "Observation is out of date"},
+    "idle": {"sourceState": "idle", "screenState": "complete", "itemHome": "silent-while-observed", "quiet": true, "screenAsOf": "2026-07-18T17:55:00Z"},
+    "healthy": {"sourceState": "healthy", "screenState": "complete", "itemHome": "silent-while-observed", "quiet": true, "screenAsOf": "2026-07-18T17:55:00Z"},
+    "recovered": {"sourceState": "healthy", "screenState": "complete", "itemHome": "silent-while-observed", "quiet": true, "screenAsOf": "2026-07-18T18:08:00Z", "changeKind": "source-recovered", "metaAlertPresent": false}
+  },
+  "forbiddenConclusionsWhenUnqualified": [
+    "all clear",
+    "up to date",
+    "nothing changed",
+    "quiet",
+    "verified",
+    "shipped"
+  ]
+}

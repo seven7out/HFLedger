@@ -1,7 +1,7 @@
 "use strict";
 
-const CACHE = "ledger-ui-v1";
-const SHELL = ["/", "/deck", "/app.css", "/app.js", "/deck.js", "/icon.svg", "/manifest.webmanifest"];
+const CACHE = "ledger-ui-v5";
+const SHELL = ["/", "/deck", "/app.css", "/app.js", "/deck.js", "/icon.png", "/logo.png", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
@@ -21,4 +21,3 @@ self.addEventListener("fetch", (event) => {
     return response;
   }).catch(() => caches.match(event.request)));
 });
-

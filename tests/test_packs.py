@@ -19,10 +19,15 @@ class PackTests(unittest.TestCase):
 
     def test_generic_and_claude_code_layouts_have_verified_manifest(self):
         config = store.load_config(self.home)
-        config["automation"]["packs"]["runtimes"] = ["generic", "claude-code"]
+        config["automation"]["packs"]["runtimes"] = ["codex", "generic", "claude-code"]
         store.save_config(self.home, config)
         result = render_packs(self.home)
         expected = {
+            "codex/AGENTS.md",
+            "codex/prompts/ledger-sweep.md",
+            "codex/prompts/ledger-work.md",
+            "codex/prompts/ledger-attend.md",
+            "codex/prompts/ledger-status.md",
             "generic/AGENTS.md",
             "generic/prompts/sweep.md",
             "generic/prompts/work.md",
@@ -40,6 +45,12 @@ class PackTests(unittest.TestCase):
         for entry in manifest["files"]:
             with open(os.path.join(result["output"], entry["path"]), "rb") as handle:
                 self.assertEqual(hashlib.sha256(handle.read()).hexdigest(), entry["sha256"])
+        with open(os.path.join(result["output"], "codex", "prompts", "ledger-work.md"),
+                  encoding="utf-8") as handle:
+            self.assertIn("--runtime codex", handle.read())
+        with open(os.path.join(result["output"], "claude-code", ".claude", "commands",
+                               "ledger-work.md"), encoding="utf-8") as handle:
+            self.assertIn("--runtime claude-code", handle.read())
 
     def test_refuses_overwrite_before_touching_any_file(self):
         result = render_packs(self.home)

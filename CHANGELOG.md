@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- Added a dedicated Settings toolbar button, content-only inline app search,
+  and a separate Help surface for the installed command guide.
+- Kept persistent Compact, Comfortable, Large, and Extra Large text-size
+  choices on the existing closed native Settings surface.
+- Kept the exact Settings navigation sentinel harmless in browser-only use by
+  redirecting it back to the board instead of a dead-end error.
+- Added a Today control-tower projection for shipped, in-motion, owner-needed,
+  and stalled work across agent runtimes.
+- Added deterministic agent-effectiveness suggestions and explicit evidence
+  coverage notices.
+- Added enforced read-only observer workspaces and adapter-supplied coverage
+  notices for intentionally unsupported source planes.
+- Added the audit-only `ledger event` surface and closed
+  `agent-evidence-v1` contract for started, checkpoint, blocked, verified,
+  shipped, and abandoned observations.
+- Added a dedicated Codex instruction-pack layout and runtime-labeled evidence
+  guidance for Codex, generic agents, and Claude Code.
+
 ## 0.4.1 — 2026-07-17
 
 Launch-hygiene release.

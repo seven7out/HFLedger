@@ -1,0 +1,27 @@
+[package]
+name = "hfledger-macos-host"
+version = "0.6.0-alpha.6"
+description = "Local-first HFLedger macOS host"
+authors = ["HFLedger contributors"]
+edition = "2021"
+
+[lib]
+name = "hfledger_macos_host_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+notify = "8"
+rfd = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-window-state = "2"

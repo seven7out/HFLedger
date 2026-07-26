@@ -15,6 +15,9 @@ The repository is designed so all technical preparation can finish before choosi
 4. Confirm `core.__version__`, [`CHANGELOG.md`](../CHANGELOG.md), and the intended tag agree.
 5. Run the README demo from a fresh clone or clean worktree and make one real swipe.
 6. Inspect the board and deck at desktop and phone widths with no console errors or horizontal overflow.
+7. Validate every declared file in `tests/fixtures/redesign-v2/`; project the
+   catalog twice with the same injected UTC clock and require byte-identical
+   normalized results.
 
 The privacy gate deliberately lives outside the public repository so the denylist cannot reveal the identities and systems it protects.
 
@@ -38,7 +41,33 @@ Before making the repository public:
 - create the `v0.4.1` release from [`CHANGELOG.md`](../CHANGELOG.md);
 - clone the public repository into a new directory and run `scripts/release-check` there.
 
-Do not publish an HFLedger data directory, generated collector report, local instruction pack, scheduler file containing machine paths, or private privacy-gate denylist.
+Do not publish an HFLedger data directory, generated collector report, private
+adapter output, app-private triage state, local instruction pack, scheduler file
+containing machine paths, or private privacy-gate denylist. Only the reviewed
+fictional `example/` and `tests/fixtures/redesign-v2/` data are public runtime
+fixtures.
+
+## Mac application release
+
+The Mac app has two release levels:
+
+1. `npm run build:dmg` creates an ad-hoc-signed local candidate and runs the
+   signature, frozen-engine, symlink-containment, privacy-marker, and checksum
+   verifier.
+2. The manual `Mac app candidate` GitHub workflow can run an explicitly enabled
+   signed job in the protected `macos-release` environment. It imports the
+   Developer ID certificate, asks Tauri to notarize and staple the DMG, verifies
+   Gatekeeper acceptance, and creates a draft GitHub release.
+
+The signed job requires the Apple secrets documented in
+[`native/macos-host/README.md`](../native/macos-host/README.md). Never place a
+certificate, app-specific password, private updater key, or keychain password in
+the repository. Review the generated `release-manifest.json` and install the DMG
+on a clean Mac account before publishing the draft.
+
+The updater remains disabled until there is a stable release URL and a separately
+stored updater signing key. Enabling it is a release-policy change, not a normal
+build step.
 
 ## Launch sequence
 

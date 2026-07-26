@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#171828">
   <title>HFLedger decision deck</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="/icon.png" type="image/png">
   <link rel="stylesheet" href="/app.css">
 </head>
 <body class="deck-page">
@@ -23,9 +23,9 @@
     </section>
     <section id="deck-error" class="deck-state error" role="alert" hidden></section>
     <section id="deck-empty" class="deck-state empty" hidden>
-      <span class="empty-orbit" aria-hidden="true">✓</span>
-      <h1>The lane is clear.</h1>
-      <p>No admitted asks need your attention in this context.</p>
+      <span id="deck-empty-icon" class="empty-orbit" aria-hidden="true">✓</span>
+      <h1 id="deck-empty-title">The lane is clear.</h1>
+      <p id="deck-empty-copy">No admitted asks need your attention in this context.</p>
       <a class="button light-button" href="/">Return to board</a>
     </section>
 
@@ -37,11 +37,6 @@
     </section>
   </main>
 
-  <div id="undo-bar" class="undo-bar" role="status" aria-live="polite" hidden>
-    <span>Outcome recorded.</span>
-    <button id="undo-button" type="button">Undo</button>
-    <span id="undo-timer" aria-hidden="true"></span>
-  </div>
   <div id="deck-toast" class="toast deck-toast" role="status" aria-live="polite" hidden></div>
   <script src="/deck.js" defer></script>
 </body>

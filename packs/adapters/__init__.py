@@ -2,6 +2,13 @@
 
 
 RUNTIME_FILES = {
+    "codex": {
+        "AGENTS.md.tmpl": "AGENTS.md",
+        "sweep.md.tmpl": "prompts/ledger-sweep.md",
+        "work.md.tmpl": "prompts/ledger-work.md",
+        "attend.md.tmpl": "prompts/ledger-attend.md",
+        "status.md.tmpl": "prompts/ledger-status.md",
+    },
     "generic": {
         "AGENTS.md.tmpl": "AGENTS.md",
         "sweep.md.tmpl": "prompts/sweep.md",
@@ -18,5 +25,11 @@ RUNTIME_FILES = {
     },
 }
 
+RUNTIME_EVIDENCE_NAMES = {
+    "codex": "codex",
+    "claude-code": "claude-code",
+    "generic": "other",
+}
 
-__all__ = ["RUNTIME_FILES"]
+
+__all__ = ["RUNTIME_EVIDENCE_NAMES", "RUNTIME_FILES"]

@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HFLedger Settings</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="main.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand">
+          <img src="icon.png" width="50" height="50" alt="">
+          <div>
+            <p class="eyebrow">Local-first control room</p>
+            <h1>HFLedger Settings</h1>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button id="show-search" class="button quiet" aria-haspopup="dialog">Search</button>
+          <button id="show-help" class="button quiet" aria-haspopup="dialog">Help</button>
+          <div class="host-pill" id="host-pill"><span></span><b>Engine stopped</b></div>
+        </div>
+      </header>
+
+      <div id="error-banner" class="banner error" role="alert" hidden>
+        <span id="error-message"></span>
+        <div class="banner-actions">
+          <button id="repair-settings" class="button quiet" hidden>Repair app settings</button>
+          <button id="dismiss-error" class="icon-button" aria-label="Dismiss">×</button>
+        </div>
+      </div>
+      <div id="success-banner" class="banner success" role="status" hidden></div>
+
+      <section id="onboarding-panel" class="mode-panel" aria-labelledby="onboarding-title" hidden>
+        <p class="eyebrow">Get started</p>
+        <h2 id="onboarding-title">Set up your first workspace</h2>
+        <p>Open an existing HFLedger folder, create a private workspace, or explicitly try the included fictional demo.</p>
+        <div class="mode-actions">
+          <button id="onboarding-add" class="button primary">Open existing folder…</button>
+          <button id="onboarding-create" class="button secondary">Create a workspace</button>
+          <button id="onboarding-demo" class="button quiet">Try fictional demo</button>
+        </div>
+      </section>
+
+      <section id="recovery-panel" class="mode-panel recovery-panel" aria-labelledby="recovery-title" hidden>
+        <p class="eyebrow">Recovery</p>
+        <h2 id="recovery-title">Today could not open</h2>
+        <p id="recovery-message">Choose another registered workspace or inspect the local diagnostics.</p>
+        <div class="mode-actions">
+          <button id="recovery-workspaces" class="button primary">Review workspaces</button>
+          <button id="recovery-diagnostics" class="button quiet">Show diagnostics</button>
+        </div>
+      </section>
+
+      <main class="content-grid">
+        <section id="workspaces-panel" class="primary-column" tabindex="-1">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Workspaces</p>
+              <h2>Manage local workspaces</h2>
+            </div>
+            <div class="section-actions">
+              <button id="open-demo" class="button quiet">Open fictional demo</button>
+              <button id="add-existing" class="button secondary">Open existing folder…</button>
+            </div>
+          </div>
+
+          <div id="workspace-list" class="workspace-list" aria-live="polite"></div>
+
+          <form id="create-form" class="create-card">
+            <div>
+              <h3>Create a private workspace</h3>
+              <p>HFLedger stores it inside this Mac app’s protected data folder.</p>
+            </div>
+            <div class="create-controls">
+              <label>
+                <span>Project name</span>
+                <input id="project-name" name="project" maxlength="80" required placeholder="My project">
+              </label>
+              <button class="button primary" type="submit">Create</button>
+            </div>
+          </form>
+        </section>
+
+        <aside class="side-column">
+          <section class="panel" aria-labelledby="engine-title">
+            <p class="eyebrow">Local engine</p>
+            <h2 id="engine-title">Status &amp; recovery</h2>
+            <dl class="status-list">
+              <div><dt>Workspace</dt><dd id="active-workspace">None open</dd></div>
+              <div><dt>Connection</dt><dd id="connection">Stopped</dd></div>
+            </dl>
+            <div class="button-stack">
+              <button id="restart" class="button secondary" disabled>Restart engine</button>
+              <button id="stop" class="button quiet" disabled>Stop engine</button>
+            </div>
+          </section>
+
+          <section id="preferences-panel" class="panel preferences-panel" aria-labelledby="prefs-title" tabindex="-1">
+            <p class="eyebrow">Preferences</p>
+            <h2 id="prefs-title">Mac behavior</h2>
+            <div class="text-size-setting">
+              <label for="pref-text-size">
+                <b>Text size</b>
+                <small id="text-size-description">Applies immediately throughout HFLedger</small>
+              </label>
+              <select id="pref-text-size" aria-describedby="text-size-description text-size-preview">
+                <option value="compact">Compact — 100%</option>
+                <option value="comfortable">Comfortable — 115%</option>
+                <option value="large">Large — 130%</option>
+                <option value="extraLarge">Extra Large — 150%</option>
+              </select>
+            </div>
+            <div id="text-size-preview" class="text-size-preview" aria-label="Text size preview">
+              <p class="preview-normal">Choose the release window after reviewing the evidence.</p>
+              <p class="preview-secondary">Secondary detail stays readable without competing with the decision.</p>
+              <p class="preview-provenance"><time datetime="2026-07-19T18:42:00Z">Observed 6:42 PM</time> · Verified provenance</p>
+            </div>
+            <label class="toggle-row">
+              <span><b>Notifications</b><small>Generic alerts for new owner asks</small></span>
+              <input id="pref-notifications" type="checkbox" role="switch">
+            </label>
+            <label class="toggle-row">
+              <span><b>Launch at login</b><small>Start HFLedger after you sign in</small></span>
+              <input id="pref-login" type="checkbox" role="switch">
+            </label>
+            <label class="toggle-row">
+              <span><b>Reopen last board</b><small>Restore the selected workspace at launch</small></span>
+              <input id="pref-restore" type="checkbox" role="switch">
+            </label>
+            <p id="text-size-status" class="visually-hidden" role="status" aria-live="polite"></p>
+          </section>
+
+          <section class="panel" aria-labelledby="data-title">
+            <p class="eyebrow">Data safety</p>
+            <h2 id="data-title">Backups &amp; diagnostics</h2>
+            <div class="button-stack">
+              <button id="backup" class="button secondary" disabled>Create validated backup</button>
+              <button id="reveal-workspace" class="button quiet" disabled>Reveal workspace in Finder</button>
+              <button id="reveal-backups" class="button quiet">Reveal backups in Finder</button>
+              <button id="show-diagnostics" class="button quiet">Show diagnostics</button>
+            </div>
+          </section>
+        </aside>
+      </main>
+
+      <footer>
+        <span id="version"></span>
+        <button id="quit" class="text-button">Quit HFLedger</button>
+      </footer>
+    </div>
+
+    <dialog id="diagnostics-dialog">
+      <form method="dialog" class="dialog-card">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">Local support details</p><h2>Diagnostics</h2></div>
+          <button class="icon-button" value="cancel" aria-label="Close">×</button>
+        </div>
+        <pre id="diagnostics-output"></pre>
+        <div class="dialog-actions">
+          <button id="reveal-logs" class="button quiet" type="button">Reveal logs</button>
+          <button class="button primary" value="default">Done</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="search-dialog" class="search-dialog">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">Local projected metadata only</p><h2>Global search</h2></div>
+          <button id="close-search" class="icon-button" type="button" aria-label="Close">×</button>
+        </div>
+
+        <label class="command-search">
+          <span>Search every registered workspace</span>
+          <input id="command-search" type="search" maxlength="128" placeholder="Title, stable ID, project, status, runtime, provenance, or safe ref" autocomplete="off">
+        </label>
+
+        <div id="ledger-search-results" class="ledger-search-results" aria-live="polite">
+          <p class="search-guidance">Type to search bounded metadata. File contents, secret logs, excerpts, remote pages, paths, and private workspace names are excluded.</p>
+        </div>
+
+        <div class="dialog-actions">
+          <button id="done-search" class="button primary" type="button">Done</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="commands-dialog" class="commands-dialog">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">Installed workflow reference</p><h2>HFLedger help</h2></div>
+          <button id="close-commands" class="icon-button" type="button" aria-label="Close">×</button>
+        </div>
+
+        <p class="commands-intro">
+          Command reference · Runtime adapters can install these slash commands in your AI coding chat.
+        </p>
+
+        <div class="workflow-rhythm" aria-label="Typical workflow">
+          <span><code>/ledger-sweep</code><small>refresh</small></span>
+          <b aria-hidden="true">→</b>
+          <span><code>/ledger-status</code><small>choose</small></span>
+          <b aria-hidden="true">→</b>
+          <span><code>/ledger-work</code><small>build</small></span>
+          <b aria-hidden="true">→</b>
+          <span><code>/ledger-attend</code><small>decide</small></span>
+        </div>
+
+        <div class="command-grid" id="command-grid">
+          <article class="command-card featured">
+            <div class="command-card-heading">
+              <code>/ledger-sweep</code>
+              <span class="command-badge refresh">Refreshes state</span>
+            </div>
+            <h3>Refresh the whole operating picture</h3>
+            <p>Reconciles durable events, checks configured read-only observations, and refreshes the operating brief.</p>
+            <dl>
+              <div><dt>Use it</dt><dd>When you need current truth, especially before deciding what to do.</dd></div>
+              <div><dt>Guardrail</dt><dd>Observations never grant build, merge, deployment, or owner-interruption authority.</dd></div>
+            </dl>
+          </article>
+
+          <article class="command-card">
+            <div class="command-card-heading">
+              <code>/ledger-status</code>
+              <span class="command-badge read-only">Read only</span>
+            </div>
+            <h3>Get a fast re-entry brief</h3>
+            <p>Reads the existing board and ranks what matters now by leverage and urgency without re-pulling every source.</p>
+            <dl>
+              <div><dt>Use it</dt><dd>For a quick “where are we?” or “what should I do next?”</dd></div>
+              <div><dt>Difference</dt><dd>If the board is stale, run <code>/ledger-sweep</code> first.</dd></div>
+            </dl>
+          </article>
+
+          <article class="command-card">
+            <div class="command-card-heading">
+              <code>/ledger-work</code>
+              <span class="command-badge builds">Builds</span>
+            </div>
+            <h3>Work the safe ready queue</h3>
+            <p>Chooses fully specified, explicitly safe work and reports bounded start, verification, and shipment evidence.</p>
+            <dl>
+              <div><dt>Use it</dt><dd>When the board contains authorized Ready-for-Build work.</dd></div>
+              <div><dt>Guardrail</dt><dd>Protected, ambiguous, or owner-gated work stays out.</dd></div>
+            </dl>
+          </article>
+
+          <article class="command-card attended">
+            <div class="command-card-heading">
+              <code>/ledger-attend</code>
+              <span class="command-badge attended">You stay involved</span>
+            </div>
+            <h3>Handle work that needs the owner</h3>
+            <p>Presents admitted decisions and exact manual actions with their evidence, risks, and completion proof.</p>
+            <dl>
+              <div><dt>Use it</dt><dd>For protected choices or owner-only steps that autonomous work must skip.</dd></div>
+              <div><dt>Guardrail</dt><dd>Only admitted asks enter this lane; vague escalations are rejected.</dd></div>
+            </dl>
+          </article>
+        </div>
+
+        <div class="dialog-actions">
+          <span class="commands-footnote">Command behavior comes from the installed workflow contracts.</span>
+          <button id="done-commands" class="button primary" type="button">Done</button>
+        </div>
+      </div>
+    </dialog>
+  </body>
+</html>

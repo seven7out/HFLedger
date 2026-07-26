@@ -8,7 +8,7 @@ import shlex
 import unicodedata
 
 from core import store
-from .adapters import RUNTIME_FILES
+from .adapters import RUNTIME_EVIDENCE_NAMES, RUNTIME_FILES
 
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -33,7 +33,7 @@ def _safe_home(home):
     return path
 
 
-def _variables(home, config):
+def _variables(home, config, runtime):
     automation = config["automation"]
     work = automation["workPolicy"]
     repositories = automation["repositories"]
@@ -52,6 +52,7 @@ def _variables(home, config):
         "READY_STATUS": _safe_text(work["readyStatus"], "readyStatus", 120),
         "REVIEW_STATUS": _safe_text(work["reviewStatus"], "reviewStatus", 120),
         "STAGE_MERGE": "enabled" if work["allowStageMerge"] else "disabled",
+        "RUNTIME": RUNTIME_EVIDENCE_NAMES[runtime],
         "REPOSITORIES": "\n".join(repository_lines),
     }
 
@@ -100,13 +101,13 @@ def render_packs(home, output_root=None, runtimes=None, force=False):
     if not isinstance(selected, list) or not selected:
         raise ValueError("at least one runtime is required")
     if len(selected) != len(set(selected)) or any(item not in RUNTIME_FILES for item in selected):
-        raise ValueError("runtimes must be a unique list of generic/claude-code")
+        raise ValueError("runtimes must be a unique list of codex/generic/claude-code")
     output_root = os.path.abspath(output_root or os.path.join(home, "generated", "packs"))
     if os.path.commonpath((home, output_root)) != home:
         raise ValueError("pack output must remain inside the HFLedger data directory")
-    variables = _variables(home, config)
     planned = []
     for runtime in selected:
+        variables = _variables(home, config, runtime)
         for template_name, relative in RUNTIME_FILES[runtime].items():
             template_path = os.path.join(TEMPLATE_ROOT, template_name)
             with open(template_path, encoding="utf-8") as handle:

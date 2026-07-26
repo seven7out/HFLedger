@@ -50,6 +50,10 @@ The Phase 1 locking implementation uses `fcntl.flock` and is POSIX-only.
 | `writerRegistry` | object | Actor-to-action authorization and handling mode |
 | `schema` | object | Statuses, extensions, gates, protected classes, and counted collections |
 
+The optional `ui.readOnly` boolean is a reference-service enforcement setting,
+not an event-ledger authority grant. When true, the shipped HTTP service rejects
+every mutation route while continuing to serve validated projections.
+
 ### 3.1 Writer registry
 
 The writer registry replaces global actor and action enums. Each actor owns an `actions` object. Every action maps to exactly one handling mode:
@@ -64,13 +68,26 @@ The shipped registry is:
 | Actor | Actions | Mode |
 |---|---|---|
 | `agent` | `decision_added`, `pr_opened`, `merged` | reconcile |
-| `agent` | `built`, `skipped` | audit-only |
+| `agent` | `built`, `skipped`, `work_started`, `work_checkpoint`, `work_blocked`, `work_verified`, `work_shipped`, `work_abandoned` | audit-only |
 | `owner-ui` | `decision_resolved`, `decision_snoozed` | reconcile |
 | `owner-ui` | `task_done`, `board_reordered`, `deck_answer`, `deck_undo`, `deck_need_info` | audit-only |
+
+`deck_undo` remains registered only so historical ledgers continue to parse.
+The served Decision Deck has no undo route or active writer for this legacy
+record. A recorded decision outcome is changed only through a separately
+admitted, replayable protocol event.
 | `owner-capture` | `owner_completed`, `owner_skipped` | reconcile |
 | `reconciler` | `completion_propagated`, `ticket_reconciled` | audit-only |
 
 The registry is local policy, but changing an existing action from audit-only to reconcile requires a handler and a protocol review. Writers must not assume that another installation has added the same custom actor or action.
+
+The six `work_*` actions use the `agent-evidence-v1` payload contract. Every
+payload names a queue task, runtime (`codex`, `claude-code`, or `other`), and a
+bounded single-line summary. It may include a thread reference and up to eight
+typed evidence references (`commit`, `pr`, `ci`, `deploy`, `test`, `file`,
+`report`, or `other`). `work_shipped` requires evidence. These events are
+deliberately audit-only: they improve orientation without giving an agent a
+second path to mutate workflow state.
 
 ### 3.2 Schema configuration
 

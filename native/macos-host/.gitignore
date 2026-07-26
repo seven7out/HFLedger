@@ -1,0 +1,7 @@
+node_modules/
+.build-venv/
+.engine-build/
+src-tauri/target/
+src-tauri/runtime/
+src-tauri/gen/
+.DS_Store

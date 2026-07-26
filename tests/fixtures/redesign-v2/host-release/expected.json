@@ -1,0 +1,84 @@
+{
+  "contractVersion": 2,
+  "workspace": {
+    "id": "workspace-ovenlight-fixture",
+    "explicitlySelected": true,
+    "automaticallyDiscovered": false,
+    "sourceFixture": "../../../example"
+  },
+  "scenarios": [
+    {
+      "id": "fresh-install",
+      "expected": [
+        "fictional-workspace-only",
+        "dynamic-loopback-port",
+        "today-opens",
+        "no-private-path-in-ui"
+      ]
+    },
+    {
+      "id": "configured-restart",
+      "ports": [53111, 61907],
+      "expected": [
+        "workspace-id-stable",
+        "private-triage-state-preserved",
+        "authoritative-hashes-identical"
+      ]
+    },
+    {
+      "id": "window-restore",
+      "expected": [
+        "selected-workspace-restored",
+        "selected-view-restored",
+        "window-geometry-clamped-to-visible-screen",
+        "focus-restored"
+      ]
+    },
+    {
+      "id": "damaged-settings",
+      "expected": [
+        "bounded-repair",
+        "raw-error-not-exposed",
+        "workspace-data-not-deleted",
+        "ui-state-not-copied-to-backup"
+      ]
+    },
+    {
+      "id": "workspace-removal",
+      "expected": [
+        "registration-removed",
+        "workspace-data-preserved",
+        "private-state-preserved",
+        "no-automatic-rediscovery"
+      ]
+    }
+  ],
+  "nativeCommands": [
+    "view.today",
+    "view.changes",
+    "view.all-work",
+    "view.shipped-log",
+    "view.watched",
+    "view.filter",
+    "view.commands",
+    "view.reload",
+    "pane.toggle-sidebar",
+    "pane.toggle-inspector",
+    "item.open",
+    "item.acknowledge",
+    "item.snooze",
+    "item.watch",
+    "item.copy-context",
+    "help.commands"
+  ],
+  "deferred": [
+    "transition-notifications",
+    "rich-menu-bar-ui",
+    "quick-look",
+    "analytics",
+    "advanced-disputes",
+    "multi-machine-skew",
+    "global-search",
+    "custom-deep-links"
+  ]
+}

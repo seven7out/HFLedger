@@ -1,9 +1,12 @@
 import json
 import os
+import runpy
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
+from app import server
 from core import store
 from tests.helpers import CLI, ROOT, load_board
 
@@ -74,13 +77,57 @@ class CliTests(unittest.TestCase):
             ["--help"], ["init", "--help"], ["ask", "--help"],
             ["ask", "decision", "--help"], ["ask", "action", "--help"],
             ["done", "--help"], ["skip", "--help"],
+            ["event", "--help"],
             ["validate", "--help"], ["reconcile", "--help"],
             ["collect", "--help"], ["render-packs", "--help"],
+            ["serve", "--help"], ["search", "--help"],
         )
         for command in commands:
             result = self.run_cli(command)
             self.assertEqual(result.returncode, 0, (command, result.stderr))
             self.assertIn("usage:", result.stdout)
+
+    def test_search_command_projects_registered_workspaces_through_one_engine(self):
+        filed = self.run_cli(self.decision_args())
+        self.assertEqual(filed.returncode, 0, filed.stderr)
+        reconciled = self.run_cli(["reconcile"])
+        self.assertEqual(reconciled.returncode, 0, reconciled.stderr)
+        result = self.run_cli([
+            "search", "--workspace", "demo", self.temp.name,
+            "--query", "Choose the fictional timer behavior", "--limit", "50",
+        ], use_home=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        body = json.loads(result.stdout)
+        self.assertEqual(body["results"][0]["workspaceId"], "demo")
+        self.assertEqual(body["results"][0]["contextId"], "main")
+        self.assertEqual(body["results"][0]["rankBand"], "exact-title-or-id-prefix")
+        self.assertNotIn(self.temp.name, result.stdout)
+
+        stdin_result = subprocess.run([
+            CLI, "search", "--workspace", "demo", self.temp.name,
+            "--query-stdin", "--limit", "50",
+        ], input="fictional timer", capture_output=True, text=True)
+        self.assertEqual(stdin_result.returncode, 0, stdin_result.stderr)
+        self.assertTrue(json.loads(stdin_result.stdout)["results"])
+
+    def test_native_serve_state_identity_reaches_server(self):
+        namespace = runpy.run_path(CLI, run_name="ledger_cli_under_test")
+        state_root = os.path.realpath(os.path.join(self.temp.name, "UIState"))
+        with mock.patch.object(server, "serve") as launch:
+            result = namespace["main"]([
+                "--home", self.temp.name,
+                "serve",
+                "--port", "17173",
+                "--local-state-root", state_root,
+                "--local-state-workspace-id", "workspace-fictional",
+            ])
+        self.assertEqual(result, 0)
+        launch.assert_called_once_with(
+            self.temp.name,
+            port=17173,
+            local_state_root=state_root,
+            local_state_workspace_id="workspace-fictional",
+        )
 
     def test_full_decision_action_completion_walkthrough(self):
         decision = self.run_cli(self.decision_args())
@@ -157,9 +204,46 @@ class CliTests(unittest.TestCase):
             "done", "--id", "task:fictional:timer",
             "--evidence", "The owner completed the fictional task.", "--dry-run",
         ])
-        self.assertEqual((decision.returncode, action.returncode, done.returncode), (0, 0, 0))
+        event = self.run_cli([
+            "event", "checkpoint", "--task", "task:fictional:timer",
+            "--summary", "The fictional timer checks passed.",
+            "--runtime", "codex", "--evidence", "test", "130 checks passed",
+            "--dry-run",
+        ])
+        self.assertEqual((decision.returncode, action.returncode, done.returncode, event.returncode),
+                         (0, 0, 0, 0))
         with open(os.path.join(self.temp.name, "ledger.jsonl"), encoding="utf-8") as handle:
             self.assertEqual(handle.read(), "")
+
+    def test_agent_evidence_event_appends_and_reconciles_as_audit_only(self):
+        result = self.run_cli([
+            "event", "started", "--task", "task:fictional:timer",
+            "--summary", "Started the bounded fictional timer implementation.",
+            "--runtime", "claude-code", "--thread", "fictional-thread-17",
+            "--evidence", "file", "timer-spec.md",
+        ])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["action"], "work_started")
+        folded = self.run_cli(["reconcile"])
+        self.assertEqual(folded.returncode, 0, folded.stderr)
+        self.assertEqual(json.loads(folded.stdout)["processed"], 1)
+        self.assertEqual(self.run_cli(["validate"]).returncode, 0)
+
+    def test_agent_evidence_rejects_multiline_and_unsupported_kind(self):
+        with open(os.path.join(self.temp.name, "ledger.jsonl"), encoding="utf-8") as handle:
+            before = handle.read()
+        bad_summary = self.run_cli([
+            "event", "checkpoint", "--task", "task:fictional:timer",
+            "--summary", "line one\nline two", "--runtime", "codex",
+        ])
+        bad_kind = self.run_cli([
+            "event", "verified", "--task", "task:fictional:timer",
+            "--summary", "Checked the fictional timer.", "--runtime", "codex",
+            "--evidence", "secret", "not allowed",
+        ])
+        self.assertEqual((bad_summary.returncode, bad_kind.returncode), (2, 2))
+        with open(os.path.join(self.temp.name, "ledger.jsonl"), encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), before)
 
     def test_example_data_directory_validates(self):
         environment = os.environ.copy()

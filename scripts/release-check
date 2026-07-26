@@ -44,7 +44,10 @@ def _run(argv, env=None):
 
 def _markdown_files():
     for directory, names, files in os.walk(ROOT):
-        names[:] = sorted(name for name in names if name not in (".git", "__pycache__"))
+        names[:] = sorted(name for name in names if name not in (
+            ".git", "__pycache__", ".build-venv", ".engine-build",
+            "node_modules", "runtime", "target",
+        ))
         for name in sorted(files):
             if name.endswith(".md"):
                 yield os.path.join(directory, name)

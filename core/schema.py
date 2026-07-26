@@ -3,7 +3,7 @@
 import datetime
 import json
 
-from . import admission
+from . import admission, evidence, item_metadata
 
 
 CORE_SECTIONS = {
@@ -36,18 +36,20 @@ QUEUE_FIELDS = frozenset((
     "recommendedNextAgent", "links", "protected", "gate", "ownerOnly",
     "ownerAssignment", "dedupeKey", "pr", "mergedNote", "created", "updated",
     "autonomousSafe", "repository", "statusKey", "protectedClass",
+    "priority", "workType", "project",
     "doneNote", "completionDisposition", "completionEvidence", "completionSource",
     "completionActor", "completionLedgerProvenance", "tombstone",
 ))
 INBOX_FIELDS = frozenset((
     "id", "title", "rawNote", "source", "date", "category", "priorityGuess",
+    "priority", "workType", "project",
     "status", "recommendedNextAgent", "convertedToTaskId", "dedupeKey",
     "completionDisposition", "completionEvidence", "completionSource",
     "completionActor", "completionLedgerProvenance", "tombstone",
 ))
 OWNER_TASK_FIELDS = frozenset((
     "id", "title", "instruction", "status", "done", "dedupeKey", "source",
-    "snoozedUntil", "snoozeReason",
+    "snoozedUntil", "snoozeReason", "project",
     "completionDisposition", "completionEvidence", "completionSource",
     "completionActor", "completionLedgerProvenance", "tombstone",
 ))
@@ -75,6 +77,7 @@ def default_config(project="HFLedger workspace"):
             "subtitle": "Govern the agent-to-owner interrupt channel.",
             "accent": "#6956e8",
             "port": 7171,
+            "readOnly": False,
             "contexts": [
                 {"id": "main", "label": project, "home": "."},
             ],
@@ -108,6 +111,7 @@ def default_config(project="HFLedger workspace"):
                 "merged": "reconcile",
                 "skipped": "audit-only",
                 "decision_added": "reconcile",
+                **{action: "audit-only" for action in evidence.ACTIONS},
             }},
             "owner-ui": {"actions": {
                 "decision_resolved": "reconcile",
@@ -281,6 +285,29 @@ def _validate_item_list(errors, section, items, required):
             errors.append("%s item %s status must be non-empty text" % (section, label))
 
 
+def _warn_invalid_item_metadata(warnings, section, items):
+    if not isinstance(items, list):
+        return
+    invalid_priority = []
+    invalid_work_type = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        item_id = item.get("id", "(missing)")
+        if ("priority" in item and item.get("priority") is not None and
+                item_metadata.normalize_priority(item.get("priority")) is None):
+            invalid_priority.append(item_id)
+        if ("workType" in item and item.get("workType") is not None and
+                item_metadata.normalize_work_type(item.get("workType")) is None):
+            invalid_work_type.append(item_id)
+    if invalid_priority:
+        warnings.append("%s has invalid priority on: %s" % (
+            section, ", ".join(str(value) for value in invalid_priority[:20])))
+    if invalid_work_type:
+        warnings.append("%s has invalid workType on: %s" % (
+            section, ", ".join(str(value) for value in invalid_work_type[:20])))
+
+
 def _valid_digest(value):
     return (isinstance(value, str) and len(value) == 64 and
             all(char in "0123456789abcdef" for char in value))
@@ -372,10 +399,12 @@ def validate(board, config):
                                       not item.get(field, "").strip()):
                     errors.append("queue item %r %s must be non-empty text" % (item_id, field))
     _warn_unknown_fields(warnings, "queue", queue, QUEUE_FIELDS)
+    _warn_invalid_item_metadata(warnings, "queue", queue)
 
     inbox = board.get("inbox")
     _validate_item_list(errors, "inbox", inbox, ("id", "status"))
     _warn_unknown_fields(warnings, "inbox", inbox, INBOX_FIELDS)
+    _warn_invalid_item_metadata(warnings, "inbox", inbox)
     owner_tasks = board.get("ownerTasks")
     _validate_item_list(errors, "ownerTasks", owner_tasks, ("id", "title"))
     _warn_unknown_fields(warnings, "ownerTasks", owner_tasks, OWNER_TASK_FIELDS)

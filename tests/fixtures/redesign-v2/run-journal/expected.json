@@ -1,0 +1,47 @@
+{
+  "contractVersion": 2,
+  "scenarios": [
+    {
+      "id": "first-visit",
+      "visitMode": "first-visit",
+      "since": null,
+      "label": "Recent activity",
+      "groupSourceRefsInOrder": [
+        "run:ovenlight:collector:0718-1500",
+        "run:ovenlight:agent:0718-1200",
+        "run:ovenlight:adapter:0718-0900"
+      ],
+      "unseenTotal": 3
+    },
+    {
+      "id": "after-run-a",
+      "visitMode": "since-visit",
+      "cursorBoundarySourceChangeRef": "change:timer-created",
+      "unseenSourceChangeRefs": [
+        "change:labels-review",
+        "change:timer-checkpoint"
+      ]
+    },
+    {
+      "id": "after-runs-b-c",
+      "visitMode": "since-visit",
+      "cursorBoundarySourceChangeRef": "change:labels-review",
+      "unseenSourceChangeRefs": []
+    },
+    {
+      "id": "replay",
+      "expectedGroups": 3,
+      "expectedChanges": 3,
+      "duplicateGroupCreated": false,
+      "duplicateChangeCreated": false
+    }
+  ],
+  "itemHomeCount": {
+    "task:ovenlight:timer": 1,
+    "task:ovenlight:labels": 1
+  },
+  "itemHistoryCount": {
+    "task:ovenlight:timer": 2,
+    "task:ovenlight:labels": 1
+  }
+}
