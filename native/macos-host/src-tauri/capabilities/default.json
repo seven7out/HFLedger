@@ -3,5 +3,6 @@
   "identifier": "default",
   "description": "Native workspace and preferences shell for HFLedger",
   "windows": ["main"],
+  "webviews": ["settings-panel"],
   "permissions": ["core:default"]
 }

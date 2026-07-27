@@ -24,6 +24,8 @@ class TextSizeSettingsTests(unittest.TestCase):
             ("comfortable", "Comfortable", "115%"),
             ("large", "Large", "130%"),
             ("extraLarge", "Extra Large", "150%"),
+            ("veryLarge", "Very Large", "175%"),
+            ("maximum", "Maximum", "200%"),
         ):
             self.assertIn(f'<option value="{value}">{label} — {percent}</option>', markup)
         self.assertIn('for="pref-text-size"', markup)
@@ -46,7 +48,7 @@ class TextSizeSettingsTests(unittest.TestCase):
             self.assertIn(shortcut, source)
         self.assertIn('"app.settings" => show_settings(app)', source)
         self.assertIn('window.addEventListener("hfledger:settings-mode"', settings)
-        self.assertIn('elements["pref-text-size"].focus', settings)
+        self.assertIn('selectSettingsSection("general-panel"', settings)
 
     def test_native_enum_is_the_only_text_size_source_and_applies_on_every_page_load(self):
         source = RUST.read_text(encoding="utf-8")
@@ -54,9 +56,9 @@ class TextSizeSettingsTests(unittest.TestCase):
         self.assertIn("struct StoredConfigV1", source)
         self.assertIn("text_size: TextSize", source)
         self.assertIn("Self::Comfortable", source)
-        self.assertIn("window.set_zoom(text_size.scale())", source)
+        self.assertIn("webview.set_zoom(text_size.scale())", source)
         self.assertIn('.on_page_load(|webview, payload|', source)
-        self.assertIn('for label in ["main", "board"]', source)
+        self.assertIn('for label in ["main", "board", "settings-panel"]', source)
         self.assertIn("apply_stored_text_size(app, false)?", source)
         self.assertNotIn("board_zoom", source)
         self.assertNotRegex(source, r"clamp\(0\.75|requested:\s*f64")
@@ -75,7 +77,7 @@ class TextSizeSettingsTests(unittest.TestCase):
 
     def test_large_presets_have_deterministic_wrapping_and_narrow_inspector_rules(self):
         style = SERVED_CSS.read_text(encoding="utf-8")
-        for preset in ("large", "extraLarge"):
+        for preset in ("large", "extraLarge", "veryLarge", "maximum"):
             self.assertIn(f'data-text-size="{preset}"', style)
         self.assertIn("white-space: normal", style)
         self.assertIn("overflow-wrap: anywhere", style)

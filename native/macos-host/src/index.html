@@ -8,148 +8,186 @@
     <script src="main.js" defer></script>
   </head>
   <body>
-    <div class="app-shell">
-      <header class="app-header">
-        <div class="brand">
-          <img src="icon.png" width="50" height="50" alt="">
-          <div>
-            <p class="eyebrow">Local-first control room</p>
-            <h1>HFLedger Settings</h1>
+    <div class="settings-shell">
+      <header class="settings-toolbar">
+        <div class="toolbar-leading">
+          <button id="settings-back" class="toolbar-button back-button" type="button" aria-label="Back to HFLedger" hidden>‹</button>
+          <img class="app-mark" src="icon.png" width="28" height="28" alt="">
+          <div class="window-title">
+            <strong>HFLedger</strong>
+            <span aria-hidden="true">—</span>
+            <span>Settings</span>
           </div>
         </div>
         <div class="header-actions">
-          <button id="show-search" class="button quiet" aria-haspopup="dialog">Search</button>
-          <button id="show-help" class="button quiet" aria-haspopup="dialog">Help</button>
+          <button id="show-search" class="toolbar-button" aria-haspopup="dialog">Search</button>
+          <button id="show-help" class="toolbar-button" aria-haspopup="dialog">Help</button>
           <div class="host-pill" id="host-pill"><span></span><b>Engine stopped</b></div>
         </div>
       </header>
 
-      <div id="error-banner" class="banner error" role="alert" hidden>
-        <span id="error-message"></span>
-        <div class="banner-actions">
-          <button id="repair-settings" class="button quiet" hidden>Repair app settings</button>
-          <button id="dismiss-error" class="icon-button" aria-label="Dismiss">×</button>
-        </div>
-      </div>
-      <div id="success-banner" class="banner success" role="status" hidden></div>
+      <div class="settings-layout">
+        <aside class="settings-sidebar" aria-label="Settings sections">
+          <div class="settings-sidebar-heading">
+            <img src="icon.png" width="36" height="36" alt="">
+            <div><strong>HFLedger</strong><small>Local-first control room</small></div>
+          </div>
+          <nav class="settings-nav">
+            <button class="settings-nav-item is-selected" type="button" data-settings-target="general-panel" aria-current="page">
+              <span aria-hidden="true">⌘</span><b>General</b><small>Mac behavior and engine</small>
+            </button>
+            <button class="settings-nav-item" type="button" data-settings-target="preferences-panel">
+              <span aria-hidden="true">Aa</span><b>Appearance</b><small>Text size and readability</small>
+            </button>
+            <button class="settings-nav-item" type="button" data-settings-target="workspaces-panel">
+              <span aria-hidden="true">◇</span><b>Workspaces</b><small>Local projects and folders</small>
+            </button>
+            <button class="settings-nav-item" type="button" data-settings-target="data-panel">
+              <span aria-hidden="true">↻</span><b>Data &amp; diagnostics</b><small>Backups and recovery</small>
+            </button>
+          </nav>
+          <div class="settings-sidebar-footer">
+            <span id="version"></span>
+            <button id="quit" class="text-button">Quit HFLedger</button>
+          </div>
+        </aside>
 
-      <section id="onboarding-panel" class="mode-panel" aria-labelledby="onboarding-title" hidden>
-        <p class="eyebrow">Get started</p>
-        <h2 id="onboarding-title">Set up your first workspace</h2>
-        <p>Open an existing HFLedger folder, create a private workspace, or explicitly try the included fictional demo.</p>
-        <div class="mode-actions">
-          <button id="onboarding-add" class="button primary">Open existing folder…</button>
-          <button id="onboarding-create" class="button secondary">Create a workspace</button>
-          <button id="onboarding-demo" class="button quiet">Try fictional demo</button>
-        </div>
-      </section>
-
-      <section id="recovery-panel" class="mode-panel recovery-panel" aria-labelledby="recovery-title" hidden>
-        <p class="eyebrow">Recovery</p>
-        <h2 id="recovery-title">Today could not open</h2>
-        <p id="recovery-message">Choose another registered workspace or inspect the local diagnostics.</p>
-        <div class="mode-actions">
-          <button id="recovery-workspaces" class="button primary">Review workspaces</button>
-          <button id="recovery-diagnostics" class="button quiet">Show diagnostics</button>
-        </div>
-      </section>
-
-      <main class="content-grid">
-        <section id="workspaces-panel" class="primary-column" tabindex="-1">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Workspaces</p>
-              <h2>Manage local workspaces</h2>
-            </div>
-            <div class="section-actions">
-              <button id="open-demo" class="button quiet">Open fictional demo</button>
-              <button id="add-existing" class="button secondary">Open existing folder…</button>
+        <main id="settings-content" class="settings-content" tabindex="-1">
+          <div id="error-banner" class="banner error" role="alert" hidden>
+            <span id="error-message"></span>
+            <div class="banner-actions">
+              <button id="repair-settings" class="button quiet" hidden>Repair app settings</button>
+              <button id="dismiss-error" class="icon-button" aria-label="Dismiss">×</button>
             </div>
           </div>
+          <div id="success-banner" class="banner success" role="status" hidden></div>
 
-          <div id="workspace-list" class="workspace-list" aria-live="polite"></div>
-
-          <form id="create-form" class="create-card">
-            <div>
-              <h3>Create a private workspace</h3>
-              <p>HFLedger stores it inside this Mac app’s protected data folder.</p>
+          <section id="onboarding-panel" class="mode-panel" aria-labelledby="onboarding-title" hidden>
+            <p class="eyebrow">Get started</p>
+            <h2 id="onboarding-title">Set up your first workspace</h2>
+            <p>Open an existing HFLedger folder, create a private workspace, or explicitly try the included fictional demo.</p>
+            <div class="mode-actions">
+              <button id="onboarding-add" class="button primary">Open existing folder…</button>
+              <button id="onboarding-create" class="button secondary">Create a workspace</button>
+              <button id="onboarding-demo" class="button quiet">Try fictional demo</button>
             </div>
-            <div class="create-controls">
-              <label>
-                <span>Project name</span>
-                <input id="project-name" name="project" maxlength="80" required placeholder="My project">
+          </section>
+
+          <section id="recovery-panel" class="mode-panel recovery-panel" aria-labelledby="recovery-title" hidden>
+            <p class="eyebrow">Recovery</p>
+            <h2 id="recovery-title">Today could not open</h2>
+            <p id="recovery-message">Choose another registered workspace or inspect the local diagnostics.</p>
+            <div class="mode-actions">
+              <button id="recovery-workspaces" class="button primary">Review workspaces</button>
+              <button id="recovery-diagnostics" class="button quiet">Show diagnostics</button>
+            </div>
+          </section>
+
+          <header class="settings-page-heading">
+            <p class="eyebrow">Settings</p>
+            <h1>Make HFLedger work the way you do</h1>
+            <p>Changes apply immediately and stay on this Mac.</p>
+          </header>
+
+          <section id="general-panel" class="settings-section" tabindex="-1" aria-labelledby="general-title">
+            <div class="section-heading">
+              <div><p class="eyebrow">General</p><h2 id="general-title">Mac behavior</h2></div>
+            </div>
+            <div class="settings-card">
+              <label class="toggle-row">
+                <span><b>Notifications</b><small>Generic alerts for new owner asks</small></span>
+                <input id="pref-notifications" type="checkbox" role="switch">
               </label>
-              <button class="button primary" type="submit">Create</button>
-            </div>
-          </form>
-        </section>
-
-        <aside class="side-column">
-          <section class="panel" aria-labelledby="engine-title">
-            <p class="eyebrow">Local engine</p>
-            <h2 id="engine-title">Status &amp; recovery</h2>
-            <dl class="status-list">
-              <div><dt>Workspace</dt><dd id="active-workspace">None open</dd></div>
-              <div><dt>Connection</dt><dd id="connection">Stopped</dd></div>
-            </dl>
-            <div class="button-stack">
-              <button id="restart" class="button secondary" disabled>Restart engine</button>
-              <button id="stop" class="button quiet" disabled>Stop engine</button>
-            </div>
-          </section>
-
-          <section id="preferences-panel" class="panel preferences-panel" aria-labelledby="prefs-title" tabindex="-1">
-            <p class="eyebrow">Preferences</p>
-            <h2 id="prefs-title">Mac behavior</h2>
-            <div class="text-size-setting">
-              <label for="pref-text-size">
-                <b>Text size</b>
-                <small id="text-size-description">Applies immediately throughout HFLedger</small>
+              <label class="toggle-row">
+                <span><b>Launch at login</b><small>Start HFLedger after you sign in</small></span>
+                <input id="pref-login" type="checkbox" role="switch">
               </label>
-              <select id="pref-text-size" aria-describedby="text-size-description text-size-preview">
-                <option value="compact">Compact — 100%</option>
-                <option value="comfortable">Comfortable — 115%</option>
-                <option value="large">Large — 130%</option>
-                <option value="extraLarge">Extra Large — 150%</option>
-              </select>
+              <label class="toggle-row">
+                <span><b>Reopen last board</b><small>Restore the selected workspace at launch</small></span>
+                <input id="pref-restore" type="checkbox" role="switch">
+              </label>
             </div>
-            <div id="text-size-preview" class="text-size-preview" aria-label="Text size preview">
-              <p class="preview-normal">Choose the release window after reviewing the evidence.</p>
-              <p class="preview-secondary">Secondary detail stays readable without competing with the decision.</p>
-              <p class="preview-provenance"><time datetime="2026-07-19T18:42:00Z">Observed 6:42 PM</time> · Verified provenance</p>
-            </div>
-            <label class="toggle-row">
-              <span><b>Notifications</b><small>Generic alerts for new owner asks</small></span>
-              <input id="pref-notifications" type="checkbox" role="switch">
-            </label>
-            <label class="toggle-row">
-              <span><b>Launch at login</b><small>Start HFLedger after you sign in</small></span>
-              <input id="pref-login" type="checkbox" role="switch">
-            </label>
-            <label class="toggle-row">
-              <span><b>Reopen last board</b><small>Restore the selected workspace at launch</small></span>
-              <input id="pref-restore" type="checkbox" role="switch">
-            </label>
-            <p id="text-size-status" class="visually-hidden" role="status" aria-live="polite"></p>
-          </section>
-
-          <section class="panel" aria-labelledby="data-title">
-            <p class="eyebrow">Data safety</p>
-            <h2 id="data-title">Backups &amp; diagnostics</h2>
-            <div class="button-stack">
-              <button id="backup" class="button secondary" disabled>Create validated backup</button>
-              <button id="reveal-workspace" class="button quiet" disabled>Reveal workspace in Finder</button>
-              <button id="reveal-backups" class="button quiet">Reveal backups in Finder</button>
-              <button id="show-diagnostics" class="button quiet">Show diagnostics</button>
+            <div class="settings-card engine-card" aria-labelledby="engine-title">
+              <div>
+                <h3 id="engine-title">Local engine</h3>
+                <p>HFLedger’s private read-only engine runs only on this Mac.</p>
+              </div>
+              <dl class="status-list">
+                <div><dt>Workspace</dt><dd id="active-workspace">None open</dd></div>
+                <div><dt>Connection</dt><dd id="connection">Stopped</dd></div>
+              </dl>
+              <div class="inline-actions">
+                <button id="restart" class="button secondary" disabled>Restart engine</button>
+                <button id="stop" class="button quiet" disabled>Stop engine</button>
+              </div>
             </div>
           </section>
-        </aside>
-      </main>
 
-      <footer>
-        <span id="version"></span>
-        <button id="quit" class="text-button">Quit HFLedger</button>
-      </footer>
+          <section id="preferences-panel" class="settings-section preferences-panel" aria-labelledby="prefs-title" tabindex="-1">
+            <div class="section-heading">
+              <div><p class="eyebrow">Appearance</p><h2 id="prefs-title">Text &amp; readability</h2></div>
+            </div>
+            <div class="settings-card appearance-card">
+              <div class="text-size-setting">
+                <label for="pref-text-size">
+                  <b>Text size</b>
+                  <small id="text-size-description">Applies immediately throughout HFLedger</small>
+                </label>
+                <select id="pref-text-size" aria-describedby="text-size-description text-size-preview">
+                  <option value="compact">Compact — 100%</option>
+                  <option value="comfortable">Comfortable — 115%</option>
+                  <option value="large">Large — 130%</option>
+                  <option value="extraLarge">Extra Large — 150%</option>
+                  <option value="veryLarge">Very Large — 175%</option>
+                  <option value="maximum">Maximum — 200%</option>
+                </select>
+              </div>
+              <div id="text-size-preview" class="text-size-preview" aria-label="Text size preview">
+                <p class="preview-normal">Choose the release window after reviewing the evidence.</p>
+                <p class="preview-secondary">Secondary detail stays readable without competing with the decision.</p>
+                <p class="preview-provenance"><time datetime="2026-07-19T18:42:00Z">Observed 6:42 PM</time> · Verified provenance</p>
+              </div>
+              <p id="text-size-status" class="visually-hidden" role="status" aria-live="polite"></p>
+            </div>
+          </section>
+
+          <section id="workspaces-panel" class="settings-section" tabindex="-1" aria-labelledby="workspaces-title">
+            <div class="section-heading">
+              <div><p class="eyebrow">Workspaces</p><h2 id="workspaces-title">Manage local workspaces</h2></div>
+              <div class="section-actions">
+                <button id="open-demo" class="button quiet">Open fictional demo</button>
+                <button id="add-existing" class="button secondary">Open existing folder…</button>
+              </div>
+            </div>
+            <div id="workspace-list" class="workspace-list" aria-live="polite"></div>
+            <form id="create-form" class="create-card">
+              <div>
+                <h3>Create a private workspace</h3>
+                <p>HFLedger stores it inside this Mac app’s protected data folder.</p>
+              </div>
+              <div class="create-controls">
+                <label>
+                  <span>Project name</span>
+                  <input id="project-name" name="project" maxlength="80" required placeholder="My project">
+                </label>
+                <button class="button primary" type="submit">Create</button>
+              </div>
+            </form>
+          </section>
+
+          <section id="data-panel" class="settings-section" tabindex="-1" aria-labelledby="data-title">
+            <div class="section-heading">
+              <div><p class="eyebrow">Data &amp; diagnostics</p><h2 id="data-title">Backups, files &amp; recovery</h2></div>
+            </div>
+            <div class="settings-card action-list">
+              <div><span><b>Create a validated backup</b><small>Save a verified local copy of the active workspace.</small></span><button id="backup" class="button secondary" disabled>Create backup</button></div>
+              <div><span><b>Workspace files</b><small>Open the active workspace without exposing its path in the ledger.</small></span><button id="reveal-workspace" class="button quiet" disabled>Reveal in Finder</button></div>
+              <div><span><b>Backup files</b><small>Open HFLedger’s private backup folder.</small></span><button id="reveal-backups" class="button quiet">Reveal backups</button></div>
+              <div><span><b>Diagnostics</b><small>Review local support details and engine health.</small></span><button id="show-diagnostics" class="button quiet">Show diagnostics</button></div>
+            </div>
+          </section>
+        </main>
+      </div>
     </div>
 
     <dialog id="diagnostics-dialog">

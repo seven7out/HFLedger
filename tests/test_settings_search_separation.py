@@ -90,6 +90,13 @@ class SettingsSearchSeparationTests(unittest.TestCase):
         self.assertIn("show_settings(&settings_app)", builder)
         self.assertRegex(builder, r"show_settings\(&settings_app\);\s*false")
         self.assertEqual(capability["windows"], ["main"])
+        self.assertEqual(capability["webviews"], ["settings-panel"])
+        self.assertIn('WebviewBuilder::new(', source)
+        self.assertIn('"settings-panel"', source)
+        self.assertIn(".add_child(", source)
+        self.assertNotIn("board.as_ref().hide()", source)
+        self.assertIn("panel.close()", source)
+        self.assertIn('fn show_today(app: AppHandle)', source)
 
     def test_settings_surface_keeps_every_existing_control_and_text_size(self):
         markup = SETTINGS_HTML.read_text(encoding="utf-8")
@@ -105,6 +112,8 @@ class SettingsSearchSeparationTests(unittest.TestCase):
             ("comfortable", "115%"),
             ("large", "130%"),
             ("extraLarge", "150%"),
+            ("veryLarge", "175%"),
+            ("maximum", "200%"),
         ):
             self.assertRegex(
                 markup,
@@ -139,15 +148,25 @@ class SettingsSearchSeparationTests(unittest.TestCase):
         self.assertIn('"help.keyboard"', keyboard_menu)
         self.assertIn("None", keyboard_menu)
 
-    def test_settings_window_supports_the_600_pixel_minimum(self):
+    def test_settings_panel_matches_the_primary_shell_and_supports_narrow_layouts(self):
         style = SETTINGS_CSS.read_text(encoding="utf-8")
+        markup = SETTINGS_HTML.read_text(encoding="utf-8")
         config = json.loads(TAURI_CONFIG.read_text(encoding="utf-8"))
         settings_window = config["app"]["windows"][0]
 
         self.assertEqual(settings_window["minWidth"], 600)
         self.assertNotIn("min-width: 760px", style)
+        self.assertIn('class="settings-layout"', markup)
+        self.assertIn('class="settings-sidebar"', markup)
+        self.assertIn('data-settings-target="general-panel"', markup)
+        self.assertIn('data-settings-target="preferences-panel"', markup)
+        self.assertIn('id="settings-back"', markup)
+        self.assertIn(".settings-toolbar", style)
+        self.assertIn(".settings-sidebar", style)
+        self.assertIn("--window: #f5f5f7", style)
+        self.assertIn("--accent: #6956e8", style)
         narrow = style[style.index("@media (max-width: 679px)"):]
-        self.assertIn(".content-grid, .side-column { grid-template-columns: minmax(0, 1fr); }", narrow)
+        self.assertIn(".settings-layout { display: block;", narrow)
         self.assertIn(".create-controls, .text-size-setting { grid-template-columns: minmax(0, 1fr); }", narrow)
         self.assertIn("#pref-text-size { width: 100%; min-width: 0; }", narrow)
 

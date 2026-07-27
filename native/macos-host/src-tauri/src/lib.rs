@@ -20,8 +20,11 @@ use tauri::menu::{
     AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID, WINDOW_SUBMENU_ID,
 };
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::webview::PageLoadEvent;
-use tauri::{AppHandle, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::webview::{PageLoadEvent, WebviewBuilder};
+use tauri::{
+    AppHandle, Manager, PhysicalPosition, RunEvent, State, WebviewUrl, WebviewWindowBuilder,
+    WindowEvent,
+};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt as AutostartManagerExt};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_notification::NotificationExt;
@@ -211,14 +214,18 @@ enum TextSize {
     Comfortable,
     Large,
     ExtraLarge,
+    VeryLarge,
+    Maximum,
 }
 
 impl TextSize {
-    const ALL: [Self; 4] = [
+    const ALL: [Self; 6] = [
         Self::Compact,
         Self::Comfortable,
         Self::Large,
         Self::ExtraLarge,
+        Self::VeryLarge,
+        Self::Maximum,
     ];
 
     fn scale(self) -> f64 {
@@ -227,6 +234,8 @@ impl TextSize {
             Self::Comfortable => 1.15,
             Self::Large => 1.3,
             Self::ExtraLarge => 1.5,
+            Self::VeryLarge => 1.75,
+            Self::Maximum => 2.0,
         }
     }
 
@@ -236,6 +245,8 @@ impl TextSize {
             Self::Comfortable => "Comfortable",
             Self::Large => "Large",
             Self::ExtraLarge => "Extra Large",
+            Self::VeryLarge => "Very Large",
+            Self::Maximum => "Maximum",
         }
     }
 
@@ -245,6 +256,8 @@ impl TextSize {
             Self::Comfortable => 115,
             Self::Large => 130,
             Self::ExtraLarge => 150,
+            Self::VeryLarge => 175,
+            Self::Maximum => 200,
         }
     }
 
@@ -268,7 +281,7 @@ impl TextSize {
     }
 
     fn can_increase(self) -> bool {
-        self != Self::ExtraLarge
+        self != Self::Maximum
     }
 
     fn page_script(self, announce: bool) -> &'static str {
@@ -281,6 +294,10 @@ impl TextSize {
             (Self::Large, true) => "document.documentElement.dataset.textSize='large';window.dispatchEvent(new CustomEvent('hfledger:text-size-changed',{detail:{value:'large',label:'Large',percent:130,announce:true}}));",
             (Self::ExtraLarge, false) => "document.documentElement.dataset.textSize='extraLarge';window.dispatchEvent(new CustomEvent('hfledger:text-size-changed',{detail:{value:'extraLarge',label:'Extra Large',percent:150,announce:false}}));",
             (Self::ExtraLarge, true) => "document.documentElement.dataset.textSize='extraLarge';window.dispatchEvent(new CustomEvent('hfledger:text-size-changed',{detail:{value:'extraLarge',label:'Extra Large',percent:150,announce:true}}));",
+            (Self::VeryLarge, false) => "document.documentElement.dataset.textSize='veryLarge';window.dispatchEvent(new CustomEvent('hfledger:text-size-changed',{detail:{value:'veryLarge',label:'Very Large',percent:175,announce:false}}));",
+            (Self::VeryLarge, true) => "document.documentElement.dataset.textSize='veryLarge';window.dispatchEvent(new CustomEvent('hfledger:text-size-changed',{detail:{value:'veryLarge',label:'Very Large',percent:175,announce:true}}));",
+            (Self::Maximum, false) => "document.documentElement.dataset.textSize='maximum';window.dispatchEvent(new CustomEvent('hfledger:text-size-changed',{detail:{value:'maximum',label:'Maximum',percent:200,announce:false}}));",
+            (Self::Maximum, true) => "document.documentElement.dataset.textSize='maximum';window.dispatchEvent(new CustomEvent('hfledger:text-size-changed',{detail:{value:'maximum',label:'Maximum',percent:200,announce:true}}));",
         }
     }
 }
@@ -476,6 +493,7 @@ struct AppSnapshot {
     preferences: Preferences,
     host: HostStatus,
     app_data: String,
+    settings_embedded: bool,
 }
 
 #[derive(Serialize)]
@@ -1169,7 +1187,7 @@ fn set_observer_error(state: &HostRuntime, message: Option<&str>) {
 
 fn dispatch_native_command(app: &AppHandle, command: NativeCommand) -> Result<(), String> {
     let board = app
-        .get_webview_window("board")
+        .get_webview("board")
         .ok_or_else(|| "no ledger window is open".to_string())?;
     board
         .eval(command.event_script())
@@ -1368,7 +1386,51 @@ fn set_startup_error(state: &HostRuntime, error: impl Into<String>) {
     }
 }
 
+fn settings_mode_script(mode: &str, message: Option<&str>, embedded: bool) -> String {
+    let mode = serde_json::to_string(mode).unwrap_or_else(|_| "\"settings\"".into());
+    let message =
+        serde_json::to_string(message.unwrap_or_default()).unwrap_or_else(|_| "\"\"".into());
+    format!(
+        "window.dispatchEvent(new CustomEvent('hfledger:settings-mode',{{detail:{{mode:{mode},message:{message},embedded:{embedded}}}}}));"
+    )
+}
+
+fn ensure_settings_panel(app: &AppHandle, mode: &str) -> Result<tauri::Webview, String> {
+    if let Some(panel) = app.get_webview("settings-panel") {
+        return Ok(panel);
+    }
+    let board_window = app
+        .get_window("board")
+        .ok_or_else(|| "no Today window is open".to_string())?;
+    let size = board_window
+        .inner_size()
+        .map_err(|error| format!("could not measure the Today window: {error}"))?;
+    let initial_path = format!("index.html#{mode}");
+    let builder =
+        WebviewBuilder::new("settings-panel", WebviewUrl::App(initial_path.into())).auto_resize();
+    board_window
+        .add_child(builder, PhysicalPosition::new(0, 0), size)
+        .map_err(|error| format!("could not create the in-window Settings panel: {error}"))
+}
+
 fn show_settings_surface(app: &AppHandle, mode: &str, message: Option<&str>) {
+    if let Some(board_window) = app.get_window("board") {
+        if let Ok(panel) = ensure_settings_panel(app, mode) {
+            let _ = panel.show();
+            let _ = panel.set_focus();
+            let _ = board_window.set_title("HFLedger — Settings");
+            let _ = board_window.show();
+            let _ = board_window.unminimize();
+            let _ = board_window.set_focus();
+            let _ = panel.eval(settings_mode_script(mode, message, true));
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.hide();
+            }
+            let _ = apply_stored_text_size(app, false);
+            return;
+        }
+    }
+
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_title(match mode {
             "onboarding" => "Set Up HFLedger",
@@ -1378,12 +1440,7 @@ fn show_settings_surface(app: &AppHandle, mode: &str, message: Option<&str>) {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
-        let mode = serde_json::to_string(mode).unwrap_or_else(|_| "\"settings\"".into());
-        let message =
-            serde_json::to_string(message.unwrap_or_default()).unwrap_or_else(|_| "\"\"".into());
-        let _ = window.eval(format!(
-            "window.dispatchEvent(new CustomEvent('hfledger:settings-mode',{{detail:{{mode:{mode},message:{message}}}}}));"
-        ));
+        let _ = window.eval(settings_mode_script(mode, message, false));
     }
     let _ = apply_stored_text_size(app, false);
 }
@@ -1406,12 +1463,26 @@ fn show_recovery(app: &AppHandle, error: &str) {
 }
 
 fn show_existing_today(app: &AppHandle) -> bool {
-    let Some(board) = app.get_webview_window("board") else {
+    let Some(board_window) = app.get_window("board") else {
         return false;
     };
-    let _ = board.show();
-    let _ = board.unminimize();
-    let _ = board.set_focus();
+    let Some(board_webview) = app.get_webview("board") else {
+        return false;
+    };
+    if let Some(panel) = app.get_webview("settings-panel") {
+        // Closing is more reliable than hiding a child WKWebView on macOS.
+        // The panel is lightweight and is recreated the next time Settings opens.
+        let _ = panel.close();
+    }
+    let _ = board_webview.show();
+    if let Ok(active) = app.state::<HostRuntime>().active_workspace.lock() {
+        if let Some(workspace) = active.as_ref() {
+            let _ = board_window.set_title(&format!("HFLedger — {}", workspace.label));
+        }
+    }
+    let _ = board_window.show();
+    let _ = board_window.unminimize();
+    let _ = board_window.set_focus();
     let _ = apply_stored_text_size(app, false);
     set_board_menu_available(&app.state::<HostRuntime>(), true);
     true
@@ -1429,7 +1500,7 @@ fn restore_primary_surface(app: &AppHandle) {
     let host_ready = current_host_status(&state).ready;
     let plan = primary_surface_plan(
         &config,
-        app.get_webview_window("board").is_some(),
+        app.get_window("board").is_some(),
         host_ready,
     );
     match plan {
@@ -1465,14 +1536,20 @@ fn show_board_window(app: &AppHandle, workspace: &Workspace, port: u16) -> Resul
         .parse()
         .map_err(|error| format!("could not build the local board URL: {error}"))?;
     let title = format!("HFLedger — {}", workspace.label);
-    if let Some(window) = app.get_webview_window("board") {
-        window
+    if let (Some(board_window), Some(board_webview)) =
+        (app.get_window("board"), app.get_webview("board"))
+    {
+        board_webview
             .navigate(url)
             .map_err(|error| format!("could not switch the board window: {error}"))?;
-        let _ = window.set_title(&title);
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
+        if let Some(panel) = app.get_webview("settings-panel") {
+            let _ = panel.close();
+        }
+        let _ = board_webview.show();
+        let _ = board_window.set_title(&title);
+        let _ = board_window.show();
+        let _ = board_window.unminimize();
+        let _ = board_window.set_focus();
     } else {
         let settings_app = app.clone();
         WebviewWindowBuilder::new(app, "board", WebviewUrl::External(url))
@@ -1600,7 +1677,7 @@ fn navigate_deep_link(app: &AppHandle, intent: &DeepLinkIntent) -> Result<(), St
         .lock()
         .map_err(|_| "engine port lock was poisoned")?
         .to_owned();
-    let board_open = app.get_webview_window("board").is_some();
+    let board_open = app.get_window("board").is_some();
     match deep_link_window_plan(intent, active.as_ref(), port, board_open) {
         DeepLinkWindowPlan::UseActiveBoard => {}
         DeepLinkWindowPlan::ShowActiveBoard => {
@@ -1624,14 +1701,12 @@ fn navigate_deep_link(app: &AppHandle, intent: &DeepLinkIntent) -> Result<(), St
         .parse()
         .map_err(|_| "could not build the item navigation URL".to_string())?;
     let board = app
-        .get_webview_window("board")
+        .get_webview("board")
         .ok_or_else(|| "no ledger window is open".to_string())?;
     board
         .navigate(target)
         .map_err(|_| "could not navigate to the requested item".to_string())?;
-    let _ = board.show();
-    let _ = board.unminimize();
-    let _ = board.set_focus();
+    let _ = show_existing_today(app);
     Ok(())
 }
 
@@ -1740,18 +1815,18 @@ fn sync_autostart(app: &AppHandle, enabled: bool) -> Result<(), String> {
 }
 
 fn apply_text_size(app: &AppHandle, text_size: TextSize, announce: bool) -> Result<(), String> {
-    for label in ["main", "board"] {
-        let Some(window) = app.get_webview_window(label) else {
+    for label in ["main", "board", "settings-panel"] {
+        let Some(webview) = app.get_webview(label) else {
             continue;
         };
-        window.set_zoom(text_size.scale()).map_err(|error| {
+        webview.set_zoom(text_size.scale()).map_err(|error| {
             format!(
                 "could not apply {} text at {}% to the {label} window: {error}",
                 text_size.label(),
                 text_size.percent()
             )
         })?;
-        let _ = window.eval(text_size.page_script(announce));
+        let _ = webview.eval(text_size.page_script(announce));
     }
     update_text_size_menu_state(&app.state::<HostRuntime>(), text_size);
     Ok(())
@@ -1788,15 +1863,33 @@ fn persist_text_size(app: &AppHandle, action: TextSizeAction) -> Result<TextSize
 
 fn report_text_size_error(app: &AppHandle) {
     show_settings(app);
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.eval(
+    if let Some(webview) = app
+        .get_webview("settings-panel")
+        .or_else(|| app.get_webview("main"))
+    {
+        let _ = webview.eval(
             "window.dispatchEvent(new CustomEvent('hfledger:settings-error',{detail:{message:'Text size could not be saved. The previous size was restored.'}}));",
         );
     }
 }
 
 #[tauri::command]
-fn app_snapshot(state: State<'_, HostRuntime>) -> Result<AppSnapshot, String> {
+fn show_today(app: AppHandle) -> Result<(), String> {
+    if show_existing_today(&app) {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.hide();
+        }
+        Ok(())
+    } else {
+        Err("No Today workspace is open yet.".into())
+    }
+}
+
+#[tauri::command]
+fn app_snapshot(
+    webview: tauri::Webview,
+    state: State<'_, HostRuntime>,
+) -> Result<AppSnapshot, String> {
     let config = read_config(&state)?;
     let app_paths = paths(&state)?;
     Ok(AppSnapshot {
@@ -1806,6 +1899,7 @@ fn app_snapshot(state: State<'_, HostRuntime>) -> Result<AppSnapshot, String> {
         preferences: config.preferences,
         host: current_host_status(&state),
         app_data: app_paths.app_data.display().to_string(),
+        settings_embedded: webview.label() == "settings-panel",
     })
 }
 
@@ -2101,7 +2195,7 @@ fn open_search_result(
         &intent,
         active.as_ref(),
         port,
-        app.get_webview_window("board").is_some(),
+        app.get_window("board").is_some(),
     ) {
         DeepLinkWindowPlan::UseActiveBoard => {}
         DeepLinkWindowPlan::ShowActiveBoard => {
@@ -2128,14 +2222,12 @@ fn open_search_result(
         .parse()
         .map_err(|_| "search result navigation is invalid".to_string())?;
     let board = app
-        .get_webview_window("board")
+        .get_webview("board")
         .ok_or_else(|| "no ledger window is open".to_string())?;
     board
         .navigate(target)
         .map_err(|_| "could not navigate to the search result".to_string())?;
-    let _ = board.show();
-    let _ = board.unminimize();
-    let _ = board.set_focus();
+    let _ = show_existing_today(&app);
     if let Ok(mut notice) = state.navigation_notice.lock() {
         *notice = None;
     }
@@ -2322,8 +2414,8 @@ fn remove_workspace(
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.set_badge_count(None);
         }
-        if let Some(board) = app.get_webview_window("board") {
-            let _ = board.close();
+        if let Some(board_window) = app.get_window("board") {
+            let _ = board_window.close();
         }
     }
     config.workspaces.retain(|item| item.id != workspace_id);
@@ -2373,8 +2465,8 @@ fn stop_workspace(app: AppHandle, state: State<'_, HostRuntime>) -> HostStatus {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_badge_count(None);
     }
-    if let Some(board) = app.get_webview_window("board") {
-        let _ = board.close();
+    if let Some(board_window) = app.get_window("board") {
+        let _ = board_window.close();
     }
     current_host_status(&state)
 }
@@ -3107,14 +3199,17 @@ fn native_command_for_menu_id(id: &str) -> Option<NativeCommand> {
 
 fn show_settings_dialog(app: &AppHandle, button_id: &str) {
     show_settings(app);
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(webview) = app
+        .get_webview("settings-panel")
+        .or_else(|| app.get_webview("main"))
+    {
         let script = match button_id {
             "show-diagnostics" => "document.getElementById('show-diagnostics')?.click();",
             "show-search" => "document.getElementById('show-search')?.click();",
             "show-help" => "document.getElementById('show-help')?.click();",
             _ => return,
         };
-        let _ = window.eval(script);
+        let _ = webview.eval(script);
     }
 }
 
@@ -3123,7 +3218,7 @@ fn handle_native_menu(app: &AppHandle, id: &str) {
         "app.settings" => show_settings(app),
         "file.open-workspace" => show_workspace_settings(app),
         "help.diagnostics" => show_settings_dialog(app, "show-diagnostics"),
-        "view.commands" if app.get_webview_window("board").is_none() => {
+        "view.commands" if app.get_window("board").is_none() => {
             show_settings_dialog(app, "show-search")
         }
         "help.commands" | "help.keyboard" | "help.privacy" => {
@@ -3146,6 +3241,7 @@ fn handle_native_menu(app: &AppHandle, id: &str) {
         }
         _ => {
             if let Some(command) = native_command_for_menu_id(id) {
+                let _ = show_existing_today(app);
                 let _ = dispatch_native_command(app, command);
             }
         }
@@ -3282,6 +3378,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_snapshot,
+            show_today,
             repair_settings,
             open_fictional_demo,
             host_status,
@@ -3950,10 +4047,14 @@ mod tests {
         assert_eq!(TextSize::Comfortable.scale(), 1.15);
         assert_eq!(TextSize::Large.scale(), 1.3);
         assert_eq!(TextSize::ExtraLarge.scale(), 1.5);
+        assert_eq!(TextSize::VeryLarge.scale(), 1.75);
+        assert_eq!(TextSize::Maximum.scale(), 2.0);
         assert_eq!(TextSize::Compact.percent(), 100);
         assert_eq!(TextSize::Comfortable.percent(), 115);
         assert_eq!(TextSize::Large.percent(), 130);
         assert_eq!(TextSize::ExtraLarge.percent(), 150);
+        assert_eq!(TextSize::VeryLarge.percent(), 175);
+        assert_eq!(TextSize::Maximum.percent(), 200);
         assert_eq!(
             serde_json::to_value(TextSize::ExtraLarge).expect("serialize preset"),
             json!("extraLarge")
@@ -3980,7 +4081,15 @@ mod tests {
         );
         assert_eq!(
             text_size_after(TextSize::ExtraLarge, TextSizeAction::Increase),
-            TextSize::ExtraLarge
+            TextSize::VeryLarge
+        );
+        assert_eq!(
+            text_size_after(TextSize::VeryLarge, TextSizeAction::Increase),
+            TextSize::Maximum
+        );
+        assert_eq!(
+            text_size_after(TextSize::Maximum, TextSizeAction::Increase),
+            TextSize::Maximum
         );
         assert_eq!(
             text_size_after(TextSize::ExtraLarge, TextSizeAction::Reset),
@@ -3989,7 +4098,9 @@ mod tests {
         assert!(!TextSize::Compact.can_decrease());
         assert!(TextSize::Compact.can_increase());
         assert!(TextSize::ExtraLarge.can_decrease());
-        assert!(!TextSize::ExtraLarge.can_increase());
+        assert!(TextSize::ExtraLarge.can_increase());
+        assert!(TextSize::Maximum.can_decrease());
+        assert!(!TextSize::Maximum.can_increase());
     }
 
     #[test]
@@ -4055,6 +4166,7 @@ mod tests {
                 navigation_notice: None,
             },
             app_data: "/tmp/fictional-app-data".into(),
+            settings_embedded: true,
         };
         let encoded = serde_json::to_value(snapshot).expect("encode app_snapshot payload");
         assert_eq!(
