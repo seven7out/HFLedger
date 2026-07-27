@@ -1047,7 +1047,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .clipboard-helper { position: fixed; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0; }
 
 :root[data-text-size="large"] .ledger-row,
-:root[data-text-size="extraLarge"] .ledger-row {
+:root[data-text-size="extraLarge"] .ledger-row,
+:root[data-text-size="veryLarge"] .ledger-row,
+:root[data-text-size="maximum"] .ledger-row {
   align-items: start;
   min-height: 72px;
   padding-block: 9px;
@@ -1056,17 +1058,27 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 :root[data-text-size="large"] .row-reason,
 :root[data-text-size="extraLarge"] .row-title,
 :root[data-text-size="extraLarge"] .row-reason,
+:root[data-text-size="veryLarge"] .row-title,
+:root[data-text-size="veryLarge"] .row-reason,
+:root[data-text-size="maximum"] .row-title,
+:root[data-text-size="maximum"] .row-reason,
 :root[data-text-size="large"] .run-title,
-:root[data-text-size="extraLarge"] .run-title {
+:root[data-text-size="extraLarge"] .run-title,
+:root[data-text-size="veryLarge"] .run-title,
+:root[data-text-size="maximum"] .run-title {
   overflow: visible;
   text-overflow: clip;
   white-space: normal;
   overflow-wrap: anywhere;
 }
 :root[data-text-size="large"] .row-meta,
-:root[data-text-size="extraLarge"] .row-meta { align-self: start; }
+:root[data-text-size="extraLarge"] .row-meta,
+:root[data-text-size="veryLarge"] .row-meta,
+:root[data-text-size="maximum"] .row-meta { align-self: start; }
 :root[data-text-size="large"] .coverage-footer span,
-:root[data-text-size="extraLarge"] .coverage-footer span {
+:root[data-text-size="extraLarge"] .coverage-footer span,
+:root[data-text-size="veryLarge"] .coverage-footer span,
+:root[data-text-size="maximum"] .coverage-footer span {
   overflow: visible;
   text-overflow: clip;
   white-space: normal;
@@ -1256,15 +1268,29 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .swipe-hint { display: flex; justify-content: space-between; margin: 21px 10px 0; color: rgba(255,255,255,.58); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
 
 :root[data-text-size="large"] .option-button,
-:root[data-text-size="extraLarge"] .option-button { align-items: start; }
-:root[data-text-size="extraLarge"] .decision-card { padding: 24px; }
-:root[data-text-size="extraLarge"] .option-button {
+:root[data-text-size="extraLarge"] .option-button,
+:root[data-text-size="veryLarge"] .option-button,
+:root[data-text-size="maximum"] .option-button { align-items: start; }
+:root[data-text-size="extraLarge"] .decision-card,
+:root[data-text-size="veryLarge"] .decision-card,
+:root[data-text-size="maximum"] .decision-card { padding: 24px; }
+:root[data-text-size="extraLarge"] .option-button,
+:root[data-text-size="veryLarge"] .option-button,
+:root[data-text-size="maximum"] .option-button {
   grid-template-columns: auto minmax(0, 1fr);
 }
-:root[data-text-size="extraLarge"] .recommend-badge { grid-column: 2; }
-:root[data-text-size="extraLarge"] .card-actions { grid-template-columns: minmax(0, 1fr); }
-:root[data-text-size="extraLarge"] .priority-build { grid-template-columns: 26px minmax(0, 1fr); }
-:root[data-text-size="extraLarge"] .priority-build-controls { grid-column: 2; }
+:root[data-text-size="extraLarge"] .recommend-badge,
+:root[data-text-size="veryLarge"] .recommend-badge,
+:root[data-text-size="maximum"] .recommend-badge { grid-column: 2; }
+:root[data-text-size="extraLarge"] .card-actions,
+:root[data-text-size="veryLarge"] .card-actions,
+:root[data-text-size="maximum"] .card-actions { grid-template-columns: minmax(0, 1fr); }
+:root[data-text-size="extraLarge"] .priority-build,
+:root[data-text-size="veryLarge"] .priority-build,
+:root[data-text-size="maximum"] .priority-build { grid-template-columns: 26px minmax(0, 1fr); }
+:root[data-text-size="extraLarge"] .priority-build-controls,
+:root[data-text-size="veryLarge"] .priority-build-controls,
+:root[data-text-size="maximum"] .priority-build-controls { grid-column: 2; }
 .deck-toast { background: white; color: var(--ink); }
 
 @media (max-width: 900px) {
