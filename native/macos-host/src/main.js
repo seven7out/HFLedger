@@ -5,13 +5,17 @@ const elements = Object.fromEntries([
   "reveal-workspace", "pref-notifications", "pref-login", "pref-restore",
   "preferences-panel", "pref-text-size", "text-size-status",
   "onboarding-panel", "recovery-panel", "recovery-message", "workspaces-panel",
+  "settings-content", "settings-back",
   "diagnostics-dialog", "diagnostics-output",
   "search-dialog", "commands-dialog", "command-search", "ledger-search-results",
 ].map((id) => [id, document.getElementById(id)]));
 
 let snapshot = null;
 let busy = false;
-let settingsMode = null;
+const initialMode = String(location.hash || "").slice(1);
+let settingsMode = ["settings", "workspaces", "onboarding", "recovery"].includes(initialMode)
+  ? initialMode
+  : null;
 let searchGeneration = 0;
 let searchTimer = null;
 
@@ -178,6 +182,8 @@ function renderSettingsMode() {
 
 function render() {
   elements.version.textContent = `HFLedger for Mac ${snapshot.version} · local data only`;
+  elements["settings-back"].hidden = !snapshot.settingsEmbedded;
+  document.body.classList.toggle("is-embedded", snapshot.settingsEmbedded);
   renderWorkspaces();
   renderHost(snapshot.host);
   renderPreferences();
@@ -187,6 +193,28 @@ function render() {
 async function refresh() {
   snapshot = await invoke("app_snapshot");
   render();
+}
+
+function selectSettingsSection(targetId, { focus = true } = {}) {
+  const target = document.getElementById(targetId);
+  if (!target) return;
+  document.querySelectorAll("[data-settings-target]").forEach((control) => {
+    const selected = control.dataset.settingsTarget === targetId;
+    control.classList.toggle("is-selected", selected);
+    if (selected) control.setAttribute("aria-current", "page");
+    else control.removeAttribute("aria-current");
+  });
+  target.scrollIntoView({ block: "start", behavior: "smooth" });
+  if (focus) target.focus({ preventScroll: true });
+}
+
+function applySettingsModeNavigation() {
+  if (settingsMode === "settings") {
+    selectSettingsSection("general-panel", { focus: false });
+    elements["settings-content"].focus({ preventScroll: true });
+  } else if (settingsMode === "workspaces") {
+    selectSettingsSection("workspaces-panel");
+  }
 }
 
 async function savePreferences() {
@@ -230,6 +258,16 @@ async function saveTextSize() {
 document.getElementById("dismiss-error").addEventListener("click", () => {
   elements["error-banner"].hidden = true;
   invoke("dismiss_navigation_notice").catch(() => {});
+});
+elements["settings-back"].addEventListener("click", async () => {
+  try {
+    await invoke("show_today");
+  } catch (error) {
+    showError(error);
+  }
+});
+document.querySelectorAll("[data-settings-target]").forEach((control) => {
+  control.addEventListener("click", () => selectSettingsSection(control.dataset.settingsTarget));
 });
 document.getElementById("repair-settings").addEventListener("click", () => action(
   async () => {
@@ -303,17 +341,15 @@ window.addEventListener("hfledger:text-size-changed", (event) => {
 
 window.addEventListener("hfledger:settings-mode", (event) => {
   settingsMode = event.detail?.mode || "settings";
+  if (typeof event.detail?.embedded === "boolean") {
+    elements["settings-back"].hidden = !event.detail.embedded;
+    document.body.classList.toggle("is-embedded", event.detail.embedded);
+  }
   if (settingsMode === "recovery" && event.detail?.message) {
     elements["recovery-message"].textContent = event.detail.message;
   }
   renderSettingsMode();
-  if (settingsMode === "settings") {
-    elements["preferences-panel"].scrollIntoView({ block: "center" });
-    elements["pref-text-size"].focus({ preventScroll: true });
-  } else if (settingsMode === "workspaces") {
-    elements["workspaces-panel"].scrollIntoView({ block: "start" });
-    elements["workspaces-panel"].focus({ preventScroll: true });
-  }
+  applySettingsModeNavigation();
 });
 
 window.addEventListener("hfledger:settings-error", (event) => {
@@ -426,6 +462,7 @@ document.getElementById("quit").addEventListener("click", () => invoke("quit_app
 window.addEventListener("DOMContentLoaded", async () => {
   try {
     await refresh();
+    applySettingsModeNavigation();
   } catch (error) {
     showError(error);
   }
