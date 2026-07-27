@@ -1187,7 +1187,7 @@ fn set_observer_error(state: &HostRuntime, message: Option<&str>) {
 
 fn dispatch_native_command(app: &AppHandle, command: NativeCommand) -> Result<(), String> {
     let board = app
-        .get_webview_window("board")
+        .get_webview("board")
         .ok_or_else(|| "no ledger window is open".to_string())?;
     board
         .eval(command.event_script())
@@ -1399,32 +1399,29 @@ fn ensure_settings_panel(app: &AppHandle, mode: &str) -> Result<tauri::Webview, 
     if let Some(panel) = app.get_webview("settings-panel") {
         return Ok(panel);
     }
-    let board = app
-        .get_webview_window("board")
+    let board_window = app
+        .get_window("board")
         .ok_or_else(|| "no Today window is open".to_string())?;
-    let size = board
+    let size = board_window
         .inner_size()
         .map_err(|error| format!("could not measure the Today window: {error}"))?;
     let initial_path = format!("index.html#{mode}");
     let builder =
         WebviewBuilder::new("settings-panel", WebviewUrl::App(initial_path.into())).auto_resize();
-    board
-        .as_ref()
-        .window()
+    board_window
         .add_child(builder, PhysicalPosition::new(0, 0), size)
         .map_err(|error| format!("could not create the in-window Settings panel: {error}"))
 }
 
 fn show_settings_surface(app: &AppHandle, mode: &str, message: Option<&str>) {
-    if let Some(board) = app.get_webview_window("board") {
+    if let Some(board_window) = app.get_window("board") {
         if let Ok(panel) = ensure_settings_panel(app, mode) {
-            let _ = board.as_ref().hide();
             let _ = panel.show();
             let _ = panel.set_focus();
-            let _ = board.set_title("HFLedger — Settings");
-            let _ = board.show();
-            let _ = board.unminimize();
-            let _ = board.set_focus();
+            let _ = board_window.set_title("HFLedger — Settings");
+            let _ = board_window.show();
+            let _ = board_window.unminimize();
+            let _ = board_window.set_focus();
             let _ = panel.eval(settings_mode_script(mode, message, true));
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.hide();
@@ -1466,21 +1463,26 @@ fn show_recovery(app: &AppHandle, error: &str) {
 }
 
 fn show_existing_today(app: &AppHandle) -> bool {
-    let Some(board) = app.get_webview_window("board") else {
+    let Some(board_window) = app.get_window("board") else {
+        return false;
+    };
+    let Some(board_webview) = app.get_webview("board") else {
         return false;
     };
     if let Some(panel) = app.get_webview("settings-panel") {
-        let _ = panel.hide();
+        // Closing is more reliable than hiding a child WKWebView on macOS.
+        // The panel is lightweight and is recreated the next time Settings opens.
+        let _ = panel.close();
     }
-    let _ = board.as_ref().show();
+    let _ = board_webview.show();
     if let Ok(active) = app.state::<HostRuntime>().active_workspace.lock() {
         if let Some(workspace) = active.as_ref() {
-            let _ = board.set_title(&format!("HFLedger — {}", workspace.label));
+            let _ = board_window.set_title(&format!("HFLedger — {}", workspace.label));
         }
     }
-    let _ = board.show();
-    let _ = board.unminimize();
-    let _ = board.set_focus();
+    let _ = board_window.show();
+    let _ = board_window.unminimize();
+    let _ = board_window.set_focus();
     let _ = apply_stored_text_size(app, false);
     set_board_menu_available(&app.state::<HostRuntime>(), true);
     true
@@ -1498,7 +1500,7 @@ fn restore_primary_surface(app: &AppHandle) {
     let host_ready = current_host_status(&state).ready;
     let plan = primary_surface_plan(
         &config,
-        app.get_webview_window("board").is_some(),
+        app.get_window("board").is_some(),
         host_ready,
     );
     match plan {
@@ -1534,18 +1536,20 @@ fn show_board_window(app: &AppHandle, workspace: &Workspace, port: u16) -> Resul
         .parse()
         .map_err(|error| format!("could not build the local board URL: {error}"))?;
     let title = format!("HFLedger — {}", workspace.label);
-    if let Some(window) = app.get_webview_window("board") {
-        window
+    if let (Some(board_window), Some(board_webview)) =
+        (app.get_window("board"), app.get_webview("board"))
+    {
+        board_webview
             .navigate(url)
             .map_err(|error| format!("could not switch the board window: {error}"))?;
         if let Some(panel) = app.get_webview("settings-panel") {
-            let _ = panel.hide();
+            let _ = panel.close();
         }
-        let _ = window.as_ref().show();
-        let _ = window.set_title(&title);
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
+        let _ = board_webview.show();
+        let _ = board_window.set_title(&title);
+        let _ = board_window.show();
+        let _ = board_window.unminimize();
+        let _ = board_window.set_focus();
     } else {
         let settings_app = app.clone();
         WebviewWindowBuilder::new(app, "board", WebviewUrl::External(url))
@@ -1673,7 +1677,7 @@ fn navigate_deep_link(app: &AppHandle, intent: &DeepLinkIntent) -> Result<(), St
         .lock()
         .map_err(|_| "engine port lock was poisoned")?
         .to_owned();
-    let board_open = app.get_webview_window("board").is_some();
+    let board_open = app.get_window("board").is_some();
     match deep_link_window_plan(intent, active.as_ref(), port, board_open) {
         DeepLinkWindowPlan::UseActiveBoard => {}
         DeepLinkWindowPlan::ShowActiveBoard => {
@@ -1697,7 +1701,7 @@ fn navigate_deep_link(app: &AppHandle, intent: &DeepLinkIntent) -> Result<(), St
         .parse()
         .map_err(|_| "could not build the item navigation URL".to_string())?;
     let board = app
-        .get_webview_window("board")
+        .get_webview("board")
         .ok_or_else(|| "no ledger window is open".to_string())?;
     board
         .navigate(target)
@@ -2191,7 +2195,7 @@ fn open_search_result(
         &intent,
         active.as_ref(),
         port,
-        app.get_webview_window("board").is_some(),
+        app.get_window("board").is_some(),
     ) {
         DeepLinkWindowPlan::UseActiveBoard => {}
         DeepLinkWindowPlan::ShowActiveBoard => {
@@ -2218,7 +2222,7 @@ fn open_search_result(
         .parse()
         .map_err(|_| "search result navigation is invalid".to_string())?;
     let board = app
-        .get_webview_window("board")
+        .get_webview("board")
         .ok_or_else(|| "no ledger window is open".to_string())?;
     board
         .navigate(target)
@@ -2410,8 +2414,8 @@ fn remove_workspace(
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.set_badge_count(None);
         }
-        if let Some(board) = app.get_webview_window("board") {
-            let _ = board.close();
+        if let Some(board_window) = app.get_window("board") {
+            let _ = board_window.close();
         }
     }
     config.workspaces.retain(|item| item.id != workspace_id);
@@ -2461,8 +2465,8 @@ fn stop_workspace(app: AppHandle, state: State<'_, HostRuntime>) -> HostStatus {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_badge_count(None);
     }
-    if let Some(board) = app.get_webview_window("board") {
-        let _ = board.close();
+    if let Some(board_window) = app.get_window("board") {
+        let _ = board_window.close();
     }
     current_host_status(&state)
 }
@@ -3214,7 +3218,7 @@ fn handle_native_menu(app: &AppHandle, id: &str) {
         "app.settings" => show_settings(app),
         "file.open-workspace" => show_workspace_settings(app),
         "help.diagnostics" => show_settings_dialog(app, "show-diagnostics"),
-        "view.commands" if app.get_webview_window("board").is_none() => {
+        "view.commands" if app.get_window("board").is_none() => {
             show_settings_dialog(app, "show-search")
         }
         "help.commands" | "help.keyboard" | "help.privacy" => {

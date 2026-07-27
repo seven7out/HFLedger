@@ -94,7 +94,8 @@ class SettingsSearchSeparationTests(unittest.TestCase):
         self.assertIn('WebviewBuilder::new(', source)
         self.assertIn('"settings-panel"', source)
         self.assertIn(".add_child(", source)
-        self.assertIn("board.as_ref().hide()", source)
+        self.assertNotIn("board.as_ref().hide()", source)
+        self.assertIn("panel.close()", source)
         self.assertIn('fn show_today(app: AppHandle)', source)
 
     def test_settings_surface_keeps_every_existing_control_and_text_size(self):
