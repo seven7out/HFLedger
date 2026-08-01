@@ -1,0 +1,72 @@
+{
+  "schema": "hfl-history-envelope",
+  "schemaVersion": 1,
+  "adapter": {
+    "id": "adapter-fictional-insufficient",
+    "version": "1.0.0",
+    "generatedAt": "2026-07-22T12:00:00Z",
+    "workspaceId": "workspace-fictional-beta",
+    "readOnly": true,
+    "dataClassification": "derived-local-history"
+  },
+  "calendar": {
+    "timeZone": "UTC",
+    "weekStartsOn": "monday",
+    "boundary": "local-midnight",
+    "interval": "half-open"
+  },
+  "historyBounds": {
+    "retainedFrom": "2026-07-14T00:00:00Z",
+    "observationStartedAt": "2026-07-14T00:00:00Z",
+    "observedThrough": "2026-07-22T11:00:00Z",
+    "finalizedThrough": "2026-07-14T00:00:00Z",
+    "retentionPolicy": "source-defined",
+    "retentionState": "unknown",
+    "deletionState": "unknown",
+    "backfillState": "records-only",
+    "lateArrivalWindowSeconds": 604800
+  },
+  "sources": [
+    {
+      "id": "source-fictional-unknown",
+      "kind": "adapter",
+      "label": "Fictional unqualified source",
+      "requiredFor": ["lifecycle", "review", "verification", "blocker", "run-outcome"],
+      "observationStartAt": "2026-07-14T00:00:00Z"
+    }
+  ],
+  "coverageWindows": [
+    {
+      "id": "coverage-fictional-unknown",
+      "sourceId": "source-fictional-unknown",
+      "scope": "all-history",
+      "from": "2026-07-14T00:00:00Z",
+      "through": "2026-07-22T11:00:00Z",
+      "state": "unknown",
+      "finality": "open",
+      "observationIds": []
+    }
+  ],
+  "items": [],
+  "runs": [],
+  "lifecycleEpisodes": [],
+  "lifecycleEvents": [],
+  "reviewTransitions": [],
+  "verificationEvents": [],
+  "blockerEpisodes": [],
+  "runOutcomes": [],
+  "evidenceLinks": [],
+  "sourceObservations": [],
+  "diagnostics": [
+    {
+      "id": "diagnostic-fictional-unknown",
+      "severity": "error",
+      "code": "unknown-interval",
+      "sourceId": "source-fictional-unknown",
+      "recordType": "history-bounds",
+      "recordId": null,
+      "observedAt": "2026-07-22T11:00:00Z",
+      "affects": ["lifecycle", "review", "verification", "blocker", "run-outcome"]
+    }
+  ]
+}
