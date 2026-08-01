@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Added the shadow-only completeness-qualified history contract: the closed
+  `hfl-history-envelope` v1 validator, a read-only workspace history adapter
+  with an append-only private observation store and prefix-integrity
+  verification, and the standalone `python3 -m history.shadow` harness. No
+  route, navigation, or Today behavior changes; the served engine does not
+  import the package.
 - Added a dedicated Settings toolbar button, content-only inline app search,
   and a separate Help surface for the installed command guide.
 - Kept persistent Compact, Comfortable, Large, and Extra Large text-size

@@ -1,0 +1,366 @@
+{
+  "schema": "hfl-history-envelope",
+  "schemaVersion": 1,
+  "adapter": {
+    "id": "adapter-fictional-history",
+    "version": "1.0.0",
+    "generatedAt": "2026-07-22T12:00:00Z",
+    "workspaceId": "workspace-fictional-alpha",
+    "readOnly": true,
+    "dataClassification": "derived-local-history"
+  },
+  "calendar": {
+    "timeZone": "America/Los_Angeles",
+    "weekStartsOn": "monday",
+    "boundary": "local-midnight",
+    "interval": "half-open"
+  },
+  "historyBounds": {
+    "retainedFrom": "2026-05-18T07:00:00Z",
+    "observationStartedAt": "2026-05-18T07:00:00Z",
+    "observedThrough": "2026-07-22T11:00:00Z",
+    "finalizedThrough": "2026-07-13T07:00:00Z",
+    "retentionPolicy": "append-only",
+    "retentionState": "complete",
+    "deletionState": "none-declared",
+    "backfillState": "none",
+    "lateArrivalWindowSeconds": 604800
+  },
+  "sources": [
+    {
+      "id": "source-fictional-board",
+      "kind": "board",
+      "label": "Fictional board",
+      "requiredFor": ["lifecycle", "review", "blocker", "run-outcome"],
+      "observationStartAt": "2026-05-18T07:00:00Z"
+    },
+    {
+      "id": "source-fictional-ledger",
+      "kind": "ledger",
+      "label": "Fictional event ledger",
+      "requiredFor": ["lifecycle", "review", "blocker", "run-outcome"],
+      "observationStartAt": "2026-05-18T07:00:00Z"
+    },
+    {
+      "id": "source-fictional-forge",
+      "kind": "repository",
+      "label": "Fictional forge",
+      "requiredFor": ["verification"],
+      "observationStartAt": "2026-05-18T07:00:00Z"
+    }
+  ],
+  "coverageWindows": [
+    {
+      "id": "coverage-board-final",
+      "sourceId": "source-fictional-board",
+      "scope": "workflow-status",
+      "from": "2026-05-18T07:00:00Z",
+      "through": "2026-07-13T07:00:00Z",
+      "state": "complete-nonempty",
+      "finality": "final",
+      "observationIds": ["observation-board-final"]
+    },
+    {
+      "id": "coverage-board-open",
+      "sourceId": "source-fictional-board",
+      "scope": "workflow-status",
+      "from": "2026-07-13T07:00:00Z",
+      "through": "2026-07-22T11:00:00Z",
+      "state": "complete-nonempty",
+      "finality": "open",
+      "observationIds": ["observation-board-open"]
+    },
+    {
+      "id": "coverage-ledger-final",
+      "sourceId": "source-fictional-ledger",
+      "scope": "typed-events",
+      "from": "2026-05-18T07:00:00Z",
+      "through": "2026-07-13T07:00:00Z",
+      "state": "complete-nonempty",
+      "finality": "final",
+      "observationIds": ["observation-ledger-final"]
+    },
+    {
+      "id": "coverage-ledger-open",
+      "sourceId": "source-fictional-ledger",
+      "scope": "typed-events",
+      "from": "2026-07-13T07:00:00Z",
+      "through": "2026-07-22T11:00:00Z",
+      "state": "complete-nonempty",
+      "finality": "open",
+      "observationIds": ["observation-ledger-open"]
+    },
+    {
+      "id": "coverage-forge-before-outage",
+      "sourceId": "source-fictional-forge",
+      "scope": "shipment-evidence",
+      "from": "2026-05-18T07:00:00Z",
+      "through": "2026-06-15T07:00:00Z",
+      "state": "complete-nonempty",
+      "finality": "final",
+      "observationIds": ["observation-forge-before-outage"]
+    },
+    {
+      "id": "coverage-forge-outage",
+      "sourceId": "source-fictional-forge",
+      "scope": "shipment-evidence",
+      "from": "2026-06-15T07:00:00Z",
+      "through": "2026-06-22T07:00:00Z",
+      "state": "outage",
+      "finality": "final",
+      "observationIds": ["observation-forge-outage"]
+    },
+    {
+      "id": "coverage-forge-after-outage",
+      "sourceId": "source-fictional-forge",
+      "scope": "shipment-evidence",
+      "from": "2026-06-22T07:00:00Z",
+      "through": "2026-07-13T07:00:00Z",
+      "state": "complete-nonempty",
+      "finality": "final",
+      "observationIds": ["observation-forge-after-outage"]
+    },
+    {
+      "id": "coverage-forge-open",
+      "sourceId": "source-fictional-forge",
+      "scope": "shipment-evidence",
+      "from": "2026-07-13T07:00:00Z",
+      "through": "2026-07-22T11:00:00Z",
+      "state": "complete-nonempty",
+      "finality": "open",
+      "observationIds": ["observation-forge-open"]
+    }
+  ],
+  "items": [
+    {"id": "item-fictional-blocked", "label": "Repair the fictional export handoff"},
+    {"id": "item-fictional-review", "label": "Review the fictional compact layout"},
+    {"id": "item-fictional-ready", "label": "Build the fictional proofing note"},
+    {"id": "item-fictional-shipment", "label": "Ship the fictional tray labels"}
+  ],
+  "runs": [
+    {"id": "run-fictional-block-one", "kind": "agent-session", "startedAt": "2026-07-02T16:00:00Z", "endedAt": "2026-07-02T17:00:00Z", "status": "partial"},
+    {"id": "run-fictional-block-two", "kind": "agent-session", "startedAt": "2026-07-09T16:00:00Z", "endedAt": "2026-07-09T17:00:00Z", "status": "partial"},
+    {"id": "run-fictional-ready", "kind": "agent-session", "startedAt": "2026-07-07T16:00:00Z", "endedAt": "2026-07-08T18:00:00Z", "status": "completed"},
+    {"id": "run-fictional-review", "kind": "owner-session", "startedAt": "2026-07-06T18:00:00Z", "endedAt": "2026-07-10T18:00:00Z", "status": "completed"},
+    {"id": "run-fictional-shipment", "kind": "agent-session", "startedAt": "2026-07-07T18:00:00Z", "endedAt": "2026-07-10T19:00:00Z", "status": "completed"}
+  ],
+  "lifecycleEpisodes": [
+    {
+      "id": "episode-fictional-ready",
+      "itemId": "item-fictional-ready",
+      "kind": "ready-for-build",
+      "state": "closed",
+      "openedAt": "2026-07-07T16:00:00Z",
+      "closedAt": "2026-07-08T18:00:00Z",
+      "eventIds": ["event-fictional-ready-entered", "event-fictional-work-started", "event-fictional-completed"]
+    },
+    {
+      "id": "episode-fictional-review",
+      "itemId": "item-fictional-review",
+      "kind": "review",
+      "state": "closed",
+      "openedAt": "2026-07-06T18:00:00Z",
+      "closedAt": "2026-07-10T18:00:00Z",
+      "eventIds": ["review-fictional-entered", "review-fictional-exited"]
+    },
+    {
+      "id": "episode-fictional-shipment",
+      "itemId": "item-fictional-shipment",
+      "kind": "work",
+      "state": "closed",
+      "openedAt": "2026-07-07T18:00:00Z",
+      "closedAt": "2026-07-10T19:00:00Z",
+      "eventIds": ["event-fictional-shipped"]
+    }
+  ],
+  "lifecycleEvents": [
+    {
+      "id": "event-fictional-ready-entered",
+      "itemId": "item-fictional-ready",
+      "episodeId": "episode-fictional-ready",
+      "runId": "run-fictional-ready",
+      "kind": "ready-entered",
+      "effectiveAt": "2026-07-07T16:00:00Z",
+      "observedAt": "2026-07-07T16:01:00Z",
+      "arrivalState": "on-time",
+      "sourceObservationId": "observation-ledger-final"
+    },
+    {
+      "id": "event-fictional-work-started",
+      "itemId": "item-fictional-ready",
+      "episodeId": "episode-fictional-ready",
+      "runId": "run-fictional-ready",
+      "kind": "work-started",
+      "effectiveAt": "2026-07-07T16:30:00Z",
+      "observedAt": "2026-07-07T16:31:00Z",
+      "arrivalState": "on-time",
+      "sourceObservationId": "observation-ledger-final"
+    },
+    {
+      "id": "event-fictional-completed",
+      "itemId": "item-fictional-ready",
+      "episodeId": "episode-fictional-ready",
+      "runId": "run-fictional-ready",
+      "kind": "completed",
+      "effectiveAt": "2026-07-08T18:00:00Z",
+      "observedAt": "2026-07-08T18:01:00Z",
+      "arrivalState": "on-time",
+      "sourceObservationId": "observation-ledger-final"
+    },
+    {
+      "id": "event-fictional-shipped",
+      "itemId": "item-fictional-shipment",
+      "episodeId": "episode-fictional-shipment",
+      "runId": "run-fictional-shipment",
+      "kind": "shipped-reported",
+      "effectiveAt": "2026-07-10T19:00:00Z",
+      "observedAt": "2026-07-10T19:01:00Z",
+      "arrivalState": "on-time",
+      "sourceObservationId": "observation-ledger-final"
+    }
+  ],
+  "reviewTransitions": [
+    {
+      "id": "review-fictional-entered",
+      "itemId": "item-fictional-review",
+      "episodeId": "episode-fictional-review",
+      "runId": "run-fictional-review",
+      "kind": "entered",
+      "effectiveAt": "2026-07-06T18:00:00Z",
+      "observedAt": "2026-07-06T18:02:00Z",
+      "arrivalState": "on-time",
+      "sourceObservationId": "observation-board-final"
+    },
+    {
+      "id": "review-fictional-exited",
+      "itemId": "item-fictional-review",
+      "episodeId": "episode-fictional-review",
+      "runId": "run-fictional-review",
+      "kind": "exited",
+      "effectiveAt": "2026-07-10T18:00:00Z",
+      "observedAt": "2026-07-10T18:02:00Z",
+      "arrivalState": "on-time",
+      "sourceObservationId": "observation-board-final"
+    }
+  ],
+  "verificationEvents": [
+    {
+      "id": "verification-fictional-merge",
+      "itemId": "item-fictional-shipment",
+      "runId": "run-fictional-shipment",
+      "kind": "merge",
+      "claimKind": "shipment",
+      "claimState": "succeeded",
+      "effectiveAt": "2026-07-10T19:05:00Z",
+      "observedAt": "2026-07-10T19:06:00Z",
+      "arrivalState": "on-time",
+      "independent": true,
+      "disputed": false,
+      "sourceObservationId": "observation-forge-after-outage"
+    },
+    {
+      "id": "verification-fictional-late-artifact",
+      "itemId": "item-fictional-ready",
+      "runId": "run-fictional-ready",
+      "kind": "local-artifact",
+      "claimKind": "completion",
+      "claimState": "succeeded",
+      "effectiveAt": "2026-07-08T18:00:00Z",
+      "observedAt": "2026-07-14T18:00:00Z",
+      "arrivalState": "late",
+      "independent": true,
+      "disputed": false,
+      "sourceObservationId": "observation-forge-open"
+    }
+  ],
+  "blockerEpisodes": [
+    {
+      "id": "blocker-fictional-one",
+      "itemId": "item-fictional-blocked",
+      "state": "resolved",
+      "blockerCode": "missing-reviewer",
+      "openedAt": "2026-07-02T16:30:00Z",
+      "closedAt": "2026-07-02T17:00:00Z",
+      "observedAt": "2026-07-02T16:31:00Z",
+      "arrivalState": "on-time",
+      "runIds": ["run-fictional-block-one"],
+      "sourceObservationId": "observation-ledger-final"
+    },
+    {
+      "id": "blocker-fictional-two",
+      "itemId": "item-fictional-blocked",
+      "state": "open",
+      "blockerCode": "missing-reviewer",
+      "openedAt": "2026-07-09T16:30:00Z",
+      "closedAt": null,
+      "observedAt": "2026-07-09T16:31:00Z",
+      "arrivalState": "on-time",
+      "runIds": ["run-fictional-block-two"],
+      "sourceObservationId": "observation-ledger-final"
+    }
+  ],
+  "runOutcomes": [
+    {
+      "id": "outcome-fictional-ready",
+      "runId": "run-fictional-ready",
+      "status": "completed",
+      "effectiveAt": "2026-07-08T18:00:00Z",
+      "observedAt": "2026-07-08T18:01:00Z",
+      "arrivalState": "on-time",
+      "sourceObservationId": "observation-ledger-final",
+      "eventIds": ["event-fictional-ready-entered", "event-fictional-work-started", "event-fictional-completed"],
+      "verificationEventIds": ["verification-fictional-late-artifact"]
+    },
+    {
+      "id": "outcome-fictional-shipment",
+      "runId": "run-fictional-shipment",
+      "status": "completed",
+      "effectiveAt": "2026-07-10T19:00:00Z",
+      "observedAt": "2026-07-10T19:01:00Z",
+      "arrivalState": "on-time",
+      "sourceObservationId": "observation-ledger-final",
+      "eventIds": ["event-fictional-shipped"],
+      "verificationEventIds": ["verification-fictional-merge"]
+    }
+  ],
+  "evidenceLinks": [
+    {
+      "id": "link-fictional-shipment-verification",
+      "fromType": "verification-event",
+      "fromId": "verification-fictional-merge",
+      "toType": "lifecycle-event",
+      "toId": "event-fictional-shipped",
+      "relationship": "verifies"
+    },
+    {
+      "id": "link-fictional-ready-late-verification",
+      "fromType": "verification-event",
+      "fromId": "verification-fictional-late-artifact",
+      "toType": "lifecycle-episode",
+      "toId": "episode-fictional-ready",
+      "relationship": "verifies"
+    },
+    {
+      "id": "link-fictional-ready-outcome",
+      "fromType": "run-outcome",
+      "fromId": "outcome-fictional-ready",
+      "toType": "run",
+      "toId": "run-fictional-ready",
+      "relationship": "belongs-to"
+    }
+  ],
+  "sourceObservations": [
+    {"id": "observation-board-final", "sourceId": "source-fictional-board", "scope": "workflow-status", "attemptStartedAt": "2026-07-13T06:58:00Z", "attemptCompletedAt": "2026-07-13T07:00:00Z", "coversFrom": "2026-05-18T07:00:00Z", "coversThrough": "2026-07-13T07:00:00Z", "result": "complete-nonempty", "recordCount": 40, "truncated": false, "cursorStart": "cursor-board-start", "cursorEnd": "cursor-board-final"},
+    {"id": "observation-board-open", "sourceId": "source-fictional-board", "scope": "workflow-status", "attemptStartedAt": "2026-07-22T10:58:00Z", "attemptCompletedAt": "2026-07-22T11:00:00Z", "coversFrom": "2026-07-13T07:00:00Z", "coversThrough": "2026-07-22T11:00:00Z", "result": "complete-nonempty", "recordCount": 9, "truncated": false, "cursorStart": "cursor-board-final", "cursorEnd": "cursor-board-open"},
+    {"id": "observation-ledger-final", "sourceId": "source-fictional-ledger", "scope": "typed-events", "attemptStartedAt": "2026-07-13T06:58:00Z", "attemptCompletedAt": "2026-07-13T07:00:00Z", "coversFrom": "2026-05-18T07:00:00Z", "coversThrough": "2026-07-13T07:00:00Z", "result": "complete-nonempty", "recordCount": 28, "truncated": false, "cursorStart": "cursor-ledger-start", "cursorEnd": "cursor-ledger-final"},
+    {"id": "observation-ledger-open", "sourceId": "source-fictional-ledger", "scope": "typed-events", "attemptStartedAt": "2026-07-22T10:58:00Z", "attemptCompletedAt": "2026-07-22T11:00:00Z", "coversFrom": "2026-07-13T07:00:00Z", "coversThrough": "2026-07-22T11:00:00Z", "result": "complete-nonempty", "recordCount": 12, "truncated": false, "cursorStart": "cursor-ledger-final", "cursorEnd": "cursor-ledger-open"},
+    {"id": "observation-forge-before-outage", "sourceId": "source-fictional-forge", "scope": "shipment-evidence", "attemptStartedAt": "2026-06-15T06:58:00Z", "attemptCompletedAt": "2026-06-15T07:00:00Z", "coversFrom": "2026-05-18T07:00:00Z", "coversThrough": "2026-06-15T07:00:00Z", "result": "complete-nonempty", "recordCount": 7, "truncated": false, "cursorStart": "cursor-forge-start", "cursorEnd": "cursor-forge-before"},
+    {"id": "observation-forge-outage", "sourceId": "source-fictional-forge", "scope": "shipment-evidence", "attemptStartedAt": "2026-06-22T06:58:00Z", "attemptCompletedAt": "2026-06-22T07:00:00Z", "coversFrom": "2026-06-15T07:00:00Z", "coversThrough": "2026-06-22T07:00:00Z", "result": "failed", "recordCount": 0, "truncated": false, "cursorStart": "cursor-forge-before", "cursorEnd": null},
+    {"id": "observation-forge-after-outage", "sourceId": "source-fictional-forge", "scope": "shipment-evidence", "attemptStartedAt": "2026-07-13T06:58:00Z", "attemptCompletedAt": "2026-07-13T07:00:00Z", "coversFrom": "2026-06-22T07:00:00Z", "coversThrough": "2026-07-13T07:00:00Z", "result": "complete-nonempty", "recordCount": 11, "truncated": false, "cursorStart": "cursor-forge-before", "cursorEnd": "cursor-forge-final"},
+    {"id": "observation-forge-open", "sourceId": "source-fictional-forge", "scope": "shipment-evidence", "attemptStartedAt": "2026-07-22T10:58:00Z", "attemptCompletedAt": "2026-07-22T11:00:00Z", "coversFrom": "2026-07-13T07:00:00Z", "coversThrough": "2026-07-22T11:00:00Z", "result": "complete-nonempty", "recordCount": 5, "truncated": false, "cursorStart": "cursor-forge-final", "cursorEnd": "cursor-forge-open"}
+  ],
+  "diagnostics": [
+    {"id": "diagnostic-fictional-outage", "severity": "warning", "code": "source-outage", "sourceId": "source-fictional-forge", "recordType": "coverage-window", "recordId": "coverage-forge-outage", "observedAt": "2026-06-22T07:00:00Z", "affects": ["verification"]},
+    {"id": "diagnostic-fictional-late", "severity": "info", "code": "late-arrival", "sourceId": "source-fictional-forge", "recordType": "verification-event", "recordId": "verification-fictional-late-artifact", "observedAt": "2026-07-14T18:00:00Z", "affects": ["verification"]}
+  ]
+}
