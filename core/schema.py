@@ -37,6 +37,7 @@ QUEUE_FIELDS = frozenset((
     "ownerAssignment", "dedupeKey", "pr", "mergedNote", "created", "updated",
     "autonomousSafe", "repository", "statusKey", "protectedClass",
     "priority", "workType", "project",
+    "productStage", "testSiteState",
     "doneNote", "completionDisposition", "completionEvidence", "completionSource",
     "completionActor", "completionLedgerProvenance", "tombstone",
 ))
@@ -159,6 +160,10 @@ def default_board(project="HFLedger workspace"):
             "project": project,
             "updated": now,
             "lastSession": None,
+            "productionHealth": {
+                "state": "degraded",
+                "summary": "Production health has not been connected yet.",
+            },
             "ledgerCursor": {"line": 0, "entrySha256": None},
         },
         "queue": [],
@@ -168,6 +173,7 @@ def default_board(project="HFLedger workspace"):
         "changelog": {"entries": []},
         "statusCounts": {
             "queue": {}, "decisions": {"open": 0, "snoozed": 0, "deferred": 0, "resolved": 0},
+            "cardKinds": {kind: 0 for kind in admission.CARD_KINDS},
             "ownerTasks": {"open": 0, "done": 0}, "inbox": 0,
             "unmatchedCompletions": 0, "retriage": 0,
         },
@@ -223,6 +229,7 @@ def compute_status_counts(board):
                 status = "(invalid)"
             queue_counts[status] = queue_counts.get(status, 0) + 1
     decision_counts = {"open": 0, "snoozed": 0, "deferred": 0, "resolved": 0}
+    card_kind_counts = {kind: 0 for kind in admission.CARD_KINDS}
     decisions = board.get("decisions", {}) if isinstance(board, dict) else {}
     if isinstance(decisions, dict):
         for item in decisions.get("items", []) if isinstance(decisions.get("items"), list) else []:
@@ -231,6 +238,9 @@ def compute_status_counts(board):
                 if not isinstance(state, str):
                     state = "(invalid)"
                 decision_counts[state] = decision_counts.get(state, 0) + 1
+                kind = item.get("cardKind")
+                if kind in card_kind_counts and state != "deferred":
+                    card_kind_counts[kind] += 1
         if isinstance(decisions.get("resolved"), list):
             decision_counts["resolved"] = len(decisions["resolved"])
     owner_counts = {"open": 0, "done": 0}
@@ -242,6 +252,7 @@ def compute_status_counts(board):
     return {
         "queue": dict(sorted(queue_counts.items())),
         "decisions": decision_counts,
+        "cardKinds": card_kind_counts,
         "ownerTasks": owner_counts,
         "inbox": len(board.get("inbox", [])) if isinstance(board.get("inbox"), list) else 0,
         "unmatchedCompletions": len(board.get("unmatchedCompletions", []))
@@ -361,6 +372,25 @@ def validate(board, config):
             errors.append("meta.updated must be a timezone-aware ISO-8601 timestamp")
         if meta.get("lastSession") is not None and not isinstance(meta.get("lastSession"), dict):
             errors.append("meta.lastSession must be an object or null")
+        production_health = meta.get("productionHealth")
+        if production_health is not None:
+            if not isinstance(production_health, dict):
+                errors.append("meta.productionHealth must be an object")
+            else:
+                unknown_health = sorted(set(production_health) - {"state", "summary"})
+                if unknown_health:
+                    errors.append("meta.productionHealth has unsupported field(s): %s" %
+                                  ", ".join(unknown_health))
+                if production_health.get("state") not in ("healthy", "degraded"):
+                    errors.append("meta.productionHealth.state must be healthy or degraded")
+                summary = production_health.get("summary")
+                if (not isinstance(summary, str) or not summary.strip() or
+                        len(summary.strip()) > 240 or "\n" in summary or "\r" in summary):
+                    errors.append(
+                        "meta.productionHealth.summary must be one non-empty line up to 240 characters")
+                else:
+                    errors.extend(admission.plain_product_language_errors(
+                        summary, "meta.productionHealth.summary"))
         cursor = meta.get("ledgerCursor")
         if not isinstance(cursor, dict):
             errors.append("meta.ledgerCursor must be an object")
@@ -394,6 +424,15 @@ def validate(board, config):
                 errors.append("queue item %r has unknown status %r" % (item_id, item.get("status")))
             if "autonomousSafe" in item and not isinstance(item.get("autonomousSafe"), bool):
                 errors.append("queue item %r autonomousSafe must be boolean" % item_id)
+            if ("productStage" in item and item.get("productStage") not in
+                    ("being-specced", "being-built", "test-site", "production")):
+                errors.append("queue item %r productStage is invalid" % item_id)
+            if ("testSiteState" in item and item.get("testSiteState") not in
+                    ("ready", "failing")):
+                errors.append("queue item %r testSiteState is invalid" % item_id)
+            if "testSiteState" in item and item.get("productStage") != "test-site":
+                errors.append(
+                    "queue item %r testSiteState requires productStage test-site" % item_id)
             for field in ("repository", "statusKey", "protectedClass"):
                 if field in item and (not isinstance(item.get(field), str) or
                                       not item.get(field, "").strip()):

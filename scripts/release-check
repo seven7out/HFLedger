@@ -19,7 +19,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from app import server  # noqa: E402
-from core import __version__  # noqa: E402
+from core import __version__, admission  # noqa: E402
 
 
 EXPECTED_VERSION = "0.4.1"
@@ -85,8 +85,10 @@ def _check_demo():
             response = connection.getresponse()
             cards = json.loads(response.read().decode("utf-8"))["cards"]
             connection.close()
-            if response.status != 200 or len(cards) != 1 or cards[0].get("type") != "decision":
-                raise RuntimeError("demo did not serve exactly one decision card")
+            if (response.status != 200 or len(cards) != 5 or
+                    {card.get("cardKind") for card in cards} != set(admission.CARD_KINDS) or
+                    cards[0].get("type") != "decision"):
+                raise RuntimeError("demo did not serve one card of each product-owner kind")
             body = json.dumps({
                 "id": cards[0]["id"], "srcHash": cards[0]["srcHash"], "action": "accept",
             })
@@ -104,7 +106,7 @@ def _check_demo():
             response = connection.getresponse()
             remaining = json.loads(response.read().decode("utf-8"))["cards"]
             connection.close()
-            if response.status != 200 or remaining:
+            if response.status != 200 or len(remaining) != 4:
                 raise RuntimeError("demo first-swipe acceptance did not resolve the card")
         finally:
             httpd.shutdown()

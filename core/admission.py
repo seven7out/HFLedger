@@ -6,11 +6,32 @@ import json
 import os
 import re
 import shlex
+from urllib.parse import urlparse
 
 
 SCHEMA_VERSION = 1
 POLICY_VERSION = "ask-policy-v1"
 ASK_TYPES = frozenset(("decision", "action"))
+CARD_KINDS = (
+    "idea_pick", "outcome_review", "risk_card", "stuck_alarm",
+    "priority_review",
+)
+CARD_KIND_TYPES = {
+    "idea_pick": "decision",
+    "outcome_review": "decision",
+    "risk_card": "decision",
+    "stuck_alarm": "action",
+    "priority_review": "decision",
+}
+CARD_KIND_FIELDS = {
+    "idea_pick": frozenset(("idea", "footnoteLinks")),
+    "outcome_review": frozenset((
+        "userChange", "evidenceLinks", "testEvidenceSummary", "footnoteLinks")),
+    "risk_card": frozenset(("riskSubject", "footnoteLinks")),
+    "stuck_alarm": frozenset((
+        "stopped", "stoppedSince", "ownerAction", "footnoteLinks")),
+    "priority_review": frozenset(("builds", "footnoteLinks")),
+}
 PRIORITIES = frozenset(("P0", "P1", "P2"))
 RISK_LEVELS = frozenset(("low", "medium", "high", "critical"))
 REVERSIBILITY = frozenset(("reversible", "partial", "irreversible"))
@@ -30,6 +51,9 @@ PACKAGE_FIELDS = frozenset((
     "workDone", "source", "admission", "deadline", "ask", "question",
     "options", "recommendedOption", "recommendationReason", "instruction",
     "completionProof", "proofCommand", "proofExpect", "estimateMinutes",
+    "cardKind", "idea", "userChange", "evidenceLinks",
+    "testEvidenceSummary", "riskSubject", "stopped", "stoppedSince",
+    "ownerAction", "builds", "footnoteLinks",
 ))
 BOARD_METADATA_FIELDS = frozenset((
     "added", "addedEstimated", "state", "ledgerProvenance", "snoozedUntil", "snoozeReason",
@@ -37,7 +61,38 @@ BOARD_METADATA_FIELDS = frozenset((
     "completionEvidence", "completionSource", "completionActor",
     "completionLedgerProvenance", "resolutionEvidence",
     "resolutionLedgerProvenance", "selectedOption", "tombstone",
+    "priorityOrder", "killedItemIds",
 ))
+
+_CODE_SHAPED_PATTERNS = (
+    ("diff", re.compile(r"(?:\bgit\s+diff\b|\bdiff\s+--git\b|@@\s+-\d+)", re.I)),
+    ("pull request", re.compile(r"(?:\bpull\s+request\b|\bPR\s*#?\d+\b)", re.I)),
+    ("commit", re.compile(
+        r"(?:\bcommits\b|\bcommit\s+list\b|\bcommit\s+[0-9a-f]{7,40}\b|\b[0-9a-f]{7,40}\b)",
+        re.I)),
+    ("branch", re.compile(
+        r"(?:\bbranch(?:es)?\b|\b(?:feature|fix|release|agent|build)/[a-z0-9._/-]+\b)",
+        re.I)),
+    ("check name", re.compile(
+        r"(?:\b(?:CI|workflow|check)\s+[`'\"]?[a-z0-9_.:/-]+|\b(?:test|check)_[a-z0-9_]+\b)",
+        re.I)),
+    ("file path", re.compile(
+        r"(?:^|[\s`])(?:[a-z0-9_.-]+/)+[a-z0-9_.-]+\.(?:py|js|ts|rs|go|java|rb|sh|json|ya?ml|toml|css|html)(?:\b|`)",
+        re.I)),
+)
+
+
+def plain_product_language_errors(value, label="text"):
+    """Reject implementation-shaped prose from a primary owner surface."""
+    if not isinstance(value, str):
+        return []
+    for shape, pattern in _CODE_SHAPED_PATTERNS:
+        if pattern.search(value):
+            return [
+                "%s must use plain product language, not a %s; put technical drill-down in footnoteLinks"
+                % (label, shape)
+            ]
+    return []
 
 _PROOF_COMMAND_MAX = 2000
 _PROOF_EXPECT_MAX = 500
@@ -212,6 +267,163 @@ def _text(errors, obj, key, label=None, max_len=2000, min_len=1):
     return clean
 
 
+def _one_line_text(errors, obj, key, label=None, max_len=280, min_len=1):
+    clean = _text(errors, obj, key, label=label, max_len=max_len, min_len=min_len)
+    if isinstance(clean, str) and any(char in clean for char in ("\n", "\r")):
+        errors.append("%s must be one line" % (label or key))
+    return clean
+
+
+def _link_list(errors, package, key, required=False, technical=False):
+    value = package.get(key)
+    if value is None and not required:
+        return
+    if not isinstance(value, list) or (required and not value) or len(value) > 8:
+        errors.append("%s must contain %sone through eight links" % (
+            key, "" if required else "zero or "))
+        return
+    for index, link in enumerate(value, 1):
+        label = "%s link %d" % (key, index)
+        if not isinstance(link, dict):
+            errors.append("%s must be an object" % label)
+            continue
+        unknown = sorted(set(link) - {"label", "href"})
+        if unknown:
+            errors.append("%s has unsupported field(s): %s" % (
+                label, ", ".join(unknown)))
+        _one_line_text(errors, link, "label", "%s label" % label, 160, 4)
+        href = _one_line_text(errors, link, "href", "%s href" % label, 2000, 1)
+        if isinstance(href, str):
+            parsed = urlparse(href)
+            safe_relative = not parsed.scheme and not parsed.netloc and href.startswith("/")
+            if parsed.scheme not in ("http", "https") and not safe_relative:
+                errors.append("%s href must be http, https, or a root-relative path" % label)
+            if any(ord(char) < 32 or ord(char) == 127 for char in href):
+                errors.append("%s href must not contain control characters" % label)
+        if not technical and isinstance(link, dict):
+            for field in ("label", "href"):
+                text = link.get(field)
+                if not isinstance(text, str):
+                    continue
+                if re.search(r"(?:(?:https?://)?[^\s]+/(?:pull|commit)/|\bPR\s*#?\d+\b)", text, re.I):
+                    errors.append(
+                        "%s contains technical evidence; move it to footnoteLinks" % label)
+                    break
+
+
+def _plain_language_errors(package):
+    fields = (
+        "title", "detail", "ask", "question", "recommendationReason",
+        "instruction", "riskIfWrong", "rollback", "blockedOutcome", "idea",
+        "userChange", "testEvidenceSummary", "riskSubject", "stopped",
+        "ownerAction", "humanRequiredReason", "workDone", "source",
+        "completionProof",
+    )
+    values = [(field, package.get(field)) for field in fields]
+    for index, option in enumerate(package.get("options", []) or [], 1):
+        if isinstance(option, dict):
+            for field in ("label", "description", "tradeoff"):
+                values.append(("option %d %s" % (index, field), option.get(field)))
+    for index, build in enumerate(package.get("builds", []) or [], 1):
+        if isinstance(build, dict):
+            for field in ("title", "description"):
+                values.append(("build %d %s" % (index, field), build.get(field)))
+    for index, link in enumerate(package.get("evidenceLinks", []) or [], 1):
+        if isinstance(link, dict):
+            values.append(("evidenceLinks link %d label" % index, link.get("label")))
+    errors = []
+    for label, value in values:
+        if not isinstance(value, str):
+            continue
+        errors.extend(plain_product_language_errors(value, label))
+    return errors
+
+
+def _validate_builds(errors, package):
+    builds = package.get("builds")
+    if not isinstance(builds, list) or not 2 <= len(builds) <= 8:
+        errors.append("priority_review builds must contain two through eight queued builds")
+        return
+    seen = set()
+    for index, build in enumerate(builds, 1):
+        label = "build %d" % index
+        if not isinstance(build, dict):
+            errors.append("%s must be an object" % label)
+            continue
+        unknown = sorted(set(build) - {"id", "title", "description"})
+        if unknown:
+            errors.append("%s has unsupported field(s): %s" % (
+                label, ", ".join(unknown)))
+        item_id = build.get("id")
+        if (not isinstance(item_id, str) or not _BLOCK_RE.fullmatch(item_id) or
+                not any(char in item_id for char in "._:/#-")):
+            errors.append("%s id must be a stable queued-build id" % label)
+        elif item_id in seen:
+            errors.append("priority_review builds contains duplicate id %r" % item_id)
+        seen.add(item_id)
+        _one_line_text(errors, build, "title", "%s title" % label, 160, 4)
+        _one_line_text(errors, build, "description", "%s description" % label, 280, 12)
+
+
+def _validate_typed_card(errors, package):
+    kind = package.get("cardKind")
+    if kind is None:
+        return
+    if kind not in CARD_KINDS:
+        errors.append("cardKind must be one of %s" % ", ".join(CARD_KINDS))
+        return
+    expected_type = CARD_KIND_TYPES[kind]
+    if package.get("type") != expected_type:
+        errors.append("%s cards must use type %s" % (kind, expected_type))
+    all_kind_fields = set().union(*CARD_KIND_FIELDS.values())
+    unexpected = sorted((set(package) & all_kind_fields) - CARD_KIND_FIELDS[kind])
+    if unexpected:
+        errors.append("%s has field(s) from another card kind: %s" % (
+            kind, ", ".join(unexpected)))
+    _link_list(errors, package, "footnoteLinks", technical=True)
+
+    if kind == "idea_pick":
+        _one_line_text(errors, package, "idea", max_len=400, min_len=20)
+    elif kind == "outcome_review":
+        _one_line_text(errors, package, "userChange", max_len=500, min_len=20)
+        _link_list(errors, package, "evidenceLinks", required=True)
+        _one_line_text(
+            errors, package, "testEvidenceSummary", max_len=320, min_len=20)
+    elif kind == "risk_card":
+        _one_line_text(errors, package, "riskSubject", max_len=1200, min_len=20)
+    elif kind == "stuck_alarm":
+        _one_line_text(errors, package, "stopped", max_len=500, min_len=20)
+        _one_line_text(errors, package, "ownerAction", max_len=500, min_len=12)
+        stopped_since = package.get("stoppedSince")
+        if not isinstance(stopped_since, str):
+            errors.append("stoppedSince must be a date or timezone-aware timestamp")
+        else:
+            try:
+                if "T" in stopped_since:
+                    parsed = datetime.datetime.fromisoformat(
+                        stopped_since.replace("Z", "+00:00"))
+                    if parsed.tzinfo is None or parsed.utcoffset() is None:
+                        raise ValueError
+                else:
+                    datetime.date.fromisoformat(stopped_since)
+            except ValueError:
+                errors.append("stoppedSince must be a real date or timezone-aware timestamp")
+    elif kind == "priority_review":
+        _validate_builds(errors, package)
+
+    if kind in ("idea_pick", "outcome_review", "risk_card"):
+        options = package.get("options")
+        if isinstance(options, list):
+            for index, option in enumerate(options, 1):
+                if isinstance(option, dict):
+                    _one_line_text(
+                        errors, option, "description", "option %d description" % index,
+                        280, 12)
+    if kind == "priority_review":
+        _text(errors, package, "recommendationReason", max_len=1000, min_len=20)
+    errors.extend(_plain_language_errors(package))
+
+
 def _date_is_valid(value):
     try:
         datetime.date.fromisoformat(value)
@@ -346,14 +558,17 @@ def validate_package(package, policy, allow_board_metadata=False):
         _text(errors, package, "recommendationReason", max_len=1000, min_len=20)
         options = package.get("options")
         option_ids = []
-        if not isinstance(options, list) or not 2 <= len(options) <= 3:
+        is_priority_review = package.get("cardKind") == "priority_review"
+        if is_priority_review and options is not None:
+            errors.append("priority_review must not contain decision options")
+        elif not is_priority_review and (not isinstance(options, list) or not 2 <= len(options) <= 3):
             errors.append("decision options must contain exactly 2 or 3 choices")
-        else:
+        elif not is_priority_review:
             for index, option in enumerate(options, 1):
                 if not isinstance(option, dict):
                     errors.append("option %d must be an object" % index)
                     continue
-                unknown_option = sorted(set(option) - {"id", "label", "tradeoff"})
+                unknown_option = sorted(set(option) - {"id", "label", "tradeoff", "description"})
                 if unknown_option:
                     errors.append("option %d has unsupported field(s): %s" % (
                         index, ", ".join(unknown_option)))
@@ -363,11 +578,19 @@ def validate_package(package, policy, allow_board_metadata=False):
                 else:
                     option_ids.append(option_id)
                 _text(errors, option, "label", "option %d label" % index, 160, 2)
-                _text(errors, option, "tradeoff", "option %d tradeoff" % index, 500, 12)
+                if package.get("cardKind") in (
+                        "idea_pick", "outcome_review", "risk_card"):
+                    if "tradeoff" in option:
+                        errors.append(
+                            "typed card options use description instead of tradeoff")
+                else:
+                    _text(errors, option, "tradeoff", "option %d tradeoff" % index, 500, 12)
             if len(option_ids) != len(set(option_ids)):
                 errors.append("decision option ids must be unique")
-        if package.get("recommendedOption") not in option_ids:
+        if not is_priority_review and package.get("recommendedOption") not in option_ids:
             errors.append("recommendedOption must name one of the option ids")
+        if is_priority_review and "recommendedOption" in package:
+            errors.append("priority_review must not contain recommendedOption")
         for field in ("instruction", "completionProof", "proofCommand", "proofExpect", "estimateMinutes"):
             if field in package:
                 errors.append("decision must not contain %s" % field)
@@ -391,6 +614,7 @@ def validate_package(package, policy, allow_board_metadata=False):
 
     if title is not None and re.sub(r"\s+", " ", title.lower()) in ("tbd", "question", "owner ask"):
         errors.append("title is too vague for the decision surface")
+    _validate_typed_card(errors, package)
     return errors
 
 
@@ -458,3 +682,106 @@ def build_action(common, instruction, proof, minutes, proof_command=None, proof_
     if proof_expect is not None:
         common["proofExpect"] = proof_expect.strip()
     return common
+
+
+def _typed_options(raw_options):
+    return [
+        {"id": option_id.strip(), "label": label.strip(), "description": description.strip()}
+        for option_id, label, description in raw_options
+    ]
+
+
+def _with_links(package, evidence_links=None, footnote_links=None):
+    if evidence_links is not None:
+        package["evidenceLinks"] = [
+            {"label": label.strip(), "href": href.strip()}
+            for label, href in evidence_links
+        ]
+    if footnote_links:
+        package["footnoteLinks"] = [
+            {"label": label.strip(), "href": href.strip()}
+            for label, href in footnote_links
+        ]
+    return package
+
+
+def _build_typed_decision(common, card_kind, question, raw_options,
+                          recommend, recommend_why):
+    options = _typed_options(raw_options)
+    common.update({
+        "cardKind": card_kind,
+        "question": question.strip(),
+        "options": options,
+        "recommendedOption": recommend.strip(),
+        "recommendationReason": recommend_why.strip(),
+    })
+    rendered = ["%s: %s — %s" % (
+        option["id"], option["label"], option["description"])
+        for option in options]
+    common["ask"] = "%s Options: %s Recommendation: %s — %s" % (
+        question.strip(), "; ".join(rendered), recommend.strip(),
+        recommend_why.strip())
+    return common
+
+
+def build_idea_pick(common, idea, question, raw_options, recommend,
+                    recommend_why, footnote_links=None):
+    package = _build_typed_decision(
+        common, "idea_pick", question, raw_options, recommend, recommend_why)
+    package["idea"] = idea.strip()
+    return _with_links(package, footnote_links=footnote_links)
+
+
+def build_outcome_review(common, user_change, evidence_links,
+                         test_evidence_summary, question, raw_options,
+                         recommend, recommend_why, footnote_links=None):
+    package = _build_typed_decision(
+        common, "outcome_review", question, raw_options, recommend, recommend_why)
+    package.update({
+        "userChange": user_change.strip(),
+        "testEvidenceSummary": test_evidence_summary.strip(),
+    })
+    return _with_links(package, evidence_links=evidence_links,
+                       footnote_links=footnote_links)
+
+
+def build_risk_card(common, risk_subject, question, raw_options,
+                    recommend, recommend_why, footnote_links=None):
+    package = _build_typed_decision(
+        common, "risk_card", question, raw_options, recommend, recommend_why)
+    package["riskSubject"] = risk_subject.strip()
+    return _with_links(package, footnote_links=footnote_links)
+
+
+def build_stuck_alarm(common, stopped, stopped_since, owner_action,
+                      footnote_links=None):
+    build_action(
+        common,
+        owner_action,
+        "The owner recorded whether the stopped product process was handled.",
+        1,
+    )
+    common.update({
+        "cardKind": "stuck_alarm",
+        "stopped": stopped.strip(),
+        "stoppedSince": stopped_since.strip(),
+        "ownerAction": owner_action.strip(),
+    })
+    return _with_links(common, footnote_links=footnote_links)
+
+
+def build_priority_review(common, question, builds, recommend_why,
+                          footnote_links=None):
+    common.update({
+        "cardKind": "priority_review",
+        "question": question.strip(),
+        "builds": [
+            {"id": item_id.strip(), "title": title.strip(),
+             "description": description.strip()}
+            for item_id, title, description in builds
+        ],
+        "recommendationReason": recommend_why.strip(),
+        "ask": "%s The listed order is recommended: %s" % (
+            question.strip(), recommend_why.strip()),
+    })
+    return _with_links(common, footnote_links=footnote_links)

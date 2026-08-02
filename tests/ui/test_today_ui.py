@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 HTML = ROOT / "app" / "static" / "index.html"
 JS = ROOT / "app" / "static" / "app.js"
 CSS = ROOT / "app" / "static" / "app.css"
+SERVER = ROOT / "app" / "server.py"
 DECK_MARKER = "/* Decision deck */"
 
 
@@ -78,6 +79,37 @@ class TodayUIContractTests(unittest.TestCase):
             self.assertIn(required, deck_rules)
         self.assertNotIn(".undo-bar", deck_rules)
         self.assertNotIn("#undo-timer", deck_rules)
+
+    def test_owner_summary_is_production_first_and_test_site_failure_is_neutral(self):
+        script = JS.read_text(encoding="utf-8")
+        style = CSS.read_text(encoding="utf-8")
+        server = SERVER.read_text(encoding="utf-8")
+        summary = script[script.index("function renderOwnerTodaySummary()"):
+                         script.index("function renderToday()")]
+        today = script[script.index("function renderToday()"):
+                       script.index("function renderChanges()")]
+        self.assertLess(today.index("renderOwnerTodaySummary()"), today.index("metaAlerts"))
+        for required in (
+                "production-health", "owner-card-count-list", "owner-pipeline-stages",
+                "Ideas waiting on pick", "Being specced", "Being built",
+                "On the test site", "Shipped to production"):
+            self.assertIn(required, summary + style + server)
+        failing_rule = style[style.index(".owner-pipeline-stage[data-stage"):
+                             style.index(".ledger-section", style.index(".owner-pipeline-stage[data-stage"))]
+        self.assertIn("var(--line)", failing_rule)
+        self.assertNotIn("var(--danger)", failing_rule)
+        self.assertIn(".owner-pipeline-stage.tone-alarm", style)
+
+    def test_typed_deck_shows_product_evidence_recommendation_and_rollback(self):
+        deck = (ROOT / "app" / "static" / "deck.js").read_text(encoding="utf-8")
+        render = deck[deck.index("function renderCard()"):
+                      deck.index("function primaryAction")]
+        self.assertIn("Test evidence:", render)
+        self.assertIn("Product evidence", render)
+        self.assertIn("Recommendation:", render)
+        self.assertIn("Rollback:", render)
+        self.assertLess(render.index("Product evidence"),
+                        render.index("Technical drill-down"))
 
     def test_decision_deck_uses_the_shared_native_scale_and_large_layout_hooks(self):
         style = CSS.read_text(encoding="utf-8")

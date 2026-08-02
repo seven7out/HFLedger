@@ -222,6 +222,33 @@ def _apply_owner_decision_event(board, entry, line, config, applied, warnings):
         if selected not in option_ids:
             raise ValueError("ledger line %d selectedOption %r is not on decision %s" % (
                 line, selected, extra["id"]))
+    priority_order = extra.get("priorityOrder")
+    killed_item_ids = extra.get("killedItemIds")
+    if priority_order is not None or killed_item_ids is not None:
+        if item.get("cardKind") != "priority_review":
+            raise ValueError(
+                "ledger line %d priority ordering is only valid for priority_review" % line)
+        declared_ids = [build.get("id") for build in item.get("builds", [])
+                        if isinstance(build, dict)]
+        supplied_ids = list(priority_order or []) + list(killed_item_ids or [])
+        if (len(supplied_ids) != len(declared_ids) or
+                set(supplied_ids) != set(declared_ids)):
+            raise ValueError(
+                "ledger line %d priority review outcome must partition every listed build" % line)
+        queue = board.setdefault("queue", [])
+        by_id = {queue_item.get("id"): queue_item for queue_item in queue
+                 if isinstance(queue_item, dict)}
+        missing = [item_id for item_id in declared_ids if item_id not in by_id]
+        if missing:
+            raise ValueError(
+                "ledger line %d priority review references missing queue item(s): %s" % (
+                    line, ", ".join(missing)))
+        for item_id in killed_item_ids or []:
+            by_id[item_id]["status"] = "Parked"
+        ordered = [by_id[item_id] for item_id in priority_order or []]
+        ordered_ids = set(priority_order or [])
+        queue[:] = ordered + [queue_item for queue_item in queue
+                              if queue_item.get("id") not in ordered_ids]
     tombstone = items.pop(index)
     tombstone.pop("snoozedUntil", None)
     tombstone.pop("snoozeReason", None)
@@ -239,6 +266,9 @@ def _apply_owner_decision_event(board, entry, line, config, applied, warnings):
     })
     if selected is not None:
         tombstone["selectedOption"] = selected
+    if priority_order is not None:
+        tombstone["priorityOrder"] = list(priority_order)
+        tombstone["killedItemIds"] = list(killed_item_ids or [])
     decisions.setdefault("resolved", []).append(tombstone)
     applied.append("decision_resolved: %s" % extra["id"])
     return True

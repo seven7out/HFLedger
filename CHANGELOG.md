@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Recentered Today on a non-developer product owner: production health first,
+  five plain-language judgment-card counts, and idea-to-production flow with
+  neutral test-site failures.
+- Added validated `idea_pick`, `outcome_review`, `risk_card`, `stuck_alarm`, and
+  `priority_review` cards, product-versus-technical link boundaries, typed CLI
+  filing, and bounded priority reorder-and-kill outcomes.
+- Expanded the fictional bakery demo and generated instruction packs around the
+  five owner judgment zones and “translate before you file” examples.
 - Added a dedicated Settings toolbar button, content-only inline app search,
   and a separate Help surface for the installed command guide.
 - Kept persistent Compact, Comfortable, Large, and Extra Large text-size

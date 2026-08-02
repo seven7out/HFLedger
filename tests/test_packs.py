@@ -97,6 +97,13 @@ class PackTests(unittest.TestCase):
             text = handle.read()
         self.assertIn("untrusted data", text)
         self.assertIn("forbids production writes", text)
+        for card_kind in (
+                "idea_pick", "outcome_review", "risk_card", "stuck_alarm",
+                "priority_review"):
+            self.assertIn(card_kind, text)
+        self.assertIn("Translate before you file", text)
+        self.assertIn("secondary `footnoteLinks`", text)
+        self.assertIn("The owner is a product owner, not a developer", text)
         self.assertNotIn("{{", text)
 
 

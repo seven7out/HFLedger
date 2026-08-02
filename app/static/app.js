@@ -885,9 +885,50 @@ function renderRunGroup(group, { allChanges = false } = {}) {
   return wrapper;
 }
 
+function renderOwnerTodaySummary() {
+  const model = state.data?.ownerToday;
+  if (!model) return null;
+  const wrap = node("section", "owner-today-summary");
+  wrap.setAttribute("aria-label", "Product owner summary");
+
+  const health = node("div", `production-health is-${model.productionHealth?.state || "degraded"}`);
+  health.setAttribute("role", "status");
+  health.append(
+    node("span", "production-health-dot", "●"),
+    node("strong", "", model.productionHealth?.line || "Degraded — Production health is unavailable."),
+  );
+  wrap.append(health);
+
+  const cards = node("div", "owner-card-counts");
+  cards.append(node("p", "owner-summary-label", `${model.totalCards || 0} awaiting your judgment`));
+  const cardList = node("div", "owner-card-count-list");
+  (model.cardCounts || []).forEach((card) => {
+    const item = node("div", `owner-card-count kind-${card.kind}`);
+    item.append(node("strong", "", card.count || 0), node("span", "", card.label));
+    cardList.append(item);
+  });
+  cards.append(cardList);
+  wrap.append(cards);
+
+  const flow = node("div", "owner-pipeline");
+  flow.append(node("p", "owner-summary-label", "Product flow"));
+  const stages = node("div", "owner-pipeline-stages");
+  (model.pipeline || []).forEach((stage) => {
+    const item = node("div", `owner-pipeline-stage tone-${stage.tone || "neutral"} state-${stage.state || "normal"}`);
+    item.append(node("strong", "", stage.count || 0), node("span", "", stage.label));
+    if (stage.note) item.append(node("small", "", stage.note));
+    stages.append(item);
+  });
+  flow.append(stages);
+  wrap.append(flow);
+  return wrap;
+}
+
 function renderToday() {
   const orientation = state.orientation;
   const fragment = document.createDocumentFragment();
+  const ownerSummary = renderOwnerTodaySummary();
+  if (ownerSummary) fragment.append(ownerSummary);
   const alerts = orientation.coverage?.metaAlerts || [];
   if (alerts.length || orientation.coverage?.screen?.state === "invalid") {
     const list = node("div", "ledger-list");

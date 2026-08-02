@@ -345,7 +345,8 @@ def decision_resolution_errors(entry, config):
         errors.append("decision resolution extra must be an object")
         return list(dict.fromkeys(errors))
     unknown = sorted(set(extra) - {
-        "schemaVersion", "id", "resolution", "evidence", "selectedOption"})
+        "schemaVersion", "id", "resolution", "evidence", "selectedOption",
+        "priorityOrder", "killedItemIds"})
     if unknown:
         errors.append("decision resolution extra has unsupported field(s): %s" % ", ".join(unknown))
     if extra.get("schemaVersion") != OWNER_UI_SCHEMA_VERSION:
@@ -361,6 +362,26 @@ def decision_resolution_errors(entry, config):
     selected = extra.get("selectedOption")
     if selected is not None and (not isinstance(selected, str) or not _OPTION_RE.fullmatch(selected)):
         errors.append("decision resolution selectedOption is invalid")
+    priority_order = extra.get("priorityOrder")
+    killed = extra.get("killedItemIds")
+    if priority_order is not None or killed is not None:
+        if selected is not None:
+            errors.append("priority review resolution must not contain selectedOption")
+        for field, value, allow_empty in (
+                ("priorityOrder", priority_order, False),
+                ("killedItemIds", killed, True)):
+            if (not isinstance(value, list) or (not allow_empty and not value) or
+                    len(value) > 8):
+                errors.append("decision resolution %s must be a bounded id list" % field)
+                continue
+            if any(not isinstance(item_id, str) or not _ID_RE.fullmatch(item_id)
+                   for item_id in value):
+                errors.append("decision resolution %s contains an invalid id" % field)
+            if len(value) != len(set(value)):
+                errors.append("decision resolution %s contains duplicate ids" % field)
+        if isinstance(priority_order, list) and isinstance(killed, list):
+            if set(priority_order) & set(killed):
+                errors.append("priorityOrder and killedItemIds must be disjoint")
     return list(dict.fromkeys(errors))
 
 

@@ -1,9 +1,10 @@
 # Local reference interface
 
-HFLedger is a quiet ledger browser for work spread across agent runtimes. Its
-primary check-in loop is:
+HFLedger governs the interrupt channel between agents and a product owner who
+is not expected to evaluate code. Its primary check-in loop is:
 
-> What changed since I last looked, and what needs me now?
+> Is production healthy, what product judgment needs me, and where is work in
+> the path from idea to production?
 
 The loopback service serves a Mac-oriented Today browser and the existing
 phone-sized Decision Deck from the same validated board and append-only ledger.
@@ -41,13 +42,32 @@ The sidebar order is fixed:
 6. Projects
 7. coverage footer
 
-Today is ordered by consequence, not by a weighted score:
+Today starts with the owner model in this exact order:
 
-1. one coverage meta-alert when a global observation gap invalidates the view;
+1. one plain production-health line: **Healthy**, or **Degraded** with a
+   one-sentence product reason;
+2. cards awaiting the owner, grouped as idea picks, production outcomes, risk
+   judgments, agent blockers, and priority reviews; and
+3. product flow: **Ideas waiting on pick → Being specced → Being built → On the
+   test site → Shipped to production**.
+
+The test site is a proving ground and is explicitly allowed to break. A failure
+there keeps neutral styling and says “Allowed to break.” Only production
+degradation uses alarm styling.
+
+Below that summary, Today remains ordered by consequence rather than a weighted
+score:
+
+1. one coverage meta-alert when a global observation gap invalidates the
+   evidence view;
 2. at most seven ranked attention rows;
 3. changes since the last successful visit, grouped by exact run id;
 4. at most three quiet-while-observed concerns; and
 5. a link to parked or unobserved work in All Work.
+
+The five owner card kinds are defined in [`owner-model.md`](owner-model.md).
+Primary card fields are plain product language. Implementation-shaped material
+is available only through secondary `footnoteLinks` or the evidence inspector.
 
 Every item has exactly one primary home, in this precedence order:
 
@@ -142,10 +162,11 @@ Today can open one named authoritative source. For an admitted owner decision,
 that action is **Open Decision Deck**. Today does not reproduce Answer, Resolve,
 Complete, Skip, reorder, merge, or deploy controls.
 
-The Decision Deck continues to support decision choice, recommendation
-acceptance, need-more-info, authoritative snooze, manual-action completion or
-skip, and digest-bound decision undo where safe. Its existing mutation routes
-remain separate from the private local-state routes.
+The Decision Deck supports prepared product choices, recommendation acceptance,
+need-more-info, authoritative snooze, stuck-alarm completion or skip, and
+bounded priority-review reorder-and-kill outcomes. Product evidence links are
+visible on outcome reviews; technical footnotes remain secondary. Existing
+mutation routes remain separate from private local-state routes.
 
 Set `ui.readOnly` to `true` for observer or imported-snapshot workspaces. The
 service still returns validated orientation and local presentation state, while
