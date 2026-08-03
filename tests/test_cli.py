@@ -96,6 +96,27 @@ class CliTests(unittest.TestCase):
             "--recommend-why", "A single calm reminder helps customers without making the experience noisy.",
         ]
 
+    def stuck_card_args(self):
+        return [
+            "ask", "card", "stuck_alarm",
+            "--key", "cli:card:menu-refresh",
+            "--title", "The daily bakery menu refresh stopped",
+            "--blocks", "task:bakery:menu-refresh",
+            "--gate", "production-manual",
+            "--human-reason", "The product owner decides whether any non-technical follow-up is useful.",
+            "--blocked-outcome", "Customers may continue seeing yesterday's fictional bakery menu.",
+            "--risk", "Customers could choose an item that is not available today.",
+            "--risk-level", "medium",
+            "--reversibility", "reversible",
+            "--rollback", "Restore the last known accurate fictional menu.",
+            "--work-done", "Agents detected the stopped refresh and began a bounded recovery attempt.",
+            "--source", "fictional bakery product monitor",
+            "--priority", "P1",
+            "--stopped", "The fictional bakery menu stopped refreshing for customers.",
+            "--stopped-since", "2026-08-02",
+            "--owner-action", "No action needed",
+        ]
+
     def test_help_is_available_for_every_command(self):
         commands = (
             ["--help"], ["init", "--help"], ["ask", "--help"],
@@ -120,6 +141,15 @@ class CliTests(unittest.TestCase):
         self.assertEqual(package["options"][0]["description"],
                          "Show one calm reminder near the end of the pickup window.")
         filed = self.run_cli(self.idea_card_args())
+        self.assertEqual(filed.returncode, 0, filed.stderr)
+
+    def test_stuck_alarm_accepts_documented_no_action_needed_response(self):
+        dry_run = self.run_cli(self.stuck_card_args() + ["--dry-run"])
+        self.assertEqual(dry_run.returncode, 0, dry_run.stderr)
+        package = json.loads(dry_run.stdout)["package"]
+        self.assertEqual(package["ownerAction"], "No action needed")
+        self.assertGreaterEqual(len(package["instruction"]), 20)
+        filed = self.run_cli(self.stuck_card_args())
         self.assertEqual(filed.returncode, 0, filed.stderr)
 
     def test_search_command_projects_registered_workspaces_through_one_engine(self):

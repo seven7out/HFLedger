@@ -10,6 +10,9 @@
   filing, and bounded priority reorder-and-kill outcomes.
 - Expanded the fictional bakery demo and generated instruction packs around the
   five owner judgment zones and “translate before you file” examples.
+- Made the owner-model rollout compatible with earlier generated board counts,
+  narrowed technical-copy detection to explicit code context, validated link
+  fields on legacy asks, and hardened typed-card edge cases.
 - Added a dedicated Settings toolbar button, content-only inline app search,
   and a separate Help surface for the installed command guide.
 - Kept persistent Compact, Comfortable, Large, and Extra Large text-size

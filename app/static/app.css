@@ -584,8 +584,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .owner-pipeline-stage small { margin-top: 4px; color: var(--subtle); font-size: 9px; line-height: 12px; }
 .owner-pipeline-stage.tone-healthy { border-color: color-mix(in srgb, var(--success) 28%, var(--line)); }
 .owner-pipeline-stage.tone-alarm { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); background: color-mix(in srgb, var(--danger) 7%, var(--content)); }
-.owner-pipeline-stage[data-stage="test-site"],
-.owner-pipeline-stage.state-failing { color: var(--ink); border-color: var(--line); background: color-mix(in srgb, var(--ink) 2%, var(--content)); }
+.owner-pipeline-stage[data-stage="test-site"] { color: var(--ink); border-color: var(--line); background: color-mix(in srgb, var(--ink) 2%, var(--content)); }
 
 .ledger-section { border-bottom: 1px solid var(--line); }
 .section-heading {

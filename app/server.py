@@ -681,6 +681,9 @@ def answer_card(runtime, body):
                     400, "priority review cards support submit, need-info, or snooze")
             priority_order = body.get("priorityOrder")
             killed = body.get("killedItemIds")
+            if not isinstance(priority_order, list) or not isinstance(killed, list):
+                raise ApiError(
+                    400, "priority review ordering must use priorityOrder and killedItemIds lists")
             resolve_body = dict(body)
             resolve_body.update({
                 "priorityOrder": priority_order,

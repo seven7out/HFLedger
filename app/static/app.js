@@ -915,6 +915,7 @@ function renderOwnerTodaySummary() {
   const stages = node("div", "owner-pipeline-stages");
   (model.pipeline || []).forEach((stage) => {
     const item = node("div", `owner-pipeline-stage tone-${stage.tone || "neutral"} state-${stage.state || "normal"}`);
+    item.dataset.stage = stage.id;
     item.append(node("strong", "", stage.count || 0), node("span", "", stage.label));
     if (stage.note) item.append(node("small", "", stage.note));
     stages.append(item);

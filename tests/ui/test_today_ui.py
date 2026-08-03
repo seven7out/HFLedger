@@ -96,8 +96,10 @@ class TodayUIContractTests(unittest.TestCase):
             self.assertIn(required, summary + style + server)
         failing_rule = style[style.index(".owner-pipeline-stage[data-stage"):
                              style.index(".ledger-section", style.index(".owner-pipeline-stage[data-stage"))]
+        self.assertIn("item.dataset.stage = stage.id", summary)
         self.assertIn("var(--line)", failing_rule)
         self.assertNotIn("var(--danger)", failing_rule)
+        self.assertNotIn(".state-failing", failing_rule)
         self.assertIn(".owner-pipeline-stage.tone-alarm", style)
 
     def test_typed_deck_shows_product_evidence_recommendation_and_rollback(self):

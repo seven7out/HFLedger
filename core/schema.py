@@ -390,7 +390,8 @@ def validate(board, config):
                         "meta.productionHealth.summary must be one non-empty line up to 240 characters")
                 else:
                     errors.extend(admission.plain_product_language_errors(
-                        summary, "meta.productionHealth.summary"))
+                        summary, "meta.productionHealth.summary",
+                        footnote_links_available=False))
         cursor = meta.get("ledgerCursor")
         if not isinstance(cursor, dict):
             errors.append("meta.ledgerCursor must be an object")
@@ -532,7 +533,13 @@ def validate(board, config):
                                 resolution_line < 1 or not _valid_digest(resolution_digest)):
                             errors.append("%s has invalid resolutionLedgerProvenance" % location)
 
-    if board.get("statusCounts") != compute_status_counts(board):
+    stored_status_counts = board.get("statusCounts")
+    expected_status_counts = compute_status_counts(board)
+    if (isinstance(stored_status_counts, dict) and
+            "cardKinds" not in stored_status_counts):
+        expected_status_counts = dict(expected_status_counts)
+        expected_status_counts.pop("cardKinds")
+    if stored_status_counts != expected_status_counts:
         errors.append("statusCounts is stale; regenerate it through the single writer")
     changelog = board.get("changelog")
     if isinstance(changelog, dict) and not isinstance(changelog.get("entries"), list):

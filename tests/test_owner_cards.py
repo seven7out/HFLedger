@@ -1,9 +1,12 @@
 import copy
+import json
+import os
+import subprocess
 import unittest
 
 from app import server
 from core import admission, ledger, reconcile, schema, store
-from tests.helpers import load_board, new_home
+from tests.helpers import CLI, load_board, new_home
 
 
 class OwnerCardTests(unittest.TestCase):
@@ -145,6 +148,65 @@ class OwnerCardTests(unittest.TestCase):
         valid = self.packages()["outcome_review"]
         self.assertEqual(admission.validate_package(valid, self.policy), [])
 
+    def test_ordinary_product_language_is_not_mistaken_for_code(self):
+        sentences = (
+            "Customers can check their order status.",
+            "The bakery served 1234567 orders in its first seven years.",
+            "The storefront was defaced overnight.",
+            "The downtown branch is serving customers normally.",
+            "The team acceded to the customer request.",
+        )
+        for sentence in sentences:
+            self.assertEqual(
+                admission.plain_product_language_errors(sentence), [], sentence)
+        board = schema.default_board()
+        board["meta"]["productionHealth"] = {
+            "state": "healthy",
+            "summary": "The downtown branch is serving customers normally.",
+        }
+        schema.refresh_generated(board)
+        self.assertEqual(schema.validate(board, self.config)[0], [])
+
+    def test_explicit_code_shapes_are_rejected_from_primary_card_copy(self):
+        examples = (
+            ("Traceback (most recent call last): the customer preview could not load.",
+             "stack trace"),
+            ("Review branch feature/pickup-window before the customer preview.",
+             "branch"),
+            ("The workflow `release-check` covers the customer preview.",
+             "check name"),
+        )
+        for text, shape in examples:
+            errors = admission.plain_product_language_errors(text)
+            self.assertTrue(any(shape in error for error in errors), errors)
+
+    def test_legacy_link_fields_receive_link_validation(self):
+        legacy = admission.build_decision(
+            self.common("idea_pick", "legacy:fictional:unsafe-link"),
+            "Which bakery reminder should customers see during pickup?",
+            [
+                ("gentle", "Gentle reminder", "Helpful without adding noise during pickup."),
+                ("none", "No reminder", "Keeps the current quiet pickup experience."),
+            ],
+            "gentle",
+            "A calm reminder gives customers useful timing without adding much noise.",
+        )
+        cases = (
+            ("footnoteLinks", [{"label": "Unsafe detail", "href": "javascript:alert(1)"}]),
+            ("evidenceLinks", [{"label": "Unsafe detail", "href": "data:text/plain,example"}]),
+            ("footnoteLinks", [{"label": "Control detail", "href": "https://example.invalid/\x01"}]),
+            ("footnoteLinks", [
+                {"label": "Product detail %d" % index,
+                 "href": "https://example.invalid/evidence/%d" % index}
+                for index in range(9)
+            ]),
+        )
+        for field, links in cases:
+            package = copy.deepcopy(legacy)
+            package[field] = links
+            errors = admission.validate_package(package, self.policy)
+            self.assertTrue(errors, (field, links))
+
     def test_one_line_product_descriptions_and_bounded_priority_builds(self):
         idea = self.packages()["idea_pick"]
         idea["options"][0]["description"] = "First line\nSecond line"
@@ -162,6 +224,30 @@ class OwnerCardTests(unittest.TestCase):
         self.assertEqual(board["statusCounts"]["cardKinds"], {
             kind: 1 for kind in admission.CARD_KINDS
         })
+
+    def test_previous_release_board_opens_validates_and_reconciles(self):
+        board_path = os.path.join(self.temp.name, "board.json")
+        board = load_board(self.temp.name)
+        board["meta"].pop("productionHealth")
+        board["statusCounts"].pop("cardKinds")
+        with open(board_path, "w", encoding="utf-8") as handle:
+            json.dump(board, handle, indent=2)
+            handle.write("\n")
+
+        for command in ("validate", "reconcile"):
+            result = subprocess.run(
+                [CLI, "--home", self.temp.name, command],
+                capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+        runtime = server.Runtime(self.temp.name)
+        today = server.build_board_view(runtime)["ownerToday"]
+        self.assertEqual(today["productionHealth"]["state"], "degraded")
+        self.assertEqual(len(today["cardCounts"]), 5)
+        self.assertEqual([stage["id"] for stage in today["pipeline"]], [
+            "ideas-waiting-on-pick", "being-specced", "being-built",
+            "test-site", "production",
+        ])
 
     def test_today_card_counts_exclude_future_snoozes(self):
         board = schema.default_board()
@@ -275,6 +361,30 @@ class OwnerCardTests(unittest.TestCase):
             "task:bakery:pickup-window",
         ])
         self.assertEqual(resolved["killedItemIds"], ["task:bakery:seasonal-banner"])
+
+    def test_priority_review_rejects_malformed_ordering_with_a_400(self):
+        package = self.packages()["priority_review"]
+
+        def seed(board):
+            board["queue"] = [
+                {"id": build["id"], "title": build["title"],
+                 "status": "Ready for Build"}
+                for build in package["builds"]
+            ]
+
+        store.BoardStore(self.temp.name, config=self.config).update(seed)
+        ledger.append_ask(package, self.temp.name, self.config)
+        reconcile.reconcile(self.temp.name, config=self.config)
+        runtime = server.Runtime(self.temp.name)
+        card = server.build_cards_view(runtime)["cards"][0]
+        for priority_order in (5, [{}]):
+            with self.assertRaises(server.ApiError) as raised:
+                server.answer_card(runtime, {
+                    "id": card["id"], "srcHash": card["srcHash"],
+                    "action": "priority-submit", "priorityOrder": priority_order,
+                    "killedItemIds": [],
+                })
+            self.assertEqual(raised.exception.status, 400)
 
 
 if __name__ == "__main__":

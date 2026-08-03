@@ -68,29 +68,35 @@ _CODE_SHAPED_PATTERNS = (
     ("diff", re.compile(r"(?:\bgit\s+diff\b|\bdiff\s+--git\b|@@\s+-\d+)", re.I)),
     ("pull request", re.compile(r"(?:\bpull\s+request\b|\bPR\s*#?\d+\b)", re.I)),
     ("commit", re.compile(
-        r"(?:\bcommits\b|\bcommit\s+list\b|\bcommit\s+[0-9a-f]{7,40}\b|\b[0-9a-f]{7,40}\b)",
+        r"(?:\bcommit\s+list\b|\b(?:commit|revision|sha)\s+[`'\"]?[0-9a-f]{7,40}\b)",
         re.I)),
     ("branch", re.compile(
-        r"(?:\bbranch(?:es)?\b|\b(?:feature|fix|release|agent|build)/[a-z0-9._/-]+\b)",
+        r"(?:\bbranch(?:es)?\s+[`'\"]?[a-z0-9._-]+/[a-z0-9._/-]+\b|\b(?:feature|fix|release|agent|build)/[a-z0-9._/-]+\b)",
         re.I)),
     ("check name", re.compile(
-        r"(?:\b(?:CI|workflow|check)\s+[`'\"]?[a-z0-9_.:/-]+|\b(?:test|check)_[a-z0-9_]+\b)",
+        r"(?:\b(?:CI|workflow|check)\s+(?:[`'\"][^`'\"\r\n]+[`'\"]|[a-z0-9]+(?:[_.:/-][a-z0-9]+)+)|\b(?:test|check)_[a-z0-9_]+\b)",
         re.I)),
     ("file path", re.compile(
         r"(?:^|[\s`])(?:[a-z0-9_.-]+/)+[a-z0-9_.-]+\.(?:py|js|ts|rs|go|java|rb|sh|json|ya?ml|toml|css|html)(?:\b|`)",
         re.I)),
+    ("stack trace", re.compile(
+        r"(?:\bTraceback \(most recent call last\):|(?:^|\n)\s+at\s+\S+\s+\(\S+:\d+:\d+\))",
+        re.I)),
 )
 
 
-def plain_product_language_errors(value, label="text"):
+def plain_product_language_errors(value, label="text", footnote_links_available=True):
     """Reject implementation-shaped prose from a primary owner surface."""
     if not isinstance(value, str):
         return []
     for shape, pattern in _CODE_SHAPED_PATTERNS:
         if pattern.search(value):
+            guidance = ("; put technical drill-down in footnoteLinks"
+                        if footnote_links_available
+                        else "; keep technical drill-down out of this field")
             return [
-                "%s must use plain product language, not a %s; put technical drill-down in footnoteLinks"
-                % (label, shape)
+                "%s must use plain product language, not a %s%s"
+                % (label, shape, guidance)
             ]
     return []
 
@@ -367,6 +373,9 @@ def _validate_builds(errors, package):
 
 def _validate_typed_card(errors, package):
     kind = package.get("cardKind")
+    _link_list(errors, package, "footnoteLinks", technical=True)
+    _link_list(
+        errors, package, "evidenceLinks", required=kind == "outcome_review")
     if kind is None:
         return
     if kind not in CARD_KINDS:
@@ -380,13 +389,10 @@ def _validate_typed_card(errors, package):
     if unexpected:
         errors.append("%s has field(s) from another card kind: %s" % (
             kind, ", ".join(unexpected)))
-    _link_list(errors, package, "footnoteLinks", technical=True)
-
     if kind == "idea_pick":
         _one_line_text(errors, package, "idea", max_len=400, min_len=20)
     elif kind == "outcome_review":
         _one_line_text(errors, package, "userChange", max_len=500, min_len=20)
-        _link_list(errors, package, "evidenceLinks", required=True)
         _one_line_text(
             errors, package, "testEvidenceSummary", max_len=320, min_len=20)
     elif kind == "risk_card":
@@ -755,9 +761,12 @@ def build_risk_card(common, risk_subject, question, raw_options,
 
 def build_stuck_alarm(common, stopped, stopped_since, owner_action,
                       footnote_links=None):
+    instruction = owner_action.strip()
+    if len(instruction) < 20:
+        instruction = "Owner response: %s" % instruction
     build_action(
         common,
-        owner_action,
+        instruction,
         "The owner recorded whether the stopped product process was handled.",
         1,
     )

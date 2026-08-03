@@ -374,12 +374,16 @@ def decision_resolution_errors(entry, config):
                     len(value) > 8):
                 errors.append("decision resolution %s must be a bounded id list" % field)
                 continue
-            if any(not isinstance(item_id, str) or not _ID_RE.fullmatch(item_id)
-                   for item_id in value):
+            valid_ids = all(
+                isinstance(item_id, str) and _ID_RE.fullmatch(item_id)
+                for item_id in value)
+            if not valid_ids:
                 errors.append("decision resolution %s contains an invalid id" % field)
-            if len(value) != len(set(value)):
+            elif len(value) != len(set(value)):
                 errors.append("decision resolution %s contains duplicate ids" % field)
-        if isinstance(priority_order, list) and isinstance(killed, list):
+        if (isinstance(priority_order, list) and isinstance(killed, list) and
+                all(isinstance(item_id, str)
+                    for item_id in priority_order + killed)):
             if set(priority_order) & set(killed):
                 errors.append("priorityOrder and killedItemIds must be disjoint")
     return list(dict.fromkeys(errors))
