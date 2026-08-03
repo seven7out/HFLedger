@@ -326,17 +326,23 @@ def _plain_language_errors(package):
         "completionProof",
     )
     values = [(field, package.get(field)) for field in fields]
-    for index, option in enumerate(package.get("options", []) or [], 1):
-        if isinstance(option, dict):
-            for field in ("label", "description", "tradeoff"):
-                values.append(("option %d %s" % (index, field), option.get(field)))
-    for index, build in enumerate(package.get("builds", []) or [], 1):
-        if isinstance(build, dict):
-            for field in ("title", "description"):
-                values.append(("build %d %s" % (index, field), build.get(field)))
-    for index, link in enumerate(package.get("evidenceLinks", []) or [], 1):
-        if isinstance(link, dict):
-            values.append(("evidenceLinks link %d label" % index, link.get("label")))
+    options = package.get("options")
+    if isinstance(options, list):
+        for index, option in enumerate(options, 1):
+            if isinstance(option, dict):
+                for field in ("label", "description", "tradeoff"):
+                    values.append(("option %d %s" % (index, field), option.get(field)))
+    builds = package.get("builds")
+    if isinstance(builds, list):
+        for index, build in enumerate(builds, 1):
+            if isinstance(build, dict):
+                for field in ("title", "description"):
+                    values.append(("build %d %s" % (index, field), build.get(field)))
+    evidence_links = package.get("evidenceLinks")
+    if isinstance(evidence_links, list):
+        for index, link in enumerate(evidence_links, 1):
+            if isinstance(link, dict):
+                values.append(("evidenceLinks link %d label" % index, link.get("label")))
     errors = []
     for label, value in values:
         if not isinstance(value, str):

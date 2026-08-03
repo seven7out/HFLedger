@@ -207,6 +207,43 @@ class OwnerCardTests(unittest.TestCase):
             errors = admission.validate_package(package, self.policy)
             self.assertTrue(errors, (field, links))
 
+    def test_malformed_typed_card_collections_report_errors_without_crashing(self):
+        cases = (
+            ("idea_pick", "options"),
+            ("priority_review", "builds"),
+            ("outcome_review", "evidenceLinks"),
+        )
+        for kind, field in cases:
+            package = self.packages()[kind]
+            package[field] = 5
+            errors = admission.validate_package(package, self.policy)
+            self.assertTrue(any(field in error for error in errors), errors)
+
+    def test_malformed_typed_links_fail_closed_without_a_traceback(self):
+        board_path = os.path.join(self.temp.name, "board.json")
+        board = load_board(self.temp.name)
+        package = self.packages()["outcome_review"]
+        package["evidenceLinks"] = 5
+        board["decisions"]["items"] = [package]
+        schema.refresh_generated(board)
+        with open(board_path, "w", encoding="utf-8") as handle:
+            json.dump(board, handle, indent=2)
+            handle.write("\n")
+
+        for command in ("validate", "reconcile"):
+            result = subprocess.run(
+                [CLI, "--home", self.temp.name, command],
+                capture_output=True, text=True)
+            output = result.stdout + result.stderr
+            self.assertNotEqual(result.returncode, 0, output)
+            self.assertIn("evidenceLinks", output)
+            self.assertNotIn("Traceback", output)
+            self.assertNotIn("TypeError", output)
+
+        with self.assertRaises(store.BoardValidationError) as raised:
+            server.Runtime(self.temp.name)
+        self.assertIn("evidenceLinks", str(raised.exception))
+
     def test_one_line_product_descriptions_and_bounded_priority_builds(self):
         idea = self.packages()["idea_pick"]
         idea["options"][0]["description"] = "First line\nSecond line"

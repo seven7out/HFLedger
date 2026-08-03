@@ -19,6 +19,8 @@ model defined in [`owner-model.md`](owner-model.md).
   list. Its resolution records both the surviving order and killed ids.
 - Derive Today summary data on the server from the validated board and admitted
   cards; the browser only renders that closed projection.
+- Reject malformed typed-card collections through normal validation instead of
+  letting plain-language inspection raise an exception.
 
 ## Deviations log
 
@@ -26,7 +28,7 @@ model defined in [`owner-model.md`](owner-model.md).
 
 ## Verification log
 
-- `python3 tests/run_all.py`: 296 tests passed.
+- `python3 tests/run_all.py`: 298 tests passed.
 - `./scripts/release-check --allow-dirty`: release ready; board and ledger
   validation passed, the disposable demo exposed five cards and resolved one,
   and the external privacy gate reported its expected absence.
@@ -38,3 +40,6 @@ model defined in [`owner-model.md`](owner-model.md).
   all five card counts were legible, test-site failure remained neutral, and
   the deck presented product descriptions before technical footnotes.
 - Browser console review: no warnings or errors.
+- Independent adversarial review reproduced the previous-release upgrade and
+  all five fix areas, found one malformed-collection crash, and returned a
+  clean narrow re-review after the guarded validation fix.
