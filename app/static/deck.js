@@ -10,7 +10,16 @@ function initialContext() {
 
 const state = {
   context: initialContext(),
-  data: null, cards: [], index: 0, busy: false, pointer: null
+  data: null, cards: [], index: 0, busy: false, pointer: null,
+  priorityDrafts: new Map()
+};
+
+const CARD_KIND_LABELS = {
+  idea_pick: "Product idea",
+  outcome_review: "Production outcome",
+  risk_card: "Risk judgment",
+  stuck_alarm: "Agent blocker",
+  priority_review: "Priority review",
 };
 
 function node(tag, className, text) {
@@ -55,7 +64,9 @@ function optionButton(card, option, index) {
   const letter = node("span", "option-letter", String.fromCharCode(65 + index));
   const copy = node("span", "option-copy");
   copy.append(node("strong", "", option.label));
-  if (option.tradeoff) copy.append(node("small", "", option.tradeoff));
+  if (option.description || option.tradeoff) {
+    copy.append(node("small", "", option.description || option.tradeoff));
+  }
   const badge = node("span", "recommend-badge", option.id === card.recommendedOption ? "Recommended" : "");
   button.append(letter, copy, badge);
   button.addEventListener("click", () => answer("choose", { option: option.id }));
@@ -65,6 +76,70 @@ function optionButton(card, option, index) {
 function tool(label, action) {
   const button = node("button", "", label); button.type = "button";
   button.addEventListener("click", action); return button;
+}
+
+function appendLinks(target, links, className, heading) {
+  if (!Array.isArray(links) || !links.length) return;
+  const wrap = node("div", className);
+  wrap.append(node("strong", "", heading));
+  links.forEach((link) => {
+    const anchor = node("a", "", link.label);
+    anchor.href = link.href;
+    if (/^https?:/i.test(link.href)) {
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+    }
+    wrap.append(anchor);
+  });
+  target.append(wrap);
+}
+
+function priorityDraft(card) {
+  if (!state.priorityDrafts.has(card.id)) {
+    state.priorityDrafts.set(card.id, {
+      order: (card.builds || []).map((build) => build.id),
+      killed: new Set(),
+    });
+  }
+  return state.priorityDrafts.get(card.id);
+}
+
+function renderPriorityBuilds(target, card) {
+  const draft = priorityDraft(card);
+  const builds = new Map((card.builds || []).map((build) => [build.id, build]));
+  const list = node("div", "priority-builds");
+  draft.order.forEach((itemId, index) => {
+    const build = builds.get(itemId);
+    if (!build) return;
+    const row = node("div", `priority-build ${draft.killed.has(itemId) ? "is-killed" : ""}`);
+    const copy = node("div", "priority-build-copy");
+    copy.append(node("strong", "", build.title), node("small", "", build.description));
+    const controls = node("div", "priority-build-controls");
+    const up = tool("↑", () => {
+      if (index < 1) return;
+      [draft.order[index - 1], draft.order[index]] = [draft.order[index], draft.order[index - 1]];
+      renderCard();
+    });
+    up.setAttribute("aria-label", `Move ${build.title} earlier`);
+    up.disabled = index < 1 || draft.killed.has(itemId);
+    const down = tool("↓", () => {
+      if (index >= draft.order.length - 1) return;
+      [draft.order[index + 1], draft.order[index]] = [draft.order[index], draft.order[index + 1]];
+      renderCard();
+    });
+    down.setAttribute("aria-label", `Move ${build.title} later`);
+    down.disabled = index >= draft.order.length - 1 || draft.killed.has(itemId);
+    const kill = tool(draft.killed.has(itemId) ? "Restore" : "Kill", () => {
+      if (draft.killed.has(itemId)) draft.killed.delete(itemId);
+      else draft.killed.add(itemId);
+      renderCard();
+    });
+    kill.className = "priority-kill";
+    controls.append(up, down, kill);
+    row.append(node("span", "priority-position", String(index + 1)), copy, controls);
+    list.append(row);
+  });
+  target.append(list);
 }
 
 function renderCard() {
@@ -78,13 +153,44 @@ function renderCard() {
   $("#deck-progress").textContent = `${state.index + 1} of ${state.cards.length}`;
   const target = $("#active-card"); target.style.transform = ""; target.style.opacity = "";
   const top = node("div", "card-topline");
-  top.append(node("span", "card-kind", card.type === "action" ? "Manual action" : "Decision"),
+  top.append(node("span", "card-kind", CARD_KIND_LABELS[card.cardKind] ||
+               (card.type === "action" ? "Agent blocker" : "Product idea")),
              node("span", "card-number", `${card.priority || ""} · ${card.id.slice(-6)}`));
   const title = node("h1", "", card.title);
-  const prompt = node("p", "card-prompt", card.type === "decision" ? card.question : card.instruction);
+  const primary = card.idea || card.userChange || card.riskSubject || card.stopped ||
+    (card.type === "decision" ? card.question : card.instruction);
+  const prompt = node("p", "card-prompt", primary);
   target.replaceChildren(top, title, prompt);
+  if (card.cardKind === "stuck_alarm") {
+    target.append(node("p", "card-product-detail", `Stopped since ${card.stoppedSince}. ${card.ownerAction}`));
+  } else if (card.question && primary !== card.question) {
+    target.append(node("p", "card-product-detail", card.question));
+  }
+  if (card.cardKind === "outcome_review" && card.testEvidenceSummary) {
+    target.append(node("div", "card-test-evidence", `Test evidence: ${card.testEvidenceSummary}`));
+    appendLinks(target, card.evidenceLinks, "card-evidence-links", "Product evidence");
+  }
   if (card.riskIfWrong) target.append(node("div", "card-risk", `Why it matters: ${card.riskIfWrong}`));
-  if (card.type === "decision") {
+  if (card.cardKind === "outcome_review" && card.rollback) {
+    target.append(node("div", "card-rollback", `Rollback: ${card.rollback}`));
+  }
+  if (card.cardKind !== "priority_review" && card.recommendationReason) {
+    const recommended = (card.options || []).find((option) => option.id === card.recommendedOption);
+    const label = recommended?.label || card.recommendedOption || "Recommended path";
+    target.append(node("div", "card-recommendation", `Recommendation: ${label} — ${card.recommendationReason}`));
+  }
+  if (card.cardKind === "priority_review") {
+    if (card.recommendationReason) {
+      target.append(node("div", "card-recommendation", `Recommended order: ${card.recommendationReason}`));
+    }
+    renderPriorityBuilds(target, card);
+    const actions = node("div", "card-actions");
+    const info = node("button", "deck-button secondary", "Need more info"); info.type = "button";
+    info.addEventListener("click", () => answer("need-info"));
+    const submit = node("button", "deck-button primary", "Save priorities →"); submit.type = "button";
+    submit.addEventListener("click", () => answer("priority-submit"));
+    actions.append(info, submit); target.append(actions);
+  } else if (card.type === "decision") {
     const options = node("div", "card-options");
     (card.options || []).forEach((option, index) => options.append(optionButton(card, option, index)));
     target.append(options);
@@ -103,6 +209,7 @@ function renderCard() {
     complete.addEventListener("click", () => answer("complete"));
     actions.append(skip, complete); target.append(actions);
   }
+  appendLinks(target, card.footnoteLinks, "card-footnote-links", "Technical drill-down");
   const tools = node("div", "card-tools");
   tools.append(tool("Snooze 1 day", () => answer("snooze-1d")),
                tool("Snooze 1 week", () => answer("snooze-7d")),
@@ -110,7 +217,10 @@ function renderCard() {
   target.append(tools);
 }
 
-function primaryAction(card) { return card.type === "decision" ? "accept" : "complete"; }
+function primaryAction(card) {
+  if (card.cardKind === "priority_review") return "priority-submit";
+  return card.type === "decision" ? "accept" : "complete";
+}
 
 async function answer(action, extra = {}) {
   if (state.busy || !current()) return;
@@ -118,6 +228,13 @@ async function answer(action, extra = {}) {
   state.busy = true;
   const card = current();
   try {
+    if (action === "priority-submit") {
+      const draft = priorityDraft(card);
+      const killedItemIds = draft.order.filter((itemId) => draft.killed.has(itemId));
+      const priorityOrder = draft.order.filter((itemId) => !draft.killed.has(itemId));
+      if (!priorityOrder.length) throw new Error("Keep at least one queued build in the priority list.");
+      extra = { ...extra, priorityOrder, killedItemIds };
+    }
     const result = await post("/api/cards/answer", {
       id: card.id, srcHash: card.srcHash, action, ...extra
     });
@@ -125,6 +242,7 @@ async function answer(action, extra = {}) {
       state.index += 1;
       renderCard(); toast("Request for context recorded.");
     } else {
+      state.priorityDrafts.delete(card.id);
       await loadCards(false);
       toast(action.startsWith("snooze") ? "Card snoozed." : "Outcome recorded.");
     }

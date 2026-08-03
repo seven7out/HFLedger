@@ -1,14 +1,18 @@
 {
   "meta": {
     "project": "Ovenlight Bakery Tools",
-    "updated": "2026-07-18T17:55:00+00:00",
+    "updated": "2026-08-02T12:00:00+00:00",
     "lastSession": {
       "kind": "agent-session",
       "summary": "Prepared fictional bakery work in queued, active, review, shipped, parked, and owner-decision states."
     },
     "ledgerCursor": {
-      "line": 1,
-      "entrySha256": "5e1cb472499a493dec8c8be689bdf7ee1da75099400a5ddc96835ef1cadbb1be"
+      "line": 5,
+      "entrySha256": "ee986f5245f7fbb21bcd7f458a739c45c32ff55039b85fb56d97f310df2149f1"
+    },
+    "productionHealth": {
+      "state": "healthy",
+      "summary": "Customers can place and collect bakery orders normally."
     }
   },
   "queue": [
@@ -28,7 +32,8 @@
       "risksTrustConcerns": "Do not imply food-safety certification.",
       "recommendedNextAgent": "implementation agent",
       "updated": "2026-07-18T16:20:00+00:00",
-      "links": []
+      "links": [],
+      "productStage": "being-built"
     },
     {
       "id": "task:ovenlight:packing-display",
@@ -46,7 +51,8 @@
       "risksTrustConcerns": "Use fictional batch data only.",
       "recommendedNextAgent": "implementation agent",
       "updated": "2026-07-18T14:10:00+00:00",
-      "links": []
+      "links": [],
+      "productStage": "being-built"
     },
     {
       "id": "task:ovenlight:recipe-export",
@@ -64,7 +70,9 @@
       "risksTrustConcerns": "A review result is not a deployment claim.",
       "recommendedNextAgent": "review agent",
       "updated": "2026-07-18T15:40:00+00:00",
-      "links": []
+      "links": [],
+      "productStage": "test-site",
+      "testSiteState": "failing"
     },
     {
       "id": "task:ovenlight:tray-labels",
@@ -82,7 +90,8 @@
       "risksTrustConcerns": "The artifact proves the fixture only, not a real deployment.",
       "recommendedNextAgent": "none",
       "updated": "2026-07-18T13:30:00+00:00",
-      "links": []
+      "links": [],
+      "productStage": "production"
     },
     {
       "id": "task:ovenlight:supplier-sync",
@@ -99,7 +108,8 @@
       "risksTrustConcerns": "Do not infer permission to contact or write to a supplier system.",
       "recommendedNextAgent": "planning agent",
       "updated": "2026-07-14T09:00:00+00:00",
-      "links": []
+      "links": [],
+      "productStage": "being-specced"
     }
   ],
   "inbox": [
@@ -120,53 +130,274 @@
     "items": [
       {
         "schemaVersion": 1,
-        "id": "ask-2c01acd32b2b8b82",
-        "dedupeKey": "demo:timer-alert",
+        "id": "ask-3c1957ca1f6fccd9",
+        "dedupeKey": "card:idea_pick:fictional",
         "type": "decision",
-        "title": "Choose the morning timer alert",
+        "title": "Choose the bakery pickup reminder",
         "detail": "",
         "blocks": [
           "task:ovenlight:proofing-timer"
         ],
-        "priority": "P2",
-        "humanRequiredReason": "Two safe interface choices remain after the fictional prototype review.",
+        "priority": "P1",
+        "humanRequiredReason": "This product judgment belongs to the owner after agents prepared the bounded choices.",
         "humanGate": {
           "class": "judgment",
-          "reason": "Two safe interface choices remain after the fictional prototype review."
+          "reason": "This product judgment belongs to the owner after agents prepared the bounded choices."
         },
-        "blockedOutcome": "The timer demo needs one alert style before the fictional release can proceed.",
-        "riskIfWrong": "A distracting default could make the bakery display harder to use during a busy shift.",
-        "riskLevel": "low",
+        "blockedOutcome": "The next fictional bakery outcome waits for this product judgment before moving ahead.",
+        "riskIfWrong": "A poor choice could confuse bakery staff or customers during a busy pickup window.",
+        "riskLevel": "medium",
         "reversibility": "reversible",
-        "rollback": "Change the alert preference back in the local configuration.",
-        "workDone": "Both choices were prototyped with fictional batch data and checked for keyboard access.",
-        "source": "fictional Ovenlight release review",
+        "rollback": "Return to the previous bakery behavior while a safer option is prepared.",
+        "workDone": "Agents prepared and reviewed the product choices with fictional bakery scenarios.",
+        "source": "fictional bakery product review",
         "admission": {
           "status": "admitted",
           "policyVersion": "ask-policy-v1"
         },
-        "question": "How should the shared timer announce that a batch is ready?",
+        "cardKind": "idea_pick",
+        "question": "Which reminder experience should the bakery prepare first?",
         "options": [
           {
-            "id": "banner",
-            "label": "Quiet banner",
-            "tradeoff": "Visible and calm, but someone must be looking at the display"
+            "id": "gentle",
+            "label": "Gentle reminder",
+            "description": "Show one calm reminder near the end of the pickup window."
           },
           {
-            "id": "bell",
-            "label": "Short bell",
-            "tradeoff": "Noticeable across the room, but it may interrupt a quiet task"
+            "id": "none",
+            "label": "No reminder",
+            "description": "Keep the current experience and avoid adding another message."
           }
         ],
-        "recommendedOption": "banner",
-        "recommendationReason": "The quiet banner is the least disruptive default and remains easy to change.",
-        "ask": "How should the shared timer announce that a batch is ready? Options: banner: Quiet banner — Visible and calm, but someone must be looking at the display; bell: Short bell — Noticeable across the room, but it may interrupt a quiet task Recommendation: banner — The quiet banner is the least disruptive default and remains easy to change.",
+        "recommendedOption": "gentle",
+        "recommendationReason": "A single calm reminder helps customers without making the experience noisy.",
+        "ask": "Which reminder experience should the bakery prepare first? Options: gentle: Gentle reminder — Show one calm reminder near the end of the pickup window.; none: No reminder — Keep the current experience and avoid adding another message. Recommendation: gentle — A single calm reminder helps customers without making the experience noisy.",
+        "idea": "Let customers choose a reminder before their bakery pickup window closes.",
         "state": "open",
         "added": "2026-07-17",
         "addedEstimated": false,
         "ledgerProvenance": {
           "line": 1,
-          "entrySha256": "5e1cb472499a493dec8c8be689bdf7ee1da75099400a5ddc96835ef1cadbb1be"
+          "entrySha256": "5b2f703841c5e90e73dc3d4e6348868da29f5839e13ae99946c599a6ddfde432"
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "ask-bb19a7384634556a",
+        "dedupeKey": "card:outcome_review:fictional",
+        "type": "decision",
+        "title": "Review the clearer pickup window",
+        "detail": "",
+        "blocks": [
+          "task:ovenlight:recipe-export"
+        ],
+        "priority": "P1",
+        "humanRequiredReason": "This product judgment belongs to the owner after agents prepared the bounded choices.",
+        "humanGate": {
+          "class": "production",
+          "reason": "This product judgment belongs to the owner after agents prepared the bounded choices."
+        },
+        "blockedOutcome": "The next fictional bakery outcome waits for this product judgment before moving ahead.",
+        "riskIfWrong": "A poor choice could confuse bakery staff or customers during a busy pickup window.",
+        "riskLevel": "medium",
+        "reversibility": "reversible",
+        "rollback": "Return to the previous bakery behavior while a safer option is prepared.",
+        "workDone": "Agents prepared and reviewed the product choices with fictional bakery scenarios.",
+        "source": "fictional bakery product review",
+        "admission": {
+          "status": "admitted",
+          "policyVersion": "ask-policy-v1"
+        },
+        "cardKind": "outcome_review",
+        "question": "Should this clearer pickup window be released to production?",
+        "options": [
+          {
+            "id": "release",
+            "label": "Release",
+            "description": "Make the clearer pickup window available to customers."
+          },
+          {
+            "id": "hold",
+            "label": "Hold",
+            "description": "Keep the current wording while the team gathers more evidence."
+          }
+        ],
+        "recommendedOption": "release",
+        "recommendationReason": "The preview is clear, reversible, and supported by the product test evidence.",
+        "ask": "Should this clearer pickup window be released to production? Options: release: Release — Make the clearer pickup window available to customers.; hold: Hold — Keep the current wording while the team gathers more evidence. Recommendation: release — The preview is clear, reversible, and supported by the product test evidence.",
+        "userChange": "Customers see a clearer pickup window before confirming a bakery order.",
+        "testEvidenceSummary": "Fictional customers completed the order flow and understood the pickup window.",
+        "evidenceLinks": [
+          {
+            "label": "Customer preview",
+            "href": "https://example.invalid/evidence/pickup-window"
+          }
+        ],
+        "footnoteLinks": [
+          {
+            "label": "Technical delivery record",
+            "href": "https://example.invalid/pull/42"
+          }
+        ],
+        "state": "open",
+        "added": "2026-07-18",
+        "addedEstimated": false,
+        "ledgerProvenance": {
+          "line": 2,
+          "entrySha256": "ec6a717e1c9133af644bbb46dbc562170f1743fd727ab7070aa61a9732e751ea"
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "ask-4dcc3d78df3104ad",
+        "dedupeKey": "card:risk_card:fictional",
+        "type": "decision",
+        "title": "Choose how long pickup notes remain",
+        "detail": "",
+        "blocks": [
+          "task:ovenlight:supplier-sync"
+        ],
+        "priority": "P1",
+        "humanRequiredReason": "This product judgment belongs to the owner after agents prepared the bounded choices.",
+        "humanGate": {
+          "class": "protected-class",
+          "reason": "This product judgment belongs to the owner after agents prepared the bounded choices.",
+          "protectedClass": "privacy"
+        },
+        "blockedOutcome": "The next fictional bakery outcome waits for this product judgment before moving ahead.",
+        "riskIfWrong": "A poor choice could confuse bakery staff or customers during a busy pickup window.",
+        "riskLevel": "medium",
+        "reversibility": "reversible",
+        "rollback": "Return to the previous bakery behavior while a safer option is prepared.",
+        "workDone": "Agents prepared and reviewed the product choices with fictional bakery scenarios.",
+        "source": "fictional bakery product review",
+        "admission": {
+          "status": "admitted",
+          "policyVersion": "ask-policy-v1"
+        },
+        "cardKind": "risk_card",
+        "question": "How long should the bakery retain those pickup notes?",
+        "options": [
+          {
+            "id": "seven_days",
+            "label": "Seven days",
+            "description": "Keep notes briefly for pickup follow-up, then remove them."
+          },
+          {
+            "id": "thirty_days",
+            "label": "Thirty days",
+            "description": "Keep the current period for a longer service history."
+          }
+        ],
+        "recommendedOption": "seven_days",
+        "recommendationReason": "The shorter period supports follow-up while reducing unnecessary customer-data retention.",
+        "ask": "How long should the bakery retain those pickup notes? Options: seven_days: Seven days — Keep notes briefly for pickup follow-up, then remove them.; thirty_days: Thirty days — Keep the current period for a longer service history. Recommendation: seven_days — The shorter period supports follow-up while reducing unnecessary customer-data retention.",
+        "riskSubject": "Pickup notes currently include a customer's free-form delivery instructions for thirty days.",
+        "state": "open",
+        "added": "2026-07-19",
+        "addedEstimated": false,
+        "ledgerProvenance": {
+          "line": 3,
+          "entrySha256": "546d03448bcc9f8801e9eb3478b32bc437433018fbe06870aef0167b741cdfb6"
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "ask-499683943a82bdda",
+        "dedupeKey": "card:stuck_alarm:fictional",
+        "type": "action",
+        "title": "The daily menu refresh stopped",
+        "detail": "",
+        "blocks": [
+          "task:ovenlight:packing-display"
+        ],
+        "priority": "P1",
+        "humanRequiredReason": "This product judgment belongs to the owner after agents prepared the bounded choices.",
+        "humanGate": {
+          "class": "production-manual",
+          "reason": "This product judgment belongs to the owner after agents prepared the bounded choices."
+        },
+        "blockedOutcome": "The next fictional bakery outcome waits for this product judgment before moving ahead.",
+        "riskIfWrong": "A poor choice could confuse bakery staff or customers during a busy pickup window.",
+        "riskLevel": "medium",
+        "reversibility": "reversible",
+        "rollback": "Return to the previous bakery behavior while a safer option is prepared.",
+        "workDone": "Agents prepared and reviewed the product choices with fictional bakery scenarios.",
+        "source": "fictional bakery product review",
+        "admission": {
+          "status": "admitted",
+          "policyVersion": "ask-policy-v1"
+        },
+        "instruction": "Nudge the menu editor; agents are already retrying and need no technical help.",
+        "completionProof": "The owner recorded whether the stopped product process was handled.",
+        "estimateMinutes": 1,
+        "ask": "Nudge the menu editor; agents are already retrying and need no technical help.",
+        "cardKind": "stuck_alarm",
+        "stopped": "The bakery menu stopped refreshing, so yesterday's items may remain visible.",
+        "stoppedSince": "2026-07-18T08:30:00+00:00",
+        "ownerAction": "Nudge the menu editor; agents are already retrying and need no technical help.",
+        "state": "open",
+        "added": "2026-07-20",
+        "addedEstimated": false,
+        "ledgerProvenance": {
+          "line": 4,
+          "entrySha256": "878e9dc60f9d1eea6721a7af0f82caf406bb85d8fce374a475927b6ff93cba3d"
+        }
+      },
+      {
+        "schemaVersion": 1,
+        "id": "ask-eca44455bf485bfe",
+        "dedupeKey": "card:priority_review:fictional",
+        "type": "decision",
+        "title": "Review the next bakery improvements",
+        "detail": "",
+        "blocks": [
+          "release:ovenlight:weekly-plan"
+        ],
+        "priority": "P1",
+        "humanRequiredReason": "This product judgment belongs to the owner after agents prepared the bounded choices.",
+        "humanGate": {
+          "class": "judgment",
+          "reason": "This product judgment belongs to the owner after agents prepared the bounded choices."
+        },
+        "blockedOutcome": "The next fictional bakery outcome waits for this product judgment before moving ahead.",
+        "riskIfWrong": "A poor choice could confuse bakery staff or customers during a busy pickup window.",
+        "riskLevel": "medium",
+        "reversibility": "reversible",
+        "rollback": "Return to the previous bakery behavior while a safer option is prepared.",
+        "workDone": "Agents prepared and reviewed the product choices with fictional bakery scenarios.",
+        "source": "fictional bakery product review",
+        "admission": {
+          "status": "admitted",
+          "policyVersion": "ask-policy-v1"
+        },
+        "cardKind": "priority_review",
+        "question": "Which bakery improvements should be built next, and which should stop?",
+        "builds": [
+          {
+            "id": "task:ovenlight:proofing-timer",
+            "title": "Share the proofing timer",
+            "description": "Help bakery staff see when each batch is ready from any station."
+          },
+          {
+            "id": "task:ovenlight:packing-display",
+            "title": "Clarify the packing display",
+            "description": "Make the next batch obvious during the morning packing run."
+          },
+          {
+            "id": "task:ovenlight:recipe-export",
+            "title": "Improve the recipe card",
+            "description": "Give customers a clearer downloaded recipe to keep."
+          }
+        ],
+        "recommendationReason": "Customer clarity comes before promotional polish in the recommended order.",
+        "ask": "Which bakery improvements should be built next, and which should stop? The listed order is recommended: Customer clarity comes before promotional polish in the recommended order.",
+        "state": "open",
+        "added": "2026-07-21",
+        "addedEstimated": false,
+        "ledgerProvenance": {
+          "line": 5,
+          "entrySha256": "ee986f5245f7fbb21bcd7f458a739c45c32ff55039b85fb56d97f310df2149f1"
         }
       }
     ],
@@ -187,17 +418,24 @@
   },
   "statusCounts": {
     "queue": {
-      "Ready for Build": 1,
+      "Done": 1,
       "In Progress": 1,
       "Needs Review": 1,
-      "Done": 1,
-      "Parked": 1
+      "Parked": 1,
+      "Ready for Build": 1
     },
     "decisions": {
-      "open": 1,
+      "open": 5,
       "snoozed": 0,
       "deferred": 0,
       "resolved": 0
+    },
+    "cardKinds": {
+      "idea_pick": 1,
+      "outcome_review": 1,
+      "risk_card": 1,
+      "stuck_alarm": 1,
+      "priority_review": 1
     },
     "ownerTasks": {
       "open": 0,

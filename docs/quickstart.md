@@ -14,15 +14,18 @@ DEMO_HOME="$(mktemp -d)"
 ./cli/ledger --home "$DEMO_HOME" serve
 ```
 
-Open [http://127.0.0.1:7171/](http://127.0.0.1:7171/). Today ranks the
-fictional work that needs attention and groups changes by the run that produced
-them. Select a row to inspect its provenance, item-change clock,
+Open [http://127.0.0.1:7171/](http://127.0.0.1:7171/). Today leads with the
+fictional bakery's production health, one waiting card of each product-owner
+kind, and the idea-to-production flow. Below that, it ranks work needing
+attention and groups changes by the run that produced them. Select a row to
+inspect its provenance, item-change clock,
 source-observation clock, named coverage, and one supported next action.
 
-For the admitted bakery choice, use **Open Decision Deck** or open
-[http://127.0.0.1:7171/deck](http://127.0.0.1:7171/deck). The card offers two
-timer-alert choices and one recommendation. Tap either choice, tap “Accept
-recommendation,” or swipe the card right. The outcome lands only in the
+For the admitted bakery cards, use **Open Decision Deck** or open
+[http://127.0.0.1:7171/deck](http://127.0.0.1:7171/deck). The first card offers
+two pickup-reminder choices and one recommendation; the deck also demonstrates
+a production outcome, risk judgment, stuck alarm, and priority review. Tap a
+choice, accept a recommendation, or swipe the first card right. The outcome lands only in the
 disposable data directory printed by `ledger-demo`; Today itself never answers
 the decision.
 

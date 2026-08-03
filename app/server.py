@@ -60,6 +60,34 @@ STATIC_ASSETS = {
     "/logo.png": ("logo.png", "image/png", "public, max-age=86400"),
 }
 _WRITE_LOCK = threading.RLock()
+CARD_KIND_LABELS = {
+    "idea_pick": "Ideas to choose",
+    "outcome_review": "Production outcomes",
+    "risk_card": "Risk judgments",
+    "stuck_alarm": "Agent blockers",
+    "priority_review": "Priority reviews",
+}
+PIPELINE_LABELS = (
+    ("ideas-waiting-on-pick", "Ideas waiting on pick"),
+    ("being-specced", "Being specced"),
+    ("being-built", "Being built"),
+    ("test-site", "On the test site"),
+    ("production", "Shipped to production"),
+)
+
+
+def _owner_card_kind(item):
+    kind = item.get("cardKind")
+    if kind in admission.CARD_KINDS:
+        return kind
+    gate = item.get("humanGate", {}).get("class")
+    if gate == "production":
+        return "outcome_review"
+    if gate in ("protected-class", "irreversible"):
+        return "risk_card"
+    if item.get("type") == "action":
+        return "stuck_alarm"
+    return "idea_pick"
 
 
 class ApiError(ValueError):
@@ -229,13 +257,16 @@ class Runtime:
 
 def _decision_view(item):
     fields = (
-        "id", "type", "title", "detail", "priority", "deadline", "state",
+        "id", "type", "cardKind", "title", "detail", "priority", "deadline", "state",
         "question", "options", "recommendedOption", "recommendationReason",
         "instruction", "completionProof", "estimateMinutes", "riskIfWrong",
         "riskLevel", "reversibility", "rollback", "blockedOutcome", "workDone",
         "humanRequiredReason", "humanGate", "blocks", "source", "added",
         "snoozedUntil", "snoozeReason", "resolvedDate", "resolution",
-        "selectedOption", "resolutionLedgerProvenance",
+        "selectedOption", "resolutionLedgerProvenance", "idea", "userChange",
+        "evidenceLinks", "testEvidenceSummary", "riskSubject", "stopped",
+        "stoppedSince", "ownerAction", "builds", "footnoteLinks",
+        "priorityOrder", "killedItemIds",
     )
     result = {key: copy.deepcopy(item[key]) for key in fields if key in item}
     result["srcHash"] = _card_hash(item)
@@ -248,6 +279,83 @@ def _load_validated(context):
     if errors:
         raise BoardValidationError(errors)
     return board
+
+
+def _build_owner_today(board):
+    health = board.get("meta", {}).get("productionHealth")
+    if not isinstance(health, dict):
+        health = {
+            "state": "degraded",
+            "summary": "Production health has not been connected yet.",
+        }
+    health_state = health.get("state", "degraded")
+    health_summary = health.get("summary", "Production health is unavailable.")
+    decisions = board.get("decisions", {})
+    card_counts = {kind: 0 for kind in admission.CARD_KINDS}
+    for item in decisions.get("items", []) if isinstance(decisions, dict) else []:
+        if not isinstance(item, dict) or item.get("state", "open") == "deferred":
+            continue
+        if item.get("state") == "snoozed":
+            try:
+                if datetime.date.fromisoformat(item.get("snoozedUntil", "")) > _today():
+                    continue
+            except ValueError:
+                continue
+        card_counts[_owner_card_kind(item)] += 1
+
+    pipeline_counts = {stage_id: 0 for stage_id, _label in PIPELINE_LABELS}
+    pipeline_counts["ideas-waiting-on-pick"] = card_counts["idea_pick"]
+    for item in board.get("inbox", []) if isinstance(board.get("inbox"), list) else []:
+        if isinstance(item, dict) and item.get("status") in (
+                "Inbox", "Needs Clarification", "Needs Spec"):
+            pipeline_counts["being-specced"] += 1
+    for item in board.get("queue", []) if isinstance(board.get("queue"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        product_stage = item.get("productStage")
+        if product_stage in pipeline_counts:
+            pipeline_counts[product_stage] += 1
+        elif item.get("status") == "Needs Spec":
+            pipeline_counts["being-specced"] += 1
+        elif item.get("status") in ("Ready for Build", "In Progress"):
+            pipeline_counts["being-built"] += 1
+        elif item.get("status") in ("Needs Review", "Final Review"):
+            pipeline_counts["test-site"] += 1
+    test_site_failing = any(
+        isinstance(item, dict) and item.get("productStage") == "test-site" and
+        item.get("testSiteState") == "failing"
+        for item in board.get("queue", []) if isinstance(board.get("queue"), list)
+    )
+    pipeline = []
+    for stage_id, label in PIPELINE_LABELS:
+        stage = {"id": stage_id, "label": label, "count": pipeline_counts[stage_id]}
+        if stage_id == "test-site":
+            stage.update({
+                "tone": "neutral",
+                "note": "Allowed to break" if test_site_failing else "Safe proving ground",
+                "state": "failing" if test_site_failing else "ready",
+            })
+        elif stage_id == "production":
+            stage["tone"] = "alarm" if health_state == "degraded" else "healthy"
+        else:
+            stage["tone"] = "neutral"
+        pipeline.append(stage)
+    return {
+        "productionHealth": {
+            "state": health_state,
+            "summary": health_summary,
+            "line": "%s — %s" % (
+                "Healthy" if health_state == "healthy" else "Degraded",
+                health_summary,
+            ),
+        },
+        "cardCounts": [
+            {"kind": kind, "label": CARD_KIND_LABELS[kind], "count": card_counts[kind]}
+            for kind in admission.CARD_KINDS
+        ],
+        "totalCards": sum(card_counts.values()),
+        "pipeline": pipeline,
+    }
 
 
 def build_board_view(runtime, context_id=None):
@@ -274,6 +382,7 @@ def build_board_view(runtime, context_id=None):
         "project": board.get("meta", {}).get("project", context.config["project"]),
         "updated": board.get("meta", {}).get("updated"),
         "counts": copy.deepcopy(board.get("statusCounts", {})),
+        "ownerToday": _build_owner_today(board),
         "decisions": [_decision_view(item) for item in decisions.get("items", [])
                       if isinstance(item, dict)],
         "resolved": [_decision_view(item) for item in decisions.get("resolved", [])[-12:]
@@ -443,6 +552,13 @@ def resolve_decision(runtime, body, deck=False):
     }
     if selected is not None:
         extra["selectedOption"] = selected
+    priority_order = body.get("priorityOrder")
+    killed_item_ids = body.get("killedItemIds")
+    if priority_order is not None or killed_item_ids is not None:
+        if item.get("cardKind") != "priority_review":
+            raise ApiError(400, "priority ordering is only valid for a priority review")
+        extra["priorityOrder"] = priority_order
+        extra["killedItemIds"] = killed_item_ids
     entry = ledger.build_entry(
         "owner-ui", "decision_resolved",
         authorization=ledger.OWNER_UI_AUTHORIZATION, extra=extra)
@@ -454,6 +570,16 @@ def resolve_decision(runtime, body, deck=False):
                    if isinstance(option, dict)}
         if selected not in options:
             raise ApiError(400, "selectedOption is not one of this decision's options")
+    if item.get("cardKind") == "priority_review":
+        declared = [build.get("id") for build in item.get("builds", [])
+                    if isinstance(build, dict)]
+        supplied = list(priority_order or []) + list(killed_item_ids or [])
+        if (len(supplied) != len(declared) or set(supplied) != set(declared)):
+            raise ApiError(400, "priority review must reorder or kill every listed build")
+        queue_ids = {queue_item.get("id") for queue_item in board.get("queue", [])
+                     if isinstance(queue_item, dict)}
+        if any(item_id not in queue_ids for item_id in declared):
+            raise ApiError(409, "a queued build changed; refresh before submitting")
     ledger.append_record(entry, context.home, context.config)
     if deck:
         _append_ui(context, "deck_answer", {
@@ -549,6 +675,24 @@ def answer_card(runtime, body):
         snooze_body.setdefault("reason", "Snoozed from the decision deck.")
         return snooze_decision(runtime, snooze_body, deck=True)
     if item.get("type") == "decision":
+        if item.get("cardKind") == "priority_review":
+            if action != "priority-submit":
+                raise ApiError(
+                    400, "priority review cards support submit, need-info, or snooze")
+            priority_order = body.get("priorityOrder")
+            killed = body.get("killedItemIds")
+            if not isinstance(priority_order, list) or not isinstance(killed, list):
+                raise ApiError(
+                    400, "priority review ordering must use priorityOrder and killedItemIds lists")
+            resolve_body = dict(body)
+            resolve_body.update({
+                "priorityOrder": priority_order,
+                "killedItemIds": killed,
+                "resolution": "Priority review recorded for %d surviving build(s); %d killed."
+                % (len(priority_order or []), len(killed or [])),
+                "evidence": "Priority order recorded in the HFLedger decision deck.",
+            })
+            return resolve_decision(runtime, resolve_body, deck=True)
         option_id = item.get("recommendedOption") if action == "accept" else body.get("option")
         options = {option.get("id"): option for option in item.get("options", [])
                    if isinstance(option, dict)}

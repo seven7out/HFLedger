@@ -38,16 +38,27 @@ class DemoQuickstartTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             payload = json.loads(result.stdout)
             self.assertEqual(payload["status"], "ready")
-            self.assertEqual(payload["cards"], 1)
+            self.assertEqual(payload["cards"], 5)
             for name in ("config.json", "board.json", "ledger.jsonl"):
                 self.assertEqual(stat.S_IMODE(os.stat(os.path.join(home, name)).st_mode), 0o600)
             runtime = server.Runtime(home)
-            card = server.build_cards_view(runtime)["cards"][0]
+            cards = server.build_cards_view(runtime)["cards"]
+            self.assertEqual({card["cardKind"] for card in cards}, {
+                "idea_pick", "outcome_review", "risk_card", "stuck_alarm",
+                "priority_review",
+            })
+            owner_today = server.build_board_view(runtime)["ownerToday"]
+            self.assertEqual(owner_today["productionHealth"]["state"], "healthy")
+            test_site = next(stage for stage in owner_today["pipeline"]
+                             if stage["id"] == "test-site")
+            self.assertEqual((test_site["state"], test_site["tone"]),
+                             ("failing", "neutral"))
+            card = cards[0]
             answer = server.answer_card(runtime, {
                 "id": card["id"], "srcHash": card["srcHash"], "action": "accept",
             })
             self.assertTrue(answer["ok"])
-            self.assertEqual(server.build_cards_view(runtime)["cards"], [])
+            self.assertEqual(len(server.build_cards_view(runtime)["cards"]), 4)
 
     def test_demo_refuses_nonempty_and_repository_targets(self):
         with tempfile.TemporaryDirectory(prefix="ledger-demo-refusal-") as temporary:

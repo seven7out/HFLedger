@@ -11,6 +11,48 @@ This workspace uses HFLedger at `{{LEDGER_HOME}}`. Treat the board and append-on
 - Agent-executable work belongs in the queue; undeveloped ideas belong in the inbox. Only an irreducible {{OWNER_ROLE}} choice or exact manual step that an agent cannot perform may enter the owner lane.
 - Never infer production authority. Phase 3 forbids production writes.
 
+## Product-owner cards
+
+The owner is a product owner, not a developer. Every owner-facing card must use
+one of these five kinds and stand on its own without code knowledge:
+
+- `idea_pick`: agents prepared product options for one idea; the owner picks a
+  direction. Include one-line product descriptions and one recommendation.
+- `outcome_review`: a production release gate. Say what changes for users,
+  link product evidence, summarize the product test evidence in one line, and
+  give a rollback statement for risky outcomes.
+- `risk_card`: a safety, security, legal, or content-risk judgment. Quote or
+  concretely describe the exact content or data practice and recommend a path.
+- `stuck_alarm`: an automated process died, starved, or failed silently. Say
+  what stopped, since when, and what useful action the owner can take—even when
+  the answer is “No action needed.”
+- `priority_review`: a periodic ordered list of the top queued product builds.
+  Give each build a one-line product description so the owner can reorder or
+  kill it.
+
+Use `ledger --home {{LEDGER_HOME_SHELL}} ask card KIND --help` for the typed
+admission surface. `decision` and `action` remain the underlying audit and
+resolution mechanics; do not create an untyped card when one of the five kinds
+fits.
+
+### Translate before you file
+
+Primary card fields must use product language. Diffs, pull requests, branch
+names, commit lists, check names, file paths, and stack traces may appear only
+as secondary `footnoteLinks` drill-downs.
+
+- `idea_pick` — Bad: “Choose the branch with the new component.” Good: “Choose
+  whether customers see a compact or detailed pickup reminder.”
+- `outcome_review` — Bad: “PR #42 passed the release check.” Good: “Customers
+  can now see their pickup window before confirming an order; the complete
+  fictional checkout journey passed.”
+- `risk_card` — Bad: “Approve the sanitizer commit.” Good: “Decide whether free-
+  form pickup notes should be retained for seven or thirty days.”
+- `stuck_alarm` — Bad: “The deploy workflow failed on main.” Good: “The daily
+  menu stopped refreshing yesterday; nudge the menu editor while agents retry.”
+- `priority_review` — Bad: “Put the refactor branch above the test cleanup.”
+  Good: “Build clearer allergen cards before refreshing seasonal banners.”
+
 ## Work policy
 
 The executable queue status is `{{READY_STATUS}}`; completed agent work moves to `{{REVIEW_STATUS}}`. Stage merging is {{STAGE_MERGE}} and still requires explicit authority in the current invocation. Missing safety metadata means the item is gated.
