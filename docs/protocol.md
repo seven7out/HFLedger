@@ -490,3 +490,35 @@ A new agent runtime should:
 The CLI uses exit status 0 for success, 1 for a completed `validate` command that found invalid state, and 2 for command misuse, rejected admission/completion packages, unreadable state, or fail-closed reconciliation errors.
 
 Protocol additions should be backward-compatible when possible: add registered audit-only actions, configured statuses, or declared extra sections. Changing envelope fields, digest rules, ask semantics, cursor semantics, or tombstone requirements requires a new protocol version and an explicit migration design. Phase 1 deliberately ships no migration command.
+
+## 13. Legacy decision planes
+
+An installation may carry decisions created under older schema versions (`schemaVersion: 0`), earlier policy labels (`ask-policy-v0`, `ask-policy-draft`), or historical ID formats (`dec-*`, `ask-v0-*`). These records predate the current `ask-policy-v1` surface and do not pass current admission validation. A legacy decision plane preserves them as immutable evidence with the following contract:
+
+### 13.1 Preservation
+
+Each legacy record is stored with its original envelope fields intact. A creation digest (`sha256` of the canonical JSON of the immutable envelope fields) is computed at attachment time and preserved alongside the record. This digest can be verified at any time to confirm that the record has not been mutated.
+
+### 13.2 Attachment
+
+Attaching a legacy plane is an auditable, append-only operation. A `legacy_plane_attached` ledger event records the plane identifier, record count, and a digest over the complete plane. Once attached, a plane cannot be replaced with a conflicting version. The attachment event uses `authorization: legacy-plane-v1`.
+
+### 13.3 Resolution through the current surface
+
+Open legacy asks remain visible and resolvable. Resolution emits a standard `decision_resolved` event through the current envelope, referencing the legacy record's ID. The resolution adds state and outcome metadata to the legacy record without rewriting any immutable envelope field. After resolution, the legacy record's dedupe key becomes permanently spent.
+
+### 13.4 Dedupe across keyspaces
+
+Deduplication checks consult both legacy spent keys and current keys. A resolved legacy key can never be respent through the new plane. A new ask whose dedupe key collides with any legacy key (open or spent) is rejected by strict admission. This prevents both re-asks of settled questions and duplicate interruptions for questions still being evaluated.
+
+### 13.5 Immutability and tamper detection
+
+Legacy records are immutable evidence. The creation digest verifies that envelope fields have not changed. Tamper detection checks for:
+- Envelope field modification (digest mismatch)
+- Status resurrection (a resolved record returned to open)
+- Spent key deletion (a digest entry with no corresponding record)
+- Duplicate IDs or keys within the plane
+
+### 13.6 Fail-closed validation
+
+Unknown or ambiguous legacy record shapes are validation failures. A record that does not match any known legacy schema version, policy label, or ID prefix is rejected. Truncated records, malformed records, and digest mismatches are all hard errors. New content cannot be admitted through the legacy plane; only the current `ask-policy-v1` surface accepts new asks.
