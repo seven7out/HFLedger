@@ -657,7 +657,7 @@ process.stdout.write(JSON.stringify({
             "pane.toggle-sidebar", "pane.toggle-inspector", "file.open-source",
             "item.open", "item.acknowledge", "item.snooze", "item.watch",
             "edit.copy-context", "item.copy-context", "help.commands",
-            "help.keyboard", "help.privacy",
+            "help.command-guide", "help.keyboard", "help.privacy",
         })
         self.assertTrue({
             "item.open", "item.acknowledge", "item.snooze", "item.watch",

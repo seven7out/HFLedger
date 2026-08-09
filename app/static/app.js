@@ -2390,6 +2390,7 @@ const COMMANDS = [
   ["pane.toggle-inspector", "Show or Hide Inspector", "⌥⌘I"], ["item.open", "Open Authoritative Source", "Return / O"],
   ["item.acknowledge", "Acknowledge Locally", "E"], ["item.snooze", "Snooze Locally", "S"],
   ["item.watch", "Watch or Unwatch", "W"], ["item.copy-context", "Copy Context", "⇧⌘C"],
+  ["help.command-guide", "Command Guide", ""],
 ];
 let globalSearchGeneration = 0;
 let globalSearchTimer = null;
@@ -2466,6 +2467,60 @@ function openSettings() {
   location.assign("/__hfledger/settings");
 }
 
+let commandGuideData = null;
+
+async function openCommandGuide() {
+  const dialog = $("#command-guide-dialog");
+  if (dialog.open) return;
+  dialog.showModal();
+  const filterInput = $("#command-guide-filter");
+  filterInput.value = "";
+  filterInput.focus();
+  if (!commandGuideData) {
+    try {
+      const response = await request("/api/command-guide");
+      commandGuideData = Array.isArray(response?.commands) ? response.commands : [];
+    } catch (_error) {
+      commandGuideData = [];
+    }
+  }
+  renderCommandGuide("");
+}
+
+function closeCommandGuide() {
+  const dialog = $("#command-guide-dialog");
+  if (dialog.open) dialog.close();
+}
+
+function renderCommandGuide(query) {
+  const list = $("#command-guide-list");
+  list.replaceChildren();
+  const commands = commandGuideData || [];
+  const lower = (query || "").toLowerCase().trim();
+  const filtered = lower
+    ? commands.filter((cmd) => cmd.name.toLowerCase().includes(lower) || cmd.description.toLowerCase().includes(lower))
+    : commands;
+  if (filtered.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "command-guide-empty";
+    empty.textContent = lower ? "No matching commands" : "No commands configured in this workspace.";
+    list.append(empty);
+    return;
+  }
+  filtered.forEach((cmd) => {
+    const entry = document.createElement("div");
+    entry.className = "command-guide-entry";
+    const name = document.createElement("p");
+    name.className = "command-guide-name";
+    name.textContent = safeText(cmd.name, 80);
+    const desc = document.createElement("p");
+    desc.className = "command-guide-desc";
+    desc.textContent = safeText(cmd.description, 200);
+    entry.append(name, desc);
+    list.append(entry);
+  });
+}
+
 function dispatchCommand(id) {
   const routes = {
     "view.today": () => setView("today"),
@@ -2488,6 +2543,7 @@ function dispatchCommand(id) {
       if (item) setWatch(item, !(localWatched(item.id) || (item.secondaryFlags || []).includes("watched")));
     },
     "item.copy-context": () => copyContext(),
+    "help.command-guide": openCommandGuide,
   };
   if (routes[id]) routes[id]();
   else announce("That command is unavailable in this version.");
@@ -2695,13 +2751,19 @@ function boot() {
     if (event.submitter?.value === "cancel") return $("#owner-complete-dialog").close();
     completeOwnerTask();
   });
+  $("#command-guide-close").addEventListener("click", closeCommandGuide);
+  $("#command-guide-done").addEventListener("click", closeCommandGuide);
+  $("#command-guide-filter").addEventListener("input", (event) => renderCommandGuide(event.target.value));
+  $("#command-guide-dialog").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { event.preventDefault(); closeCommandGuide(); }
+  });
   document.addEventListener("keydown", handleKeyboard);
   document.addEventListener("pointerdown", (event) => {
     if (!event.target.closest("#global-search")) closeGlobalSearch();
   });
   window.addEventListener("hfledger:native-command", (event) => {
     const id = typeof event.detail === "string" ? event.detail : event.detail?.id;
-    if (COMMANDS.some(([command]) => command === id) || ["view.commands", "pane.toggle-sidebar", "pane.toggle-inspector"].includes(id)) dispatchCommand(id);
+    if (COMMANDS.some(([command]) => command === id) || ["view.commands", "pane.toggle-sidebar", "pane.toggle-inspector", "help.command-guide"].includes(id)) dispatchCommand(id);
   });
   window.addEventListener("hfledger:text-size-changed", (event) => {
     const detail = event.detail || {};

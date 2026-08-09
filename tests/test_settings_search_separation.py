@@ -124,23 +124,29 @@ class SettingsSearchSeparationTests(unittest.TestCase):
         markup = SETTINGS_HTML.read_text(encoding="utf-8")
         client = SETTINGS_JS.read_text(encoding="utf-8")
         source = RUST.read_text(encoding="utf-8")
-        search_dialog = markup[
-            markup.index('<dialog id="search-dialog"'):
-            markup.index('<dialog id="commands-dialog"')
-        ]
-        help_dialog = markup[markup.index('<dialog id="commands-dialog"'):]
 
-        self.assertIn('id="command-search" type="search"', search_dialog)
-        self.assertIn('id="ledger-search-results"', search_dialog)
-        self.assertNotIn("command-grid", search_dialog)
-        self.assertNotIn("/ledger-sweep", search_dialog)
-        self.assertIn("command-grid", help_dialog)
-        self.assertIn("/ledger-sweep", help_dialog)
-        self.assertNotIn('type="search"', help_dialog)
+        # Search dialog still lives in Settings
+        self.assertIn('<dialog id="search-dialog"', markup)
+        self.assertIn('id="command-search" type="search"', markup)
+        self.assertIn('id="ledger-search-results"', markup)
+
+        # The old hardcoded commands-dialog was removed; command guide is now
+        # data-driven in the engine web UI
+        self.assertNotIn('<dialog id="commands-dialog"', markup)
+        self.assertNotIn("command-grid", markup)
+
+        # Engine web UI has the data-driven command guide dialog
+        engine_markup = APP_HTML.read_text(encoding="utf-8")
+        self.assertIn('id="command-guide-dialog"', engine_markup)
+        self.assertIn('id="command-guide-filter"', engine_markup)
+        self.assertIn('id="command-guide-list"', engine_markup)
+
         self.assertNotIn("filterCommands", client)
         self.assertIn('document.getElementById("show-search")', client)
-        self.assertIn('document.getElementById("show-help")', client)
         self.assertEqual(source.count('Some("CmdOrCtrl+K")'), 1)
+
+        # Native help menu includes command guide
+        self.assertIn('"help.command-guide"', source)
         keyboard_menu = source[
             source.index('let keyboard = custom_menu_item('):
             source.index('let privacy = custom_menu_item(')

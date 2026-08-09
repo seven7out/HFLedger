@@ -5,3 +5,4 @@ __pycache__/
 coverage/
 tmp/
 example/locks/*.lock
+tests/local-private-commands.txt

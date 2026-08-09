@@ -153,6 +153,7 @@ enum NativeCommand {
     ItemWatch,
     ItemCopyContext,
     HelpCommands,
+    HelpCommandGuide,
 }
 
 impl NativeCommand {
@@ -176,6 +177,7 @@ impl NativeCommand {
             Self::ItemWatch => "item.watch",
             Self::ItemCopyContext => "item.copy-context",
             Self::HelpCommands => "help.commands",
+            Self::HelpCommandGuide => "help.command-guide",
         }
     }
 
@@ -199,6 +201,7 @@ impl NativeCommand {
             Self::ItemWatch => native_event_script!("item.watch"),
             Self::ItemCopyContext => native_event_script!("item.copy-context"),
             Self::HelpCommands => native_event_script!("help.commands"),
+            Self::HelpCommandGuide => native_event_script!("help.command-guide"),
         }
     }
 }
@@ -3359,6 +3362,8 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
     )?;
 
     let help = custom_menu_item(app, "help.commands", "HFLedger Help", true, None)?;
+    let command_guide =
+        custom_menu_item(app, "help.command-guide", "Command Guide\u{2026}", true, None)?;
     let keyboard = custom_menu_item(app, "help.keyboard", "Keyboard Shortcuts", true, None)?;
     let privacy = custom_menu_item(app, "help.privacy", "Privacy & Read-only Model", true, None)?;
     let diagnostics = custom_menu_item(app, "help.diagnostics", "Show Diagnostics", true, None)?;
@@ -3369,6 +3374,7 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
         true,
         &[
             &help,
+            &command_guide,
             &keyboard,
             &privacy,
             &PredefinedMenuItem::separator(app)?,
@@ -3731,6 +3737,7 @@ fn native_command_for_menu_id(id: &str) -> Option<NativeCommand> {
         "item.watch" => Some(NativeCommand::ItemWatch),
         "edit.copy-context" | "item.copy-context" => Some(NativeCommand::ItemCopyContext),
         "help.commands" | "help.keyboard" | "help.privacy" => Some(NativeCommand::HelpCommands),
+        "help.command-guide" => Some(NativeCommand::HelpCommandGuide),
         _ => None,
     }
 }
@@ -4542,6 +4549,7 @@ mod tests {
             ("item.watch", NativeCommand::ItemWatch),
             ("item.copy-context", NativeCommand::ItemCopyContext),
             ("help.commands", NativeCommand::HelpCommands),
+            ("help.command-guide", NativeCommand::HelpCommandGuide),
         ];
         for (id, expected) in cases {
             let command = native_command_for_menu_id(id).expect("allowlisted command");

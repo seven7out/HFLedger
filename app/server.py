@@ -219,6 +219,12 @@ class Runtime:
             "accent": ui["accent"],
             "readOnly": bool(ui.get("readOnly", False)),
         }
+        raw_guide = self.config.get("commandGuide")
+        self.command_guide = [
+            {"name": str(entry.get("name", "")), "description": str(entry.get("description", ""))}
+            for entry in (raw_guide if isinstance(raw_guide, list) else [])
+            if isinstance(entry, dict) and entry.get("name")
+        ]
         self.workspace_id = local_state_workspace_id or "active"
         self.port = ui["port"]
         contexts = []
@@ -1245,6 +1251,9 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == "/api/links":
                 context_id = _context_from_query(parsed)
                 self._send_json(build_resolved_links_view(self.runtime, context_id))
+                return
+            if parsed.path == "/api/command-guide":
+                self._send_json({"version": 1, "commands": copy.deepcopy(self.runtime.command_guide)})
                 return
             if parsed.path.startswith("/api/items/"):
                 context_id = _context_from_query(parsed)

@@ -8,7 +8,7 @@ const elements = Object.fromEntries([
   "onboarding-panel", "recovery-panel", "recovery-message", "workspaces-panel",
   "settings-content", "settings-back",
   "diagnostics-dialog", "diagnostics-output",
-  "search-dialog", "commands-dialog", "command-search", "ledger-search-results",
+  "search-dialog", "command-search", "ledger-search-results",
 ].map((id) => [id, document.getElementById(id)]));
 
 let snapshot = null;
@@ -560,9 +560,7 @@ document.getElementById("close-search").addEventListener("click", () => {
 });
 document.getElementById("done-search").addEventListener("click", () => elements["search-dialog"].close());
 elements["search-dialog"].addEventListener("close", () => { searchGeneration += 1; });
-document.getElementById("show-help").addEventListener("click", () => elements["commands-dialog"].showModal());
-document.getElementById("close-commands").addEventListener("click", () => elements["commands-dialog"].close());
-document.getElementById("done-commands").addEventListener("click", () => elements["commands-dialog"].close());
+// Command guide is now data-driven in the engine web UI; the old help dialog was removed.
 elements["command-search"].addEventListener("input", () => {
   scheduleGlobalSearch();
 });

@@ -90,6 +90,32 @@
       }
     }
   },
+  "commandGuide": [
+    {
+      "name": "/ledger-status",
+      "description": "Print the current board summary and attention items without re-pulling sources."
+    },
+    {
+      "name": "/ledger-sweep",
+      "description": "Reconcile durable events, refresh observations, and rebuild the operating brief."
+    },
+    {
+      "name": "/ledger-work",
+      "description": "Pick and build the next safe ready-queue item, reporting bounded evidence."
+    },
+    {
+      "name": "/ledger-attend",
+      "description": "Present admitted owner decisions and exact manual actions for resolution."
+    },
+    {
+      "name": "/ledger-sync",
+      "description": "Push local ledger entries to the configured remote and pull any new ones."
+    },
+    {
+      "name": "/ledger-view",
+      "description": "Open the HFLedger engine UI in the default browser."
+    }
+  ],
   "schema": {
     "statuses": [
       "Needs Spec",
