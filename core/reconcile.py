@@ -4,7 +4,7 @@ import copy
 import fcntl
 import os
 
-from . import admission, ledger
+from . import admission, epoch, ledger
 from .store import BoardStore, BoardValidationError
 
 
@@ -277,8 +277,19 @@ def _apply_owner_decision_event(board, entry, line, config, applied, warnings):
 def _apply(board, entry, line, config, applied, warnings):
     mode = ledger.action_mode(config, entry["actor"], entry["action"])
     if mode == "audit-only":
-        warnings.append("audit-only %s/%s at line %d advanced without board effects" % (
-            entry["actor"], entry["action"], line))
+        if epoch.is_epoch_anchor(entry):
+            # Epoch anchors are audit-only but must be at line 1 only
+            if line != 1:
+                raise ValueError(
+                    "epoch anchor at line %d is invalid; "
+                    "anchors are only permitted at line 1 (%s)" % (
+                        line, epoch.EPOCH_ERR_DUPLICATE_ANCHOR))
+            warnings.append(
+                "epoch anchor (epoch %s) at line %d processed" % (
+                    entry.get("extra", {}).get("epochSequence"), line))
+        else:
+            warnings.append("audit-only %s/%s at line %d advanced without board effects" % (
+                entry["actor"], entry["action"], line))
         return False
     if mode != "reconcile":
         raise ValueError("ledger line %d is not registered for reconciliation" % line)

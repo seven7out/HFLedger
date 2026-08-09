@@ -5,6 +5,9 @@ import json
 
 from . import admission, evidence, item_metadata
 
+# Epoch anchor action name — must match core.epoch.EPOCH_ACTION
+EPOCH_ACTION = "epoch_anchor"
+
 
 CORE_SECTIONS = {
     "meta": dict,
@@ -112,6 +115,7 @@ def default_config(project="HFLedger workspace"):
                 "merged": "reconcile",
                 "skipped": "audit-only",
                 "decision_added": "reconcile",
+                EPOCH_ACTION: "audit-only",
                 **{action: "audit-only" for action in evidence.ACTIONS},
             }},
             "owner-ui": {"actions": {

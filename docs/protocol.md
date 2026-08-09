@@ -70,7 +70,7 @@ The shipped registry is:
 | Actor | Actions | Mode |
 |---|---|---|
 | `agent` | `decision_added`, `pr_opened`, `merged` | reconcile |
-| `agent` | `built`, `skipped`, `work_started`, `work_checkpoint`, `work_blocked`, `work_verified`, `work_shipped`, `work_abandoned` | audit-only |
+| `agent` | `built`, `skipped`, `epoch_anchor`, `work_started`, `work_checkpoint`, `work_blocked`, `work_verified`, `work_shipped`, `work_abandoned` | audit-only |
 | `owner-ui` | `decision_resolved`, `decision_snoozed` | reconcile |
 | `owner-ui` | `task_done`, `board_reordered`, `deck_answer`, `deck_undo`, `deck_need_info` | audit-only |
 
@@ -450,7 +450,77 @@ read the folded projection with `ledger owner-control` before selecting work.
 See [`owner-control.md`](owner-control.md) for the product boundary and
 Operations observation contract.
 
-## 10. Store invariants
+## 10. Ledger epochs
+
+When a ledger grows large, the operator may close the current epoch and start a new one. An epoch transition is a first-class protocol construct with cryptographic binding, archive verification, and tamper detection.
+
+### 10.1 Epoch anchor schema
+
+The first entry of a non-genesis epoch is an epoch-anchor: an audit-only event that cryptographically binds the new epoch to the old. The anchor uses action `epoch_anchor`, actor `agent`, authorization `epoch-boundary-v1`, and this `extra` payload:
+
+| Field | Type | Rule |
+|---|---|---|
+| `schemaVersion` | integer | Exactly `1` |
+| `epochSequence` | positive integer | Monotonically increasing epoch number |
+| `priorLedgerHash` | lowercase SHA-256 | Hash of the prior ledger file's exact bytes |
+| `priorLineCount` | non-negative integer | Number of lines in the archived ledger |
+| `priorExternalCursor` | non-negative integer | Board cursor position at epoch creation |
+| `priorLastEntryDigest` | lowercase SHA-256 | Canonical entry digest of the last entry in the prior ledger |
+| `priorBoardHash` | lowercase SHA-256 | Hash of the board file's exact bytes at epoch creation |
+| `archiveLocator` | non-empty string | Relative path to the archived prior ledger within the data directory |
+
+All anchor fields are part of the entry's canonical digest, making them tamper-evident.
+
+### 10.2 Digest and cursor semantics
+
+The new epoch's cursor starts at the anchor (line 1). An anchor is valid only if the prior external cursor equals the prior line count; this prevents creating an epoch over unprocessed entries. The board's ledger cursor must have processed all prior-epoch entries before an epoch transition.
+
+### 10.3 Placement rule
+
+An epoch anchor is only valid at line 1 of a ledger file. A second anchor anywhere in the same epoch is a fatal error (`EPOCH_DUPLICATE_ANCHOR_MID_EPOCH`). Reconciliation enforces this: an anchor at any line other than 1 halts processing with a distinct error.
+
+### 10.4 Archive contract
+
+The prior ledger must be stored byte-identical at the archive locator relative to the data directory. Archive files have permissions 0600 and their parent directories have permissions 0700. The archive bytes must hash to exactly the anchored full-file hash.
+
+### 10.5 Validation failure codes
+
+Every failure class produces a distinct error code:
+
+| Code | Meaning |
+|---|---|
+| `EPOCH_ARCHIVE_MISSING` | Archive file not found at the locator path |
+| `EPOCH_ARCHIVE_HASH_MISMATCH` | Archive bytes do not hash to the anchored hash |
+| `EPOCH_LINE_COUNT_MISMATCH` | Archive line count differs from the anchored count |
+| `EPOCH_CURSOR_STALE` | Prior cursor < prior line count; unprocessed suffix exists |
+| `EPOCH_LAST_ENTRY_DIGEST_MISMATCH` | Last entry digest in archive does not match anchor |
+| `EPOCH_BOARD_HASH_MISMATCH` | Board hash at epoch creation does not match anchor |
+| `EPOCH_DUPLICATE_ANCHOR_MID_EPOCH` | Second anchor found within the same epoch |
+| `EPOCH_OVER_UNRECONCILED_SUFFIX` | Board cursor behind prior epoch line count |
+| `EPOCH_ANCHOR_FIELD_TAMPERED` | Anchor payload fields are malformed |
+| `EPOCH_SYNC_CONFLICT` | Archive epoch sequence >= current, indicating backup restoration |
+
+All failures are fail-closed: the operation halts and leaves state unchanged.
+
+### 10.6 Recovery procedure
+
+After a crash, sync conflict, or backup restore, the recovery procedure deterministically verifies the epoch boundary:
+
+1. Check if the ledger starts with an epoch anchor.
+2. Validate all anchor payload fields.
+3. Verify the archive file exists and its bytes hash to the anchored hash.
+4. Check for duplicate anchors in the epoch.
+5. Validate cursor alignment (prior cursor equals prior line count).
+6. Check that no unreconciled suffix was skipped.
+7. Verify the board hash if a board snapshot is available.
+
+No step ever mutates the prior archive. Recovery is deterministic: running it twice produces identical results. Rollback for a non-authoritative epoch creation means discarding the new epoch's ledger file and restoring the prior ledger from the archive, which remains byte-identical.
+
+### 10.7 Sync conflict detection
+
+An older backup of epoch N restored after epoch N+1 exists is detected via the anchor's epoch sequence. If the archive's anchored epoch sequence is >= the current epoch sequence, a sync conflict is reported (`EPOCH_SYNC_CONFLICT`).
+
+## 11. Store invariants
 
 A conforming implementation preserves all of these properties:
 
@@ -469,7 +539,7 @@ A conforming implementation preserves all of these properties:
 - Generated counts: `statusCounts` must equal the board's current contents.
 - Bounded quarantine: untrusted excerpts cannot exceed the configured cap.
 
-## 11. Runtime integration checklist
+## 12. Runtime integration checklist
 
 A new agent runtime should:
 
@@ -485,7 +555,7 @@ A new agent runtime should:
 10. Run `ledger reconcile`, then `ledger validate`, before serving updated state.
 11. Treat exit status 2 as malformed input or an unsafe state requiring correction; do not bypass the gate with direct board edits.
 
-## 12. Exit statuses and versioning
+## 13. Exit statuses and versioning
 
 The CLI uses exit status 0 for success, 1 for a completed `validate` command that found invalid state, and 2 for command misuse, rejected admission/completion packages, unreadable state, or fail-closed reconciliation errors.
 

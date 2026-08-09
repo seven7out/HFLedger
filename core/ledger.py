@@ -7,7 +7,7 @@ import json
 import os
 import re
 
-from . import admission, evidence
+from . import admission, epoch, evidence
 
 
 ENVELOPE_FIELDS = frozenset((
@@ -101,6 +101,8 @@ def envelope_errors(entry, config):
         errors.append("extra must be null or an object")
     if action in evidence.ACTIONS:
         errors.extend(evidence.event_errors(entry))
+    if action == epoch.EPOCH_ACTION:
+        errors.extend(epoch.anchor_payload_errors(entry.get("extra")))
     return errors
 
 
