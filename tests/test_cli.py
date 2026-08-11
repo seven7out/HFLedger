@@ -72,10 +72,56 @@ class CliTests(unittest.TestCase):
             "--proof-expect", "enabled",
         ]
 
+    def idea_card_args(self):
+        return [
+            "ask", "card", "idea_pick",
+            "--key", "cli:card:pickup-reminder",
+            "--title", "Choose the bakery pickup reminder",
+            "--blocks", "task:bakery:pickup-reminder",
+            "--gate", "judgment",
+            "--human-reason", "Two prepared customer experiences remain for the product owner to choose.",
+            "--blocked-outcome", "The pickup reminder cannot enter product planning until one direction is chosen.",
+            "--risk", "A noisy reminder could frustrate customers during a busy pickup window.",
+            "--risk-level", "low",
+            "--reversibility", "reversible",
+            "--rollback", "Return to the current no-reminder experience.",
+            "--work-done", "Both reminder experiences were reviewed with fictional customer scenarios.",
+            "--source", "fictional bakery product workshop",
+            "--priority", "P2",
+            "--idea", "Let customers choose a reminder before their bakery pickup window closes.",
+            "--question", "Which reminder experience should the bakery prepare first?",
+            "--option", "gentle", "Gentle reminder", "Show one calm reminder near the end of the pickup window.",
+            "--option", "none", "No reminder", "Keep the current experience without adding another message.",
+            "--recommend", "gentle",
+            "--recommend-why", "A single calm reminder helps customers without making the experience noisy.",
+        ]
+
+    def stuck_card_args(self):
+        return [
+            "ask", "card", "stuck_alarm",
+            "--key", "cli:card:menu-refresh",
+            "--title", "The daily bakery menu refresh stopped",
+            "--blocks", "task:bakery:menu-refresh",
+            "--gate", "production-manual",
+            "--human-reason", "The product owner decides whether any non-technical follow-up is useful.",
+            "--blocked-outcome", "Customers may continue seeing yesterday's fictional bakery menu.",
+            "--risk", "Customers could choose an item that is not available today.",
+            "--risk-level", "medium",
+            "--reversibility", "reversible",
+            "--rollback", "Restore the last known accurate fictional menu.",
+            "--work-done", "Agents detected the stopped refresh and began a bounded recovery attempt.",
+            "--source", "fictional bakery product monitor",
+            "--priority", "P1",
+            "--stopped", "The fictional bakery menu stopped refreshing for customers.",
+            "--stopped-since", "2026-08-02",
+            "--owner-action", "No action needed",
+        ]
+
     def test_help_is_available_for_every_command(self):
         commands = (
             ["--help"], ["init", "--help"], ["ask", "--help"],
             ["ask", "decision", "--help"], ["ask", "action", "--help"],
+            ["ask", "card", "--help"],
             ["done", "--help"], ["skip", "--help"],
             ["event", "--help"],
             ["validate", "--help"], ["reconcile", "--help"],
@@ -86,6 +132,25 @@ class CliTests(unittest.TestCase):
             result = self.run_cli(command)
             self.assertEqual(result.returncode, 0, (command, result.stderr))
             self.assertIn("usage:", result.stdout)
+
+    def test_typed_card_cli_validates_and_files_the_product_kind(self):
+        dry_run = self.run_cli(self.idea_card_args() + ["--dry-run"])
+        self.assertEqual(dry_run.returncode, 0, dry_run.stderr)
+        package = json.loads(dry_run.stdout)["package"]
+        self.assertEqual(package["cardKind"], "idea_pick")
+        self.assertEqual(package["options"][0]["description"],
+                         "Show one calm reminder near the end of the pickup window.")
+        filed = self.run_cli(self.idea_card_args())
+        self.assertEqual(filed.returncode, 0, filed.stderr)
+
+    def test_stuck_alarm_accepts_documented_no_action_needed_response(self):
+        dry_run = self.run_cli(self.stuck_card_args() + ["--dry-run"])
+        self.assertEqual(dry_run.returncode, 0, dry_run.stderr)
+        package = json.loads(dry_run.stdout)["package"]
+        self.assertEqual(package["ownerAction"], "No action needed")
+        self.assertGreaterEqual(len(package["instruction"]), 20)
+        filed = self.run_cli(self.stuck_card_args())
+        self.assertEqual(filed.returncode, 0, filed.stderr)
 
     def test_search_command_projects_registered_workspaces_through_one_engine(self):
         filed = self.run_cli(self.decision_args())

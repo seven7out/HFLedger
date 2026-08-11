@@ -376,7 +376,10 @@ def _explicit_relations(records, maximum):
                 continue
             total += 1
             affected.update((first_id, second_id))
-            pair_key = _evidence_pair_key(first, second)
+            # These ids were already normalized while building by_id. Reusing
+            # them avoids re-sanitizing both ids for every declared edge.
+            pair_key = ((first_id, second_id) if first_id < second_id
+                        else (second_id, first_id))
             candidate = (_ReversePairKey(pair_key), first_id, second_id, first, second)
             if len(selected) < maximum:
                 heapq.heappush(selected, candidate)

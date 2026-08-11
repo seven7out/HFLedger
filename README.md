@@ -1,15 +1,17 @@
 # HFLedger
 
-HFLedger is a quiet local ledger browser for work spread across AI coding
-agents. It answers two questions first: what needs attention now, and what
-changed since the last successful visit. Ranked attention, run-grouped changes,
-source health, and evidence dossiers replace a metric dashboard or a second
-task database.
+HFLedger governs the interrupt channel between AI agents and a product owner.
+The owner is not expected to evaluate code. Today answers three product
+questions first: is production healthy, which product judgments are waiting,
+and where work is flowing from idea to production. Ranked attention,
+run-grouped changes, source health, and evidence dossiers remain available
+under that owner-facing summary.
 
 Most agent tools make it easy to start work inside one task. HFLedger provides
-the missing orientation across tasks and runtimes while retaining its strict
-boundary for human interruptions: when may an agent interrupt a person, what
-must it provide, and how does a reported outcome become durable? It combines a
+the missing product orientation across tasks and runtimes while retaining its
+strict boundary for owner interruptions: when may an agent interrupt the
+owner, which product judgment is required, and how does the outcome become
+durable? It combines a
 read-only Today browser, local JSON board, append-only evidence ledger, strict
 admission and completion gates, a phone-sized Decision Deck, app-private local
 triage state, and optional read-only collectors.
@@ -18,7 +20,15 @@ HFLedger is agent-agnostic. Any runtime that can read files and run a command ca
 
 ## The contract
 
-- An agent cannot file a vague escalation. A decision needs two or three options, a reasoned recommendation, risk, reversibility, rollback, completed analysis, and a stable deduplication key.
+- An agent cannot file a vague escalation. Admission requires a reasoned
+  recommendation, risk, reversibility, rollback, completed analysis, and a
+  stable deduplication key; option-picking cards carry two or three prepared
+  product choices.
+- Every typed owner card is an `idea_pick`, `outcome_review`, `risk_card`,
+  `stuck_alarm`, or `priority_review`, matching the owner's five judgment zones.
+- Primary card copy uses plain product language. Diffs, pull requests, branch
+  names, commits, and check names are secondary `footnoteLinks`, never the
+  content the owner is asked to judge.
 - A manual action must identify one exact owner-only step and observable completion proof.
 - “I already did that” and “skip it” become provenance-bearing completion events instead of disappearing into chat history.
 - Board mutation is locked, validated, backed up, and atomically replaced. Agent events are append-only and reconciled through a fail-closed cursor.
@@ -51,7 +61,12 @@ DEMO_HOME="$(mktemp -d)"
 ./cli/ledger --home "$DEMO_HOME" serve
 ```
 
-Open [http://127.0.0.1:7171/deck](http://127.0.0.1:7171/deck). The copied fictional bakery workspace contains one admitted decision. Choose an option or swipe right to accept the recommendation; the outcome is written only to the disposable directory printed by `ledger-demo`.
+Open [http://127.0.0.1:7171/](http://127.0.0.1:7171/). The fictional bakery
+Today view starts with production health, one waiting card of each kind, and
+the idea-to-production flow. Then open
+[http://127.0.0.1:7171/deck](http://127.0.0.1:7171/deck) to review the five
+product-owner cards. Any outcome is written only to the disposable directory
+printed by `ledger-demo`.
 
 The board is at [http://127.0.0.1:7171/](http://127.0.0.1:7171/). Stop the server with `Ctrl-C`. The committed `example/` remains untouched.
 
@@ -96,6 +111,7 @@ Agents use one CLI surface:
 ```text
 ledger init
 ledger ask decision|action
+ledger ask card idea_pick|outcome_review|risk_card|stuck_alarm|priority_review
 ledger done|skip
 ledger event started|checkpoint|blocked|verified|shipped|abandoned
 ledger validate
@@ -105,7 +121,11 @@ ledger collect
 ledger render-packs
 ```
 
-`ledger ask` is intentionally demanding. Agent-executable work stays in the queue; raw ideas stay in the inbox; only an irreducible human choice or exact owner-only action should pass admission. See [`docs/discipline.md`](docs/discipline.md).
+`ledger ask` is intentionally demanding. Agent-executable work stays in the
+queue; raw ideas stay in the inbox; only an irreducible product judgment or
+exact owner-only action should pass admission. Typed cards translate that
+judgment into the five zones above. See [`docs/owner-model.md`](docs/owner-model.md)
+and [`docs/discipline.md`](docs/discipline.md).
 
 `ledger event` is the low-friction evidence surface for Codex, Claude Code, and
 other runtimes. It records bounded task progress and evidence references
@@ -124,8 +144,11 @@ generation are in [`docs/automation.md`](docs/automation.md).
 
 The standard-library HTTP service provides:
 
-- a Today view with capped ranked attention, changes grouped by an exact run,
-  and quiet concerns only when the required sources were actually observed;
+- a Today view led by one plain production-health sentence, waiting card counts
+  across the five judgment zones, and product flow from idea pick through
+  production;
+- capped ranked attention, changes grouped by an exact run, and quiet concerns
+  only when the required sources were actually observed;
 - Changes, All Work, Shipped Log, Watched, Projects, and an evidence inspector
   with explicit provenance and separate item-change/source-observation clocks;
 - a responsive board for queue, inbox, owner tasks, admitted asks, and outcomes;

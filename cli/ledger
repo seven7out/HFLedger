@@ -51,8 +51,10 @@ def _add_common_ask_args(parser):
 
 
 def _build_package(args):
+    ask_type = (admission.CARD_KIND_TYPES[args.card_kind]
+                if args.ask_kind == "card" else args.ask_kind)
     common = admission.build_common(
-        args.ask_kind, args.dedupe_key, args.title, args.blocks, args.gate,
+        ask_type, args.dedupe_key, args.title, args.blocks, args.gate,
         args.human_reason, args.blocked_outcome, args.risk, args.risk_level,
         args.reversibility, args.rollback, args.work_done, args.source,
         args.priority, protected_class=args.protected_class,
@@ -60,9 +62,49 @@ def _build_package(args):
     if args.ask_kind == "decision":
         return admission.build_decision(
             common, args.question, args.option, args.recommend, args.recommend_why)
-    return admission.build_action(
-        common, args.instruction, args.proof, args.minutes,
-        proof_command=args.proof_command, proof_expect=args.proof_expect)
+    if args.ask_kind == "action":
+        return admission.build_action(
+            common, args.instruction, args.proof, args.minutes,
+            proof_command=args.proof_command, proof_expect=args.proof_expect)
+    required = {
+        "idea_pick": ("idea", "question", "recommend", "recommend_why"),
+        "outcome_review": (
+            "user_change", "test_evidence", "question", "recommend", "recommend_why"),
+        "risk_card": ("risk_subject", "question", "recommend", "recommend_why"),
+        "stuck_alarm": ("stopped", "stopped_since", "owner_action"),
+        "priority_review": ("question", "recommend_why"),
+    }
+    missing = [field.replace("_", "-") for field in required[args.card_kind]
+               if not getattr(args, field)]
+    if args.card_kind in ("idea_pick", "outcome_review", "risk_card") and not args.option:
+        missing.append("option")
+    if args.card_kind == "outcome_review" and not args.evidence_link:
+        missing.append("evidence-link")
+    if args.card_kind == "priority_review" and not args.build:
+        missing.append("build")
+    if missing:
+        raise ValueError("%s requires: %s" % (args.card_kind, ", ".join(missing)))
+    footnotes = args.footnote_link or []
+    if args.card_kind == "idea_pick":
+        return admission.build_idea_pick(
+            common, args.idea, args.question, args.option, args.recommend,
+            args.recommend_why, footnote_links=footnotes)
+    if args.card_kind == "outcome_review":
+        return admission.build_outcome_review(
+            common, args.user_change, args.evidence_link, args.test_evidence,
+            args.question, args.option, args.recommend, args.recommend_why,
+            footnote_links=footnotes)
+    if args.card_kind == "risk_card":
+        return admission.build_risk_card(
+            common, args.risk_subject, args.question, args.option, args.recommend,
+            args.recommend_why, footnote_links=footnotes)
+    if args.card_kind == "stuck_alarm":
+        return admission.build_stuck_alarm(
+            common, args.stopped, args.stopped_since, args.owner_action,
+            footnote_links=footnotes)
+    return admission.build_priority_review(
+        common, args.question, args.build, args.recommend_why,
+        footnote_links=footnotes)
 
 
 def _add_completion_args(parser):
@@ -114,6 +156,36 @@ def build_parser():
     action.add_argument("--proof-command", "--proof-cmd", dest="proof_command",
                         help="optional single-line read-only shell command")
     action.add_argument("--proof-expect", help="optional literal expected in proof command output")
+
+    card = ask_sub.add_parser(
+        "card", help="file one of the five product-owner card kinds",
+        description=(
+            "Typed cards use plain product language. Technical implementation references "
+            "are allowed only in --footnote-link drill-downs."))
+    card.add_argument("card_kind", choices=admission.CARD_KINDS)
+    _add_common_ask_args(card)
+    card.add_argument("--question", help="plain-language product choice")
+    card.add_argument("--option", action="append", nargs=3, default=[],
+                      metavar=("ID", "LABEL", "DESCRIPTION"),
+                      help="prepared product option; repeat two or three times")
+    card.add_argument("--recommend", help="recommended option id")
+    card.add_argument("--recommend-why", dest="recommend_why",
+                      help="plain-language reason for the recommendation")
+    card.add_argument("--idea", help="one-line product idea for idea_pick")
+    card.add_argument("--user-change", help="one-line user-visible change for outcome_review")
+    card.add_argument("--evidence-link", action="append", nargs=2, default=[],
+                      metavar=("LABEL", "HREF"), help="product evidence link or screenshot")
+    card.add_argument("--test-evidence", help="one-line product test summary")
+    card.add_argument("--risk-subject", help="exact content or data practice being judged")
+    card.add_argument("--stopped", help="plain-language statement of what stopped")
+    card.add_argument("--stopped-since", help="date or timezone-aware timestamp")
+    card.add_argument("--owner-action", help="useful owner action, including no action needed")
+    card.add_argument("--build", action="append", nargs=3, default=[],
+                      metavar=("ID", "TITLE", "DESCRIPTION"),
+                      help="queued product build in recommended order; repeat two to eight times")
+    card.add_argument("--footnote-link", action="append", nargs=2, default=[],
+                      metavar=("LABEL", "HREF"),
+                      help="secondary technical drill-down; repeat up to eight times")
 
     done = sub.add_parser("done", help="capture the owner's report that an item is complete")
     _add_completion_args(done)

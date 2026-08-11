@@ -232,6 +232,7 @@ The deterministic ask id is `ask-` plus the first 16 lowercase hexadecimal chara
 | `id` | string | Deterministic id derived from `dedupeKey` |
 | `dedupeKey` | string | Stable global key; same underlying ask always uses the same key |
 | `type` | string | `decision` or `action` |
+| `cardKind` | string, typed cards | `idea_pick`, `outcome_review`, `risk_card`, `stuck_alarm`, or `priority_review` |
 | `title` | string | 12–180 useful characters |
 | `detail` | string | Optional additional context |
 | `blocks` | nonempty string array | Stable task, issue, release, or risk identifiers |
@@ -260,11 +261,12 @@ Known placeholder values such as `x`, `test`, `tbd`, `todo`, `none`, `unknown`, 
 | Field | Type | Rule |
 |---|---|---|
 | `question` | string | Exact question, 20–1000 characters |
-| `options` | array | Exactly 2 or 3 option objects |
+| `options` | array | Exactly 2 or 3 option objects; omitted only by `priority_review` |
 | `options[].id` | string | Unique; `[a-z][a-z0-9_-]{0,63}` |
 | `options[].label` | string | 2–160 characters |
-| `options[].tradeoff` | string | 12–500 characters |
-| `recommendedOption` | string | One option id |
+| `options[].tradeoff` | string | 12–500 characters on legacy decisions |
+| `options[].description` | string | One-line 12–280 character product description on typed option cards |
+| `recommendedOption` | string | One option id; omitted by `priority_review` |
 | `recommendationReason` | string | 20–1000 reasoned characters |
 
 A decision must not contain action-only fields. The required recommendation reduces choice dumping: the agent must perform analysis before interrupting the owner.
@@ -281,7 +283,27 @@ A decision must not contain action-only fields. The required recommendation redu
 
 An action must not contain decision-only fields. `proofCommand` screening is defense in depth, not a shell sandbox. The gate rejects shell substitutions, output redirection, mutating `find` actions, interpreters and shells, common file/process/package mutation tools, mutating Git operations, mutating GitHub CLI subcommands and API requests, upload/body forms of `curl` and `wget`, and non-read-only operations for selected system tools. A later proof runner must revalidate immediately before execution, impose a timeout, avoid secrets in output, and run with the least available authority.
 
-### 6.4 Dedupe semantics
+### 6.4 Typed product-owner cards
+
+Typed cards extend the existing decision/action plane. The underlying `type`
+continues to control authorization and resolution; `cardKind` names the product
+judgment. Legacy untyped decisions and actions remain valid.
+
+| Kind | Underlying type | Required typed fields |
+|---|---|---|
+| `idea_pick` | `decision` | `idea`; two or three product-description options; recommendation |
+| `outcome_review` | `decision` | `userChange`; one through eight `evidenceLinks`; one-line `testEvidenceSummary`; release/hold options; rollback |
+| `risk_card` | `decision` | exact content or data practice in `riskSubject`; options; recommendation |
+| `stuck_alarm` | `action` | `stopped`; real date or timezone-aware `stoppedSince`; `ownerAction` |
+| `priority_review` | `decision` | two through eight ordered `builds` with stable id, title, and one-line product description; recommendation reason |
+
+`evidenceLinks` contain visible product evidence such as screenshots or a
+user-facing preview. `footnoteLinks` are the only sanctioned field for diffs,
+pull requests, branch names, commits, check names, file paths, and similar
+technical drill-down. Typed validation rejects those shapes across primary
+card prose. See [`owner-model.md`](owner-model.md).
+
+### 6.5 Dedupe semantics
 
 Filing is serialized by `locks/ask.lock`. Before append, the gate searches:
 
@@ -293,7 +315,7 @@ Filing is serialized by `locks/ask.lock`. Before append, the gate searches:
 
 An open or pending duplicate returns success with `status: already_open` and appends nothing. A deferred duplicate is rejected. A resolved key is permanently spent and cannot be asked again. A materially different future question needs a genuinely new stable key; changing a key only to bypass resolution history violates the protocol.
 
-### 6.5 Owner decision events
+### 6.6 Owner decision events
 
 Interfaces resolve or snooze a folded card by appending registered `owner-ui` events through the core ledger writer. These are event-first operations: reconciliation applies the board change and its provenance atomically. The Phase 2 reference client implements this contract; see `docs/ui.md`.
 
@@ -307,6 +329,12 @@ Both actions use actor `owner-ui`, null `task_id` and `pr`, authorization `owner
 | `resolution` | string | Nonempty owner choice, at most 4000 characters |
 | `evidence` | string | Nonempty capture evidence, at most 4000 characters |
 | `selectedOption` | string, optional | An option id present on that decision |
+| `priorityOrder` | string array, priority review only | Nonempty ordered surviving build ids |
+| `killedItemIds` | string array, priority review only | Disjoint killed build ids; together with `priorityOrder`, exactly partitions the card's builds |
+
+Applying a valid priority-review outcome moves the surviving listed queue items
+to the front in the submitted order, marks killed items `Parked`, and preserves
+the relative order of unrelated queue work.
 
 It moves the card into `decisions.resolved`, sets the date from the event timestamp, and adds `resolutionLedgerProvenance`. It cannot also carry completion provenance.
 
