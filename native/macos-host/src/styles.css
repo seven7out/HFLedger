@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   color: #202124;
   background: #f5f5f7;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
@@ -354,25 +354,6 @@ dialog::backdrop { background: rgba(24, 24, 30, .38); backdrop-filter: blur(5px)
 .command-badge.attended { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 24%, transparent); background: color-mix(in srgb, var(--danger) 7%, transparent); }
 .commands-dialog .dialog-actions { justify-content: space-between; }
 .commands-footnote { color: var(--muted); font-size: 9px; }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --window: #202124;
-    --content: #292a2d;
-    --sidebar: rgba(36, 37, 40, .98);
-    --toolbar: rgba(41, 42, 45, .95);
-    --ink: #f1f1f3;
-    --muted: #b2b3b8;
-    --subtle: #929399;
-    --line: rgba(241, 241, 243, .12);
-    --strong-line: rgba(241, 241, 243, .22);
-    --accent: #a89cff;
-    --good: #7ed9b4;
-    --danger: #ffaaa6;
-    --warning: #e0a96a;
-    --card-shadow: 0 10px 28px rgba(0, 0, 0, .14);
-  }
-}
 
 @media (max-width: 850px) {
   .settings-layout { grid-template-columns: 210px minmax(0, 1fr); }

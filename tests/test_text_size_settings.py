@@ -82,7 +82,7 @@ class TextSizeSettingsTests(unittest.TestCase):
         self.assertIn("white-space: normal", style)
         self.assertIn("overflow-wrap: anywhere", style)
         self.assertIn("@media (max-width: 679px)", style)
-        self.assertIn("prefers-color-scheme: dark", style)
+        self.assertNotIn("prefers-color-scheme: dark", style)
         self.assertIn("prefers-contrast: more", style)
         self.assertIn("prefers-reduced-motion: reduce", style)
 

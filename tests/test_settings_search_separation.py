@@ -165,6 +165,10 @@ class SettingsSearchSeparationTests(unittest.TestCase):
         self.assertIn(".settings-sidebar", style)
         self.assertIn("--window: #f5f5f7", style)
         self.assertIn("--accent: #6956e8", style)
+        self.assertIn("color-scheme: light", style)
+        self.assertIn('content="light"', markup)
+        self.assertNotIn("prefers-color-scheme: dark", style)
+        self.assertNotIn("#a89cff", style)
         narrow = style[style.index("@media (max-width: 679px)"):]
         self.assertIn(".settings-layout { display: block;", narrow)
         self.assertIn(".create-controls, .text-size-setting { grid-template-columns: minmax(0, 1fr); }", narrow)

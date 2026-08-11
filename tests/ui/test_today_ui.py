@@ -64,7 +64,7 @@ class TodayUIContractTests(unittest.TestCase):
             script,
         )
         self.assertIn("quick-look-card", style)
-        self.assertIn("prefers-color-scheme: dark", style)
+        self.assertNotIn("prefers-color-scheme: dark", style)
         self.assertIn("prefers-reduced-motion: reduce", style)
         for forbidden in (
             "FileReader", "showOpenFilePicker", "webkitRequestFileSystem",
@@ -79,6 +79,24 @@ class TodayUIContractTests(unittest.TestCase):
             self.assertIn(required, deck_rules)
         self.assertNotIn(".undo-bar", deck_rules)
         self.assertNotIn("#undo-timer", deck_rules)
+
+    def test_owner_surfaces_share_the_restrained_light_visual_contract(self):
+        style = CSS.read_text(encoding="utf-8")
+        markup = HTML.read_text(encoding="utf-8")
+        deck_markup = (ROOT / "app" / "static" / "deck.html").read_text(encoding="utf-8")
+        served_rules = style[:style.index(DECK_MARKER)]
+        deck_rules = style[style.index(DECK_MARKER):]
+
+        self.assertIn('content="light"', markup)
+        self.assertIn('content="light"', deck_markup)
+        self.assertIn("color-scheme: light", served_rules)
+        self.assertIn("color-scheme: light", deck_rules)
+        self.assertIn("background: var(--window)", deck_rules)
+        self.assertIn(".stack-card { display: none; }", deck_rules)
+        for forbidden in ("prefers-color-scheme: dark", "#a89cff"):
+            self.assertNotIn(forbidden, style)
+        for forbidden in ("#171828", "radial-gradient", "rgba(255,255,255"):
+            self.assertNotIn(forbidden, deck_rules)
 
     def test_owner_summary_is_production_first_and_test_site_failure_is_neutral(self):
         script = JS.read_text(encoding="utf-8")
@@ -133,7 +151,7 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertIn('document.body.style.setProperty("--inspector-width"', script)
         self.assertNotIn('document.documentElement.style.setProperty("--sidebar-width"', script)
         self.assertNotIn('document.documentElement.style.setProperty("--inspector-width"', script)
-        self.assertIn("prefers-color-scheme: dark", served_rules)
+        self.assertNotIn("prefers-color-scheme: dark", served_rules)
         self.assertIn("prefers-reduced-motion: reduce", served_rules)
 
     def test_escape_closes_transients_before_editable_shortcut_guard(self):

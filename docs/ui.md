@@ -11,6 +11,20 @@ phone-sized Decision Deck from the same validated board and append-only ledger.
 There is no UI task database. Today is a read-only orientation projection; the
 Decision Deck remains the owner outcome surface.
 
+## Visual contract
+
+Today, the Decision Deck, Settings, onboarding, and recovery use one restrained
+light visual system. The three-pane Today layout is the anchor: quiet neutral
+surfaces, thin separators, compact controls, and color reserved for state and
+the configured workspace accent. Owner cards are dense product documents, not
+glowing presentation cards.
+
+HFLedger deliberately does not infer an alternate palette from the operating
+system's dark-mode preference. A future theme may be added only as an explicit
+owner setting with its own cross-surface visual review. Recovery must preserve
+the same visual language as Today so a failed engine cannot make the app appear
+to have changed products.
+
 ## Start the service
 
 ```sh
@@ -220,11 +234,12 @@ shell, or filesystem capability.
 
 The Today toolbar keeps Search and Settings separate. Search is an inline text
 box whose popover contains only ledger-item matches. Settings uses one exact
-native-intercepted loopback sentinel to open the existing Mac Settings window;
-it does not grant native IPC to the board page. The Settings window retains
-workspace management, engine recovery, notifications, Launch at Login, Reopen
-Last Board, persistent text size, backups, Finder reveals, diagnostics, and
-quit. Its own Global Search dialog is search-only, while the slash-command
+native-intercepted loopback sentinel to replace Today with a capability-bounded
+Settings child webview in the same window; the board page itself receives no
+native IPC. Back and the Today menu restore the mounted Today webview. Settings
+retains workspace management, engine recovery, notifications, Launch at Login,
+Reopen Last Board, persistent text size, backups, Finder reveals, diagnostics,
+and quit. Its own Global Search dialog is search-only, while the slash-command
 reference lives in a separate Help dialog.
 
 The native host watches only already configured, allowlisted board, ledger,

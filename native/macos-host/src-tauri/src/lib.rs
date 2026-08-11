@@ -1498,11 +1498,7 @@ fn restore_primary_surface(app: &AppHandle) {
         }
     };
     let host_ready = current_host_status(&state).ready;
-    let plan = primary_surface_plan(
-        &config,
-        app.get_window("board").is_some(),
-        host_ready,
-    );
+    let plan = primary_surface_plan(&config, app.get_window("board").is_some(), host_ready);
     match plan {
         PrimarySurfacePlan::ShowExistingToday => {
             let _ = show_existing_today(app);

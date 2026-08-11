@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Restored the Mac app's three-pane Today surface on current owner-model
+  workspaces, embedded Settings into the same window, and unified Today,
+  Decision Deck, Settings, onboarding, and recovery on one restrained light
+  visual system.
+- Extended the closed native text-size scale with 175% and 200% choices while
+  preserving readable wrapping and navigation at the largest sizes.
 - Recentered Today on a non-developer product owner: production health first,
   five plain-language judgment-card counts, and idea-to-production flow with
   neutral test-site failures.
