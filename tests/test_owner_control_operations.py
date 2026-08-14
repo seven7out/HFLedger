@@ -92,6 +92,38 @@ class OwnerControlTests(unittest.TestCase):
         for name, content in before.items():
             self.assertEqual(Path(self.home, name).read_bytes(), content)
 
+    def test_owner_manual_completion_is_one_way_and_does_not_rewrite_source(self):
+        before = {
+            name: Path(self.home, name).read_bytes()
+            for name in ("board.json", "ledger.jsonl", "config.json")
+        }
+        event = owner_control.append(
+            self.home, 0, "owner-task-complete", task_id="owner-window-sign",
+            now_fn=lambda: "2026-08-14T11:03:00+00:00")
+        self.assertIsNone(event["changes"])
+        self.assertIsNone(event["priorityOrder"])
+        state = owner_control.fold(owner_control.read(self.home))
+        self.assertEqual(
+            state["ownerTaskCompletions"],
+            {"owner-window-sign": "2026-08-14T11:03:00+00:00"})
+        projected = {"ownerTasks": [{
+            "id": "owner-window-sign",
+            "title": "Confirm the new pickup sign is visible",
+        }]}
+        owner_control.apply_owner_task_completions(projected, state)
+        self.assertEqual(projected["ownerTasks"][0]["status"], "done")
+        self.assertTrue(projected["ownerTasks"][0]["done"])
+        self.assertEqual(
+            projected["ownerTasks"][0]["completionSource"], "owner-control")
+        for name, content in before.items():
+            self.assertEqual(Path(self.home, name).read_bytes(), content)
+
+    def test_owner_manual_completion_rejects_extra_payload(self):
+        with self.assertRaises(owner_control.OwnerControlError):
+            owner_control.append(
+                self.home, 0, "owner-task-complete", task_id="owner-window-sign",
+                changes={"note": "Do not smuggle task edits into completion."})
+
     def test_stale_revision_hash_chain_permissions_and_symlink_fail_closed(self):
         owner_control.append(
             self.home, 0, "task-set", task_id="task-menu",
@@ -220,6 +252,12 @@ class OwnerControlServerTests(unittest.TestCase):
                 "status": "Ready for Build",
                 "updated": "2026-08-14T10:05:00+00:00",
             }])
+            board["ownerTasks"].append({
+                "id": "owner-window-sign",
+                "title": "Confirm the new pickup sign is visible",
+                "instruction": "Look from across the street and confirm the sign is readable.",
+                "done": False,
+            })
             schema.refresh_generated(board)
 
         store.BoardStore(str(self.home), config=config).update(seed)
@@ -310,6 +348,49 @@ class OwnerControlServerTests(unittest.TestCase):
         self.assertEqual(status, 404)
         status, _response = self.command(1, "set-priority", {"taskIds": ["task-menu"]})
         self.assertEqual(status, 400)
+
+    def test_read_only_source_accepts_owner_manual_completion_only_for_owner_tasks(self):
+        source_before = {
+            name: Path(self.home, name).read_bytes()
+            for name in ("board.json", "ledger.jsonl", "config.json")
+        }
+        status, before = self.request("GET", "/api/board?context=main")
+        self.assertEqual(status, 200)
+        item = next(
+            value for value in before["orientationV2"]["items"]
+            if value.get("sourceItemRef") == "owner-window-sign")
+        self.assertTrue(item["ownerCompletionAvailable"])
+        self.assertEqual(item["nextAction"]["kind"], "complete-owner-task")
+
+        status, response = self.command(0, "complete-owner-task", {
+            "taskId": "owner-window-sign",
+        })
+        self.assertEqual(status, 200, response)
+        self.assertEqual(
+            response["ownerControl"]["completedOwnerTaskIds"],
+            ["owner-window-sign"])
+        status, after = self.request("GET", "/api/board?context=main")
+        self.assertEqual(status, 200)
+        self.assertEqual(after["counts"]["ownerTasks"], {"open": 0, "done": 1})
+        self.assertFalse(any(
+            value.get("sourceItemRef") == "owner-window-sign"
+            for value in after["orientationV2"]["items"]))
+        projected = next(
+            value for value in after["ownerTasks"]
+            if value.get("id") == "owner-window-sign")
+        self.assertTrue(projected["done"])
+        self.assertEqual(projected["completionSource"], "owner-control")
+        for name, content in source_before.items():
+            self.assertEqual(Path(self.home, name).read_bytes(), content)
+
+        status, response = self.command(1, "complete-owner-task", {
+            "taskId": "owner-window-sign",
+        })
+        self.assertEqual(status, 409, response)
+        status, response = self.command(1, "complete-owner-task", {
+            "taskId": "task-menu",
+        })
+        self.assertEqual(status, 404, response)
 
     def test_invalid_owner_journal_is_contained_without_unlocking_writes(self):
         path = Path(self.home, owner_control.FILE_NAME)

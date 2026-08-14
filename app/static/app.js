@@ -466,7 +466,7 @@ async function ownerCommand(command, arguments_) {
   } catch (error) {
     if (error.status === 409) {
       await loadBoard({ preserve: true });
-      throw new Error("Priorities changed in another window. The latest order is now shown; please try again.");
+      throw new Error("Owner controls changed in another window. The latest state is now shown; please try again.");
     }
     throw error;
   }
@@ -1126,6 +1126,33 @@ async function saveOwnerTask() {
     announce(error.message);
   } finally {
     $("#owner-task-save").disabled = false;
+  }
+}
+
+function openOwnerCompletion(item) {
+  if (!item?.ownerCompletionAvailable || item.entityKind !== "owner-task") {
+    return announce("This item cannot be completed from HFLedger.");
+  }
+  const taskId = safeText(item.sourceItemRef, 256);
+  if (!taskId) return announce("This owner task has no stable reference.");
+  $("#owner-complete-task-id").value = taskId;
+  $("#owner-complete-title").textContent = safeText(item.title, 180) || "Owner task";
+  $("#owner-complete-dialog").showModal();
+  $("#owner-complete-save").focus();
+}
+
+async function completeOwnerTask() {
+  const taskId = safeText($("#owner-complete-task-id").value, 256);
+  if (!taskId) return announce("This owner task has no stable reference.");
+  $("#owner-complete-save").disabled = true;
+  try {
+    await ownerCommand("complete-owner-task", { taskId });
+    $("#owner-complete-dialog").close();
+    announce("Owner task marked complete.");
+  } catch (error) {
+    announce(error.message);
+  } finally {
+    $("#owner-complete-save").disabled = false;
   }
 }
 
@@ -1888,6 +1915,9 @@ function toggleQuickLook() {
 
 function buildNextAction(item) {
   const action = item.nextAction || {};
+  if (action.kind === "complete-owner-task" && item.ownerCompletionAvailable) {
+    return button("control-button primary-control", action.label || "Mark complete", () => openOwnerCompletion(item));
+  }
   if (action.kind === "copy-context") return button("control-button primary-control", action.label || "Copy Context", () => copyContext(item));
   if (!["open-source", "open-decision"].includes(action.kind)) return null;
   const link = linkMap().get(action.linkId);
@@ -2533,6 +2563,11 @@ function handleKeyboard(event) {
       $("#owner-task-dialog").close();
       return;
     }
+    if ($("#owner-complete-dialog").open) {
+      event.preventDefault();
+      $("#owner-complete-dialog").close();
+      return;
+    }
     if (state.quickLookOpen) {
       event.preventDefault();
       closeQuickLook();
@@ -2654,6 +2689,11 @@ function boot() {
     event.preventDefault();
     if (event.submitter?.value === "cancel") return $("#owner-task-dialog").close();
     saveOwnerTask();
+  });
+  $("#owner-complete-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (event.submitter?.value === "cancel") return $("#owner-complete-dialog").close();
+    completeOwnerTask();
   });
   document.addEventListener("keydown", handleKeyboard);
   document.addEventListener("pointerdown", (event) => {

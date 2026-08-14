@@ -11,7 +11,9 @@ The owner can also shape active work without editing code or pretending to
 control implementation status. Priorities provides a durable drag-and-drop
 order plus product titles, intended outcomes, notes, and active/parked choices.
 Operations shows available commands, scheduled tasks, and their latest success
-or failure in plain language.
+or failure in plain language. An owner-only manual task has a separate **Mark
+complete** action because the owner, not an agent, knows whether that action was
+performed.
 
 Most agent tools make it easy to start work inside one task. HFLedger provides
 the missing product orientation across tasks and runtimes while retaining its
@@ -171,11 +173,13 @@ The standard-library HTTP service provides:
 - config-driven branding and allowlisted independent contexts.
 
 Today can acknowledge, snooze, watch, and mark changes seen only in private
-presentation state. It never answers a decision, completes work, edits the
-board, appends evidence, changes collector configuration, merges, or deploys.
-Separately, Priorities writes only the append-only owner-control lane; it never
-rewrites the observed board or event ledger. Those other actions remain in the
-Decision Deck or the named authoritative source.
+presentation state. It can also record a one-way owner report that an exact
+owner-only manual task was completed. It never answers a decision, completes
+agent work, edits the observed board, appends implementation evidence, changes
+collector configuration, merges, or deploys. Separately, Priorities writes only
+the append-only owner-control lane; it never rewrites the observed board or
+event ledger. Those other actions remain in the Decision Deck or the named
+authoritative source.
 See [`docs/ui.md`](docs/ui.md) for the nine one-home states, evidence vocabulary,
 coverage model, keyboard/menu behavior, and first-run/degraded limitations.
 
@@ -195,7 +199,8 @@ Observer workspaces can set `ui.readOnly: true`; the service then exposes the
 same validated views while refusing authoritative mutation requests with `403`.
 Private seen, acknowledgement, snooze, watch, navigation, and pane state remain
 presentation-only. Owner product direction remains writable in its separate
-control lane. Both leave `board.json` and `ledger.jsonl` byte-identical. See
+control lane, including one-way completion reports for owner-only manual tasks.
+Both leave `board.json` and `ledger.jsonl` byte-identical. See
 [`docs/owner-control.md`](docs/owner-control.md).
 
 ## Current limits

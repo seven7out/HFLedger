@@ -119,6 +119,11 @@ An adapter that atomically replaces an observed workspace must carry the
 independent `owner-control.jsonl` journal forward byte for byte. Regenerating a
 board is not authority to discard or rewrite owner priorities.
 
+If an installation reconciles owner-only manual completion reports back into
+another authoritative system, it must consume `completedOwnerTaskIds` through
+that system's sanctioned completion writer. HFLedger never runs that writer or
+edits the observed source directly.
+
 ## Instruction packs
 
 Render the configured runtimes into the private data directory:

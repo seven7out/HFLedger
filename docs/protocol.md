@@ -436,11 +436,15 @@ for the event ledger or materialized board. Each private, newline-terminated
 JSON event has a contiguous revision and SHA-256 predecessor link. `task-set`
 events set or clear a product title, intended outcome, owner note, or
 active/parked disposition for an exact queue id. `priority-set` events contain
-a duplicate-free ordered list of active queue ids.
+a duplicate-free ordered list of active queue ids. `owner-task-complete` is a
+one-way event for an exact current owner-task id and carries no changes or
+priority payload.
 
 The projection overlays these directives while retaining source title and
 observed status. It never claims execution progress, changes safety metadata,
-or rewrites `board.json` or `ledger.jsonl`. Writers use optimistic revisions;
+or rewrites `board.json` or `ledger.jsonl`. Owner-task completion is the narrow
+exception for a manual action performed by the owner; it cannot target queue
+work. Writers use optimistic revisions;
 a stale revision conflicts instead of overwriting a newer owner choice. Agents
 read the folded projection with `ledger owner-control` before selecting work.
 See [`owner-control.md`](owner-control.md) for the product boundary and

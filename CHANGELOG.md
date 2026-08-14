@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added an explicit **Mark complete** action for owner-only manual tasks. The
+  one-way owner report uses the revisioned owner-control journal, immediately
+  leaves the active owner lane, and never changes agent-reported work status.
+- Fixed native upgrades so an existing fictional demo safely receives newly
+  introduced app-private support files instead of opening in Recovery.
 - Added a durable owner-control lane with draggable agent priority order,
   product-facing task edits, active/parked planning state, agent-readable CLI
   projection, and byte-identical preservation of observed board and ledger.

@@ -19,6 +19,12 @@ These are owner directives. Agent-reported status, tests, releases, source
 evidence, and technical history remain read-only. The app never presents those
 fields as owner-editable progress controls.
 
+An exact owner-only manual task is different: the owner is the person who knows
+whether that action happened. Its inspector therefore offers **Mark complete**.
+After confirmation, HFLedger appends a one-way `owner-task-complete` event and
+removes the task from the active owner lane. It cannot complete a queue task,
+claim an agent result, or be used to reopen a source-captured completion.
+
 Dragging a task changes the durable priority order. It is not a personal sort
 preference. The active order is available to agents through the CLI and generated
 instruction packs, so an agent choosing work sees the same order as the owner.
@@ -38,12 +44,18 @@ keeps source facts and owner direction separate:
 | Lane | Owns | May change when the observed board is read-only? |
 | --- | --- | --- |
 | Observed workspace | execution status, evidence, runs, releases, source facts | No |
-| Owner control | product title, intended outcome, owner note, active/parked choice, priority order | Yes |
+| Owner control | product title, intended outcome, owner note, active/parked choice, priority order, owner-only manual completion report | Yes |
 
 Owner events are stored in `owner-control.jsonl`; they never rewrite `board.json`
 or `ledger.jsonl`. The projection overlays the latest valid directive while
 retaining the original source title and status as provenance. Removing an
 override returns the task to its observed value.
+
+For an owner-only manual task, the projection overlays a completed state from
+the one-way owner report while leaving the observed record untouched. An
+installation adapter may reconcile `completedOwnerTaskIds` into its source only
+through that source's sanctioned completion writer. It must not edit source
+files directly or treat this report as proof of agent execution.
 
 ## Operations
 

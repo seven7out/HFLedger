@@ -403,7 +403,17 @@
     ],
     "resolved": []
   },
-  "ownerTasks": [],
+  "ownerTasks": [
+    {
+      "id": "owner:ovenlight:window-sign",
+      "title": "Confirm the pickup sign is readable",
+      "instruction": "Look from across the street and confirm that customers can read the new pickup sign.",
+      "status": "open",
+      "done": false,
+      "source": "fictional bakery opening checklist",
+      "project": "Ovenlight Bakery Tools"
+    }
+  ],
   "changelog": {
     "entries": [
       {
@@ -438,7 +448,7 @@
       "priority_review": 1
     },
     "ownerTasks": {
-      "open": 0,
+      "open": 1,
       "done": 0
     },
     "inbox": 1,

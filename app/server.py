@@ -18,7 +18,7 @@ if REPO_ROOT not in sys.path:
 
 from core import (admission, item_metadata, ledger, local_state, operations,
                   orientation, owner_control, production_health, reconcile,
-                  search_links)  # noqa: E402
+                  schema, search_links)  # noqa: E402
 from core.link_safety import resolve_projected_link  # noqa: E402
 from core.store import BoardStore, BoardValidationError, load_config, resolve_home  # noqa: E402
 
@@ -382,10 +382,21 @@ def _build_owner_today(board, observed_health=None):
 
 def build_board_view(runtime, context_id=None):
     context = runtime.context(context_id)
-    board = _load_validated(context)
+    observed_board = _load_validated(context)
     entries = ledger.parse_lines(ledger.snapshot_lines(context.home), context.config)
-    ledger.validate_cursor(board, entries)
+    ledger.validate_cursor(observed_board, entries)
     now_utc = runtime.now_fn()
+    owner_events = None
+    owner_state = None
+    try:
+        owner_events = owner_control.read(context.home)
+        owner_state = owner_control.fold(owner_events)
+    except owner_control.OwnerControlError:
+        pass
+    board = copy.deepcopy(observed_board)
+    if owner_state is not None:
+        owner_control.apply_owner_task_completions(board, owner_state)
+        schema.refresh_generated(board)
     try:
         local_state_response = runtime.local_state.get(context.context_id)
         local_view_state = (
@@ -428,7 +439,8 @@ def build_board_view(runtime, context_id=None):
             "sourceHome": projected.get("primaryHome"),
         })
     try:
-        owner_control_view = owner_control.build_view(context.home, candidates)
+        owner_control_view = owner_control.build_view(
+            context.home, candidates, events=owner_events)
     except owner_control.OwnerControlError:
         owner_control_view = {
             "version": owner_control.VERSION,
@@ -436,6 +448,8 @@ def build_board_view(runtime, context_id=None):
             "revision": None,
             "updatedAt": None,
             "activeOrder": [],
+            "completedOwnerTaskIds": [],
+            "ownerTaskCompletions": [],
             "items": [],
             "counts": {"active": 0, "parked": 0},
             "summary": "Owner priorities could not be read.",
@@ -476,6 +490,31 @@ def build_board_view(runtime, context_id=None):
                 owner_lines.append("Owner note: %s" % directive["note"])
             copy_context["text"] = "\n".join(
                 lines[:insert_at] + owner_lines + lines[insert_at:])[:4000]
+    if owner_control_view.get("available") is True:
+        for item in orientation_v2.get("items", []):
+            if item.get("entityKind") != "owner-task":
+                continue
+            item["ownerCompletionAvailable"] = True
+            item["nextAction"] = {
+                "kind": "complete-owner-task",
+                "label": "Mark complete",
+                "reason": "Record that you completed this owner-only action.",
+                "linkId": None,
+                "authoritative": True,
+            }
+            copy_context = item.get("copyContext")
+            if isinstance(copy_context, dict) and isinstance(copy_context.get("text"), str):
+                lines = copy_context["text"].splitlines()
+                replacement = "Next action: Mark complete — Record that you completed this owner-only action."
+                replaced = False
+                for index, line in enumerate(lines):
+                    if line.startswith("Next action: "):
+                        lines[index] = replacement
+                        replaced = True
+                        break
+                if not replaced:
+                    lines.append(replacement)
+                copy_context["text"] = "\n".join(lines)[:4000]
     decisions = board.get("decisions", {})
     response = runtime.shell(context.context_id)
     response.update({
@@ -988,7 +1027,7 @@ def _owner_control_body(runtime, body):
     if (not isinstance(expected, int) or isinstance(expected, bool) or expected < 0):
         raise ApiError(400, "expectedRevision must be a non-negative integer")
     command = body.get("command")
-    if command not in ("set-task", "set-priority"):
+    if command not in ("set-task", "set-priority", "complete-owner-task"):
         raise ApiError(400, "command is invalid")
     if not isinstance(body.get("arguments"), dict):
         raise ApiError(400, "arguments must be an object")
@@ -1019,7 +1058,7 @@ def owner_control_command(runtime, body):
         event = owner_control.append(
             context.home, expected, "task-set", task_id=task_id, changes=changes,
             now_fn=runtime.now_fn)
-    else:
+    elif command == "set-priority":
         if set(arguments) != {"taskIds"}:
             raise ApiError(400, "set-priority arguments must contain taskIds")
         task_ids = arguments.get("taskIds")
@@ -1031,6 +1070,20 @@ def owner_control_command(runtime, body):
             raise ApiError(400, "taskIds must order every active task exactly once")
         event = owner_control.append(
             context.home, expected, "priority-set", priority_order=task_ids,
+            now_fn=runtime.now_fn)
+    else:
+        if set(arguments) != {"taskId"}:
+            raise ApiError(400, "complete-owner-task arguments must contain taskId")
+        task_id = arguments.get("taskId")
+        observed_board = _load_validated(context)
+        task = _find(observed_board.get("ownerTasks", []), task_id)
+        if task is None:
+            raise ApiError(404, "owner task is not available for completion")
+        if (task.get("done") is True or task.get("status") == "done" or
+                task_id in current.get("completedOwnerTaskIds", [])):
+            raise ApiError(409, "owner task is already complete")
+        event = owner_control.append(
+            context.home, expected, "owner-task-complete", task_id=task_id,
             now_fn=runtime.now_fn)
     refreshed = build_board_view(runtime, context_id)["ownerControl"]
     return {"event": event, "ownerControl": refreshed}
