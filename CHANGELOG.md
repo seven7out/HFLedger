@@ -7,6 +7,10 @@
   leaves the active owner lane, and never changes agent-reported work status.
 - Fixed native upgrades so an existing fictional demo safely receives newly
   introduced app-private support files instead of opening in Recovery.
+- Added an explicit persisted Light or Dark appearance for every Mac owner
+  surface. Dark mode keeps the same dense three-pane hierarchy with charcoal
+  neutrals, thin separators, and a softened workspace accent instead of neon,
+  gradients, or glowing cards.
 - Added a durable owner-control lane with draggable agent priority order,
   product-facing task edits, active/parked planning state, agent-readable CLI
   projection, and byte-identical preservation of observed board and ledger.

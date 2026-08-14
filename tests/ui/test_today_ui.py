@@ -99,7 +99,7 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertNotIn(".undo-bar", deck_rules)
         self.assertNotIn("#undo-timer", deck_rules)
 
-    def test_owner_surfaces_share_the_restrained_light_visual_contract(self):
+    def test_owner_surfaces_share_one_restrained_explicit_theme_contract(self):
         style = CSS.read_text(encoding="utf-8")
         markup = HTML.read_text(encoding="utf-8")
         deck_markup = (ROOT / "app" / "static" / "deck.html").read_text(encoding="utf-8")
@@ -110,11 +110,13 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertIn('content="light"', deck_markup)
         self.assertIn("color-scheme: light", served_rules)
         self.assertIn("color-scheme: light", deck_rules)
+        self.assertIn(':root[data-appearance="dark"] .board-page', served_rules)
+        self.assertIn(':root[data-appearance="dark"] .deck-page', deck_rules)
         self.assertIn("background: var(--window)", deck_rules)
         self.assertIn(".stack-card { display: none; }", deck_rules)
-        for forbidden in ("prefers-color-scheme: dark", "#a89cff"):
+        for forbidden in ("prefers-color-scheme: dark", "#a89cff", "#171828"):
             self.assertNotIn(forbidden, style)
-        for forbidden in ("#171828", "radial-gradient", "rgba(255,255,255"):
+        for forbidden in ("radial-gradient", "rgba(255,255,255"):
             self.assertNotIn(forbidden, deck_rules)
 
     def test_owner_summary_is_production_first_and_test_site_failure_is_neutral(self):

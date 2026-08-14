@@ -32,8 +32,9 @@ use tauri_plugin_notification::NotificationExt;
 const HOST: &str = "127.0.0.1";
 const PORT_START: u16 = 17171;
 const PORT_END: u16 = 17199;
-const CONFIG_VERSION: u32 = 2;
-const PREVIOUS_CONFIG_VERSION: u32 = 1;
+const CONFIG_VERSION: u32 = 3;
+const PREVIOUS_CONFIG_VERSION: u32 = 2;
+const LEGACY_CONFIG_VERSION: u32 = 1;
 const LOG_LIMIT_BYTES: u64 = 1_048_576;
 const CORE_FILES: [&str; 3] = ["config.json", "board.json", "ledger.jsonl"];
 const DATA_DIRECTORIES: [&str; 3] = ["locks", "backups", "reports"];
@@ -239,6 +240,32 @@ enum TextSize {
     Maximum,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum Appearance {
+    #[default]
+    Light,
+    Dark,
+}
+
+impl Appearance {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Light => "Light",
+            Self::Dark => "Dark",
+        }
+    }
+
+    fn page_script(self, announce: bool) -> &'static str {
+        match (self, announce) {
+            (Self::Light, false) => "document.documentElement.dataset.appearance='light';document.documentElement.style.colorScheme='light';document.querySelector('meta[name=\"color-scheme\"]')?.setAttribute('content','light');document.querySelector('meta[name=\"theme-color\"]')?.setAttribute('content','#f5f5f7');window.dispatchEvent(new CustomEvent('hfledger:appearance-changed',{detail:{value:'light',label:'Light',announce:false}}));",
+            (Self::Light, true) => "document.documentElement.dataset.appearance='light';document.documentElement.style.colorScheme='light';document.querySelector('meta[name=\"color-scheme\"]')?.setAttribute('content','light');document.querySelector('meta[name=\"theme-color\"]')?.setAttribute('content','#f5f5f7');window.dispatchEvent(new CustomEvent('hfledger:appearance-changed',{detail:{value:'light',label:'Light',announce:true}}));",
+            (Self::Dark, false) => "document.documentElement.dataset.appearance='dark';document.documentElement.style.colorScheme='dark';document.querySelector('meta[name=\"color-scheme\"]')?.setAttribute('content','dark');document.querySelector('meta[name=\"theme-color\"]')?.setAttribute('content','#202124');window.dispatchEvent(new CustomEvent('hfledger:appearance-changed',{detail:{value:'dark',label:'Dark',announce:false}}));",
+            (Self::Dark, true) => "document.documentElement.dataset.appearance='dark';document.documentElement.style.colorScheme='dark';document.querySelector('meta[name=\"color-scheme\"]')?.setAttribute('content','dark');document.querySelector('meta[name=\"theme-color\"]')?.setAttribute('content','#202124');window.dispatchEvent(new CustomEvent('hfledger:appearance-changed',{detail:{value:'dark',label:'Dark',announce:true}}));",
+        }
+    }
+}
+
 impl TextSize {
     const ALL: [Self; 6] = [
         Self::Compact,
@@ -374,6 +401,7 @@ struct Preferences {
     launch_at_login: bool,
     restore_board_window: bool,
     text_size: TextSize,
+    appearance: Appearance,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -402,6 +430,24 @@ struct StoredConfigV1 {
     preferences: PreferencesV1,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PreferencesV2 {
+    notifications: bool,
+    launch_at_login: bool,
+    restore_board_window: bool,
+    text_size: TextSize,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StoredConfigV2 {
+    version: u32,
+    workspaces: Vec<Workspace>,
+    selected_workspace_id: Option<String>,
+    preferences: PreferencesV2,
+}
+
 impl From<StoredConfigV1> for StoredConfig {
     fn from(previous: StoredConfigV1) -> Self {
         Self {
@@ -413,6 +459,24 @@ impl From<StoredConfigV1> for StoredConfig {
                 launch_at_login: previous.preferences.launch_at_login,
                 restore_board_window: previous.preferences.restore_board_window,
                 text_size: TextSize::default(),
+                appearance: Appearance::default(),
+            },
+        }
+    }
+}
+
+impl From<StoredConfigV2> for StoredConfig {
+    fn from(previous: StoredConfigV2) -> Self {
+        Self {
+            version: CONFIG_VERSION,
+            workspaces: previous.workspaces,
+            selected_workspace_id: previous.selected_workspace_id,
+            preferences: Preferences {
+                notifications: previous.preferences.notifications,
+                launch_at_login: previous.preferences.launch_at_login,
+                restore_board_window: previous.preferences.restore_board_window,
+                text_size: previous.preferences.text_size,
+                appearance: Appearance::default(),
             },
         }
     }
@@ -1032,8 +1096,16 @@ fn decode_stored_config(bytes: &[u8]) -> Result<(StoredConfig, bool), String> {
             "app settings are invalid: version must be an unsigned integer".to_string()
         })?;
     let (config, migrated) = match version {
-        PREVIOUS_CONFIG_VERSION => {
+        LEGACY_CONFIG_VERSION => {
             let previous: StoredConfigV1 = serde_json::from_value(value)
+                .map_err(|error| format!("app settings are invalid: {error}"))?;
+            if previous.version != LEGACY_CONFIG_VERSION {
+                return Err("app settings are invalid: version changed during migration".into());
+            }
+            (StoredConfig::from(previous), true)
+        }
+        PREVIOUS_CONFIG_VERSION => {
+            let previous: StoredConfigV2 = serde_json::from_value(value)
                 .map_err(|error| format!("app settings are invalid: {error}"))?;
             if previous.version != PREVIOUS_CONFIG_VERSION {
                 return Err("app settings are invalid: version changed during migration".into());
@@ -1705,7 +1777,7 @@ fn show_settings_surface(app: &AppHandle, mode: &str, message: Option<&str>) {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.hide();
             }
-            let _ = apply_stored_text_size(app, false);
+            let _ = apply_stored_preferences(app, false);
             return;
         }
     }
@@ -1721,7 +1793,7 @@ fn show_settings_surface(app: &AppHandle, mode: &str, message: Option<&str>) {
         let _ = window.set_focus();
         let _ = window.eval(settings_mode_script(mode, message, false));
     }
-    let _ = apply_stored_text_size(app, false);
+    let _ = apply_stored_preferences(app, false);
 }
 
 fn show_settings(app: &AppHandle) {
@@ -1762,7 +1834,7 @@ fn show_existing_today(app: &AppHandle) -> bool {
     let _ = board_window.show();
     let _ = board_window.unminimize();
     let _ = board_window.set_focus();
-    let _ = apply_stored_text_size(app, false);
+    let _ = apply_stored_preferences(app, false);
     set_board_menu_available(&app.state::<HostRuntime>(), true);
     true
 }
@@ -1846,7 +1918,7 @@ fn show_board_window(app: &AppHandle, workspace: &Workspace, port: u16) -> Resul
     if let Some(settings) = app.get_webview_window("main") {
         let _ = settings.hide();
     }
-    apply_stored_text_size(app, false)?;
+    apply_stored_preferences(app, false)?;
     set_board_menu_available(&app.state::<HostRuntime>(), true);
     Ok(())
 }
@@ -2113,11 +2185,36 @@ fn apply_text_size(app: &AppHandle, text_size: TextSize, announce: bool) -> Resu
     Ok(())
 }
 
-fn apply_stored_text_size(app: &AppHandle, announce: bool) -> Result<(), String> {
-    let text_size = read_config(&app.state::<HostRuntime>())?
-        .preferences
-        .text_size;
-    apply_text_size(app, text_size, announce)
+fn apply_appearance(app: &AppHandle, appearance: Appearance, announce: bool) -> Result<(), String> {
+    for label in ["main", "board", "settings-panel"] {
+        let Some(webview) = app.get_webview(label) else {
+            continue;
+        };
+        webview
+            .eval(appearance.page_script(announce))
+            .map_err(|error| {
+                format!(
+                    "could not apply {} appearance to the {label} window: {error}",
+                    appearance.label()
+                )
+            })?;
+    }
+    Ok(())
+}
+
+fn apply_stored_preferences(app: &AppHandle, announce: bool) -> Result<(), String> {
+    let preferences = read_config(&app.state::<HostRuntime>())?.preferences;
+    apply_text_size(app, preferences.text_size, announce)?;
+    apply_appearance(app, preferences.appearance, announce)
+}
+
+fn apply_preferences(
+    app: &AppHandle,
+    preferences: &Preferences,
+    announce: bool,
+) -> Result<(), String> {
+    apply_text_size(app, preferences.text_size, announce)?;
+    apply_appearance(app, preferences.appearance, announce)
 }
 
 fn persist_text_size(app: &AppHandle, action: TextSizeAction) -> Result<TextSize, String> {
@@ -2901,13 +2998,13 @@ fn update_preferences(
             "Preferences could not be saved. The previous values were restored. {error}"
         ));
     }
-    if let Err(error) = apply_text_size(&app, preferences.text_size, true) {
+    if let Err(error) = apply_preferences(&app, &preferences, true) {
         config.preferences = prior.clone();
         let _ = write_config(&state, &config);
         if preferences.launch_at_login != prior.launch_at_login {
             let _ = sync_autostart(&app, prior.launch_at_login);
         }
-        let _ = apply_text_size(&app, prior.text_size, false);
+        let _ = apply_preferences(&app, &prior, false);
         return Err(format!(
             "Preferences could not be applied. The previous values were restored. {error}"
         ));
@@ -3760,7 +3857,7 @@ pub fn run() {
         .on_menu_event(|app, event| handle_native_menu(app, event.id.as_ref()))
         .on_page_load(|webview, payload| {
             if payload.event() == PageLoadEvent::Finished {
-                let _ = apply_stored_text_size(webview.app_handle(), false);
+                let _ = apply_stored_preferences(webview.app_handle(), false);
             }
         })
         .setup(|app| {
@@ -3774,7 +3871,7 @@ pub fn run() {
             set_board_menu_available(&state, false);
             match initialize_app(app, &state) {
                 Ok(config) => {
-                    let _ = apply_text_size(app.handle(), config.preferences.text_size, false);
+                    let _ = apply_preferences(app.handle(), &config.preferences, false);
                     // Plugin setup and private-path initialization are complete
                     // before an OS callback can reach the strict parser.
                     let deep_link_app = app.handle().clone();
@@ -3869,8 +3966,8 @@ mod tests {
         production_health_signature, project_slug, recent_duplicate, refresh_demo_operations,
         sync_production_monitor_config, text_size_after, validate_search_response,
         validate_stored_config, watch_snapshot_is_safe, workspace_id, workspace_watch_plan,
-        write_config_unlocked, AppPaths, AppSnapshot, DeepLinkIntent, DeepLinkRejection,
-        DeepLinkWindowPlan, HostRuntime, HostStatus, NativeCommand, Preferences,
+        write_config_unlocked, AppPaths, AppSnapshot, Appearance, DeepLinkIntent,
+        DeepLinkRejection, DeepLinkWindowPlan, HostRuntime, HostStatus, NativeCommand, Preferences,
         PrimarySurfacePlan, ProductionMonitorSettings, SearchResponse, StoredConfig, TextSize,
         TextSizeAction, Workspace, WorkspaceKind, CONFIG_VERSION, CORE_FILES, DATA_DIRECTORIES,
         DEEP_LINK_REJECTION_MESSAGE,
@@ -4528,7 +4625,7 @@ mod tests {
         };
         assert!(validate_stored_config(&config).is_ok());
         assert!(serde_json::from_value::<StoredConfig>(json!({
-            "version": 2,
+            "version": 3,
             "workspaces": [],
             "selectedWorkspaceId": null,
             "preferences": {
@@ -4536,12 +4633,13 @@ mod tests {
                 "launchAtLogin": false,
                 "restoreBoardWindow": false,
                 "textSize": "comfortable",
+                "appearance": "light",
                 "unexpected": true
             }
         }))
         .is_err());
         assert!(serde_json::from_value::<StoredConfig>(json!({
-            "version": 2,
+            "version": 3,
             "workspaces": [{
                 "id": "bad\nid",
                 "label": "Fictional",
@@ -4553,7 +4651,8 @@ mod tests {
                 "notifications": false,
                 "launchAtLogin": false,
                 "restoreBoardWindow": false,
-                "textSize": "comfortable"
+                "textSize": "comfortable",
+                "appearance": "light"
             }
         }))
         .is_ok());
@@ -4709,6 +4808,7 @@ mod tests {
         assert!(migrated.preferences.launch_at_login);
         assert!(migrated.preferences.restore_board_window);
         assert_eq!(migrated.preferences.text_size, TextSize::Comfortable);
+        assert_eq!(migrated.preferences.appearance, Appearance::Light);
 
         let encoded = serde_json::to_vec(&migrated).expect("encode migrated settings");
         let (round_trip, changed_again) =
@@ -4718,12 +4818,35 @@ mod tests {
     }
 
     #[test]
-    fn app_snapshot_and_update_preferences_share_the_exact_text_size_shape() {
+    fn version_two_settings_migrate_to_the_explicit_light_appearance() {
+        let source = serde_json::to_vec(&json!({
+            "version": 2,
+            "workspaces": [],
+            "selectedWorkspaceId": null,
+            "preferences": {
+                "notifications": false,
+                "launchAtLogin": false,
+                "restoreBoardWindow": true,
+                "textSize": "extraLarge"
+            }
+        }))
+        .expect("encode v2 settings");
+        let (migrated, changed) = decode_stored_config(&source).expect("migrate v2 settings");
+        assert!(changed);
+        assert_eq!(migrated.version, CONFIG_VERSION);
+        assert!(migrated.preferences.restore_board_window);
+        assert_eq!(migrated.preferences.text_size, TextSize::ExtraLarge);
+        assert_eq!(migrated.preferences.appearance, Appearance::Light);
+    }
+
+    #[test]
+    fn app_snapshot_and_update_preferences_share_the_exact_appearance_shape() {
         let incoming: Preferences = serde_json::from_value(json!({
             "notifications": true,
             "launchAtLogin": false,
             "restoreBoardWindow": true,
-            "textSize": "large"
+            "textSize": "large",
+            "appearance": "dark"
         }))
         .expect("decode update_preferences payload");
         let snapshot = AppSnapshot {
@@ -4750,6 +4873,10 @@ mod tests {
             Some(&json!("large"))
         );
         assert_eq!(
+            encoded.pointer("/preferences/appearance"),
+            Some(&json!("dark"))
+        );
+        assert_eq!(
             serde_json::from_value::<Preferences>(encoded["preferences"].clone())
                 .expect("decode snapshot preferences"),
             incoming
@@ -4757,21 +4884,22 @@ mod tests {
     }
 
     #[test]
-    fn unknown_text_sizes_unknown_fields_and_future_versions_fail_closed() {
+    fn unknown_appearances_text_sizes_fields_and_future_versions_fail_closed() {
         for invalid in [
             json!({
-                "version": 2,
+                "version": 3,
                 "workspaces": [],
                 "selectedWorkspaceId": null,
                 "preferences": {
                     "notifications": false,
                     "launchAtLogin": false,
                     "restoreBoardWindow": false,
-                    "textSize": "gigantic"
+                    "textSize": "gigantic",
+                    "appearance": "light"
                 }
             }),
             json!({
-                "version": 2,
+                "version": 3,
                 "workspaces": [],
                 "selectedWorkspaceId": null,
                 "preferences": {
@@ -4779,6 +4907,7 @@ mod tests {
                     "launchAtLogin": false,
                     "restoreBoardWindow": false,
                     "textSize": "comfortable",
+                    "appearance": "light",
                     "browserFallback": true
                 }
             }),
@@ -4790,7 +4919,20 @@ mod tests {
                     "notifications": false,
                     "launchAtLogin": false,
                     "restoreBoardWindow": false,
-                    "textSize": "comfortable"
+                    "textSize": "comfortable",
+                    "appearance": "sepia"
+                }
+            }),
+            json!({
+                "version": 4,
+                "workspaces": [],
+                "selectedWorkspaceId": null,
+                "preferences": {
+                    "notifications": false,
+                    "launchAtLogin": false,
+                    "restoreBoardWindow": false,
+                    "textSize": "comfortable",
+                    "appearance": "light"
                 }
             }),
         ] {

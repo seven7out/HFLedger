@@ -15,16 +15,19 @@ edits and priority order without rewriting observed execution facts.
 ## Visual contract
 
 Today, the Decision Deck, Settings, onboarding, and recovery use one restrained
-light visual system. The three-pane Today layout is the anchor: quiet neutral
-surfaces, thin separators, compact controls, and color reserved for state and
-the configured workspace accent. Owner cards are dense product documents, not
-glowing presentation cards.
+visual system with explicit Light and Dark appearances. The three-pane Today
+layout is the anchor: quiet neutral surfaces, thin separators, compact controls,
+and color reserved for state and the configured workspace accent. Owner cards
+are dense product documents, not glowing presentation cards.
 
-HFLedger deliberately does not infer an alternate palette from the operating
-system's dark-mode preference. A future theme may be added only as an explicit
-owner setting with its own cross-surface visual review. Recovery must preserve
-the same visual language as Today so a failed engine cannot make the app appear
-to have changed products.
+Dark appearance uses charcoal and slate surfaces rather than black, tinted
+gradients, or luminous panels. It preserves the same spacing, borders, hierarchy,
+and information density as Light; the workspace accent is softened against dark
+surfaces instead of becoming a neon highlight. HFLedger does not silently follow
+the operating system's appearance. The owner chooses Light or Dark in Settings,
+the app stores that choice in private native settings, and all owner surfaces
+change together. Recovery preserves the chosen appearance so a failed engine
+does not make the app appear to have changed products.
 
 ## Start the service
 

@@ -251,7 +251,7 @@ async function answer(action, extra = {}) {
 }
 
 function renderShell(data) {
-  document.documentElement.style.setProperty("--accent", data.ui.accent);
+  document.documentElement.style.setProperty("--workspace-accent", data.ui.accent);
   document.title = `${data.ui.title} · Decision deck`;
   $("#deck-brand").textContent = data.ui.title;
   if (data.ui.readOnly) {
