@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Kept Today usable when a workspace has more activity runs than the bounded
+  history window: current work remains available, older activity stays in the
+  append-only ledger, and history limiting no longer masquerades as an invalid
+  observer or a production outage.
 - Restored the Mac app's three-pane Today surface on current owner-model
   workspaces, embedded Settings into the same window, and unified Today,
   Decision Deck, Settings, onboarding, and recovery on one restrained light

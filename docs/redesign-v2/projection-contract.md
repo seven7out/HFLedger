@@ -796,8 +796,12 @@ text and is inserted into clients only through text nodes.
 Truncation adds one ellipsis and is recorded in the owning record when the
 shape provides `truncated`. For bounded arrays without such a field, the
 projection adds a `projection-truncated` diagnostic and a meta-alert if the
-omitted data could change Today. Totals are computed before presentation caps
-but after invalid records are rejected and exact duplicates are collapsed.
+omitted data could change Today. Once current work and owner attention have
+already been classified, older runs outside the bounded history window instead
+produce a non-critical `history-window-limited` diagnostic and a partial screen
+qualification; the append-only ledger remains intact. Totals are computed
+before presentation caps but after invalid records are rejected and exact
+duplicates are collapsed.
 
 ## 15. Malformed and ambiguous data
 

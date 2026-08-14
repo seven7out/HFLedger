@@ -680,6 +680,7 @@ class _V2Builder:
         }
         self.dispute_witness_pairs = {}
         self._truncated = False
+        self._history_truncated = False
         self._adapter_valid = True
         self._collector_valid = True
 
@@ -2426,7 +2427,7 @@ class _V2Builder:
         if (invalid_sources or self._truncated or not self._adapter_valid or
                 not self._collector_valid):
             screen_state = "invalid"
-        elif optional_gaps or item_gaps:
+        elif optional_gaps or item_gaps or self._history_truncated:
             screen_state = "partial"
         else:
             screen_state = "complete"
@@ -2467,6 +2468,7 @@ class _V2Builder:
         reason_codes = sorted(set(
             ["source:%s:%s" % (source["id"], source["state"]) for source in invalid_sources]
             + (["projection-truncated"] if self._truncated else [])
+            + (["history-window-limited"] if self._history_truncated else [])
             + (["coverage-partial"] if screen_state == "partial" else [])
         ))
         if screen_state == "complete":
@@ -2480,8 +2482,14 @@ class _V2Builder:
             gaps = sorted(set(
                 source["label"] for source in optional_gaps[:3]
             ))
+            if self._history_truncated:
+                gaps.insert(0, "older activity history")
             gap_summary = ", ".join(gaps) or "item-scoped observations are incomplete"
-            if not any(item["_primaryHome"] in V2_ATTENTION_HOMES for item in self.items.values()):
+            if self._history_truncated and not optional_gaps:
+                qualification = (
+                    "Today is current through %s. Older activity remains available in the ledger."
+                    % (_v2_iso(as_of) or "the current validated read"))
+            elif not any(item["_primaryHome"] in V2_ATTENTION_HOMES for item in self.items.values()):
                 qualification = (
                     "No attention items were found in the sources observed through %s. "
                     "Coverage is partial: %s." % (
@@ -2596,10 +2604,18 @@ class _V2Builder:
             for key in list(records):
                 if key not in keep:
                     del records[key]
-            self._truncated = True
-            self._diagnostic(
-                "projection-truncated", "%s exceeded the bounded projection limit." % label,
-                severity="critical")
+            if label == "runs":
+                self._history_truncated = True
+                self._diagnostic(
+                    "history-window-limited",
+                    "Older activity is outside the bounded history window; current work and "
+                    "owner attention remain available.",
+                    severity="warning")
+            else:
+                self._truncated = True
+                self._diagnostic(
+                    "projection-truncated", "%s exceeded the bounded projection limit." % label,
+                    severity="critical")
         if self._truncated:
             self._meta_alert(
                 "projection-truncated", "Coverage cannot support a complete Today view",
@@ -2890,6 +2906,8 @@ class _V2Builder:
         self._apply_local_overlays(local)
         self._cap_full_records()
         visit, next_cursor, changes_output = self._prepare_changes(local)
+        if self._history_truncated:
+            changes_output["truncated"] = True
         coverage = self._coverage_output()
 
         attention_eligible = sorted(

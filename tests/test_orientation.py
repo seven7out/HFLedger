@@ -640,6 +640,55 @@ class OrientationV2Tests(unittest.TestCase):
         self.assertNotIn('"confidence"', encoded)
         self.assertNotIn("probably verified", encoded.lower())
 
+    def test_deep_run_history_is_partial_without_invalidating_today(self):
+        source = self.observed_source()
+        item = self.adapter_item()
+        runs = []
+        changes = []
+        for index in range(orientation.V2_MAX_RUNS + 5):
+            stamp = (self.now - datetime.timedelta(seconds=index + 1)).isoformat()
+            run_ref = "run:%d" % index
+            runs.append({
+                "sourceId": "adapter:fictional", "sourceRunRef": run_ref,
+                "kind": "agent-session", "label": "Fictional session %d" % index,
+                "startedAt": stamp, "completedAt": stamp,
+                "status": "completed", "provenance": "agent-reported",
+            })
+            changes.append({
+                "sourceId": "adapter:fictional",
+                "exactSourceLocator": "change:%d" % index,
+                "runRef": run_ref, "itemSourceRef": "external:timer",
+                "kind": "progress-reported",
+                "summary": "Prepared timer option %d." % index,
+                "itemChangedAt": stamp, "provenance": "agent-reported",
+            })
+
+        result = self.build(adapter=self.adapter(
+            sources=[source], items=[item], runs=runs, changes=changes))
+
+        self.assertEqual(len(result["runs"]), orientation.V2_MAX_RUNS)
+        self.assertEqual(result["coverage"]["screen"]["state"], "partial")
+        self.assertEqual(result["coverage"]["observer"]["state"], "healthy")
+        self.assertIn(
+            "history-window-limited", result["coverage"]["screen"]["reasonCodes"])
+        self.assertIn(
+            "Older activity remains available in the ledger.",
+            result["coverage"]["screen"]["qualification"])
+        self.assertNotIn(
+            "projection-truncated", result["coverage"]["screen"]["reasonCodes"])
+        self.assertFalse(any(
+            value["reasonCode"] in ("observer-invalid", "projection-truncated")
+            for value in result["coverage"]["metaAlerts"]))
+        self.assertTrue(result["changes"]["truncated"])
+        change_ids = {value["id"] for value in result["changesById"]}
+        self.assertTrue(all(
+            change_id in change_ids
+            for group in result["changes"]["groups"]
+            for change_id in group["changeRefs"]))
+        self.assertTrue(any(
+            value["reasonCode"] == "history-window-limited"
+            for value in result["coverage"]["diagnostics"]))
+
     def test_input_reordering_is_byte_stable_across_one_hundred_permutations(self):
         self.board["queue"] = [{
             "id": "task:%d" % index, "title": "Timer %d" % index,
