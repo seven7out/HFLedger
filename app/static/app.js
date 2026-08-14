@@ -893,9 +893,19 @@ function renderOwnerTodaySummary() {
 
   const health = node("div", `production-health is-${model.productionHealth?.state || "degraded"}`);
   health.setAttribute("role", "status");
+  const healthCopy = node("span", "production-health-copy");
+  healthCopy.append(node("strong", "", model.productionHealth?.line || "Degraded — Production health is unavailable."));
+  if (model.productionHealth?.monitorState) {
+    let monitorText = "Continuous monitoring is starting";
+    if (model.productionHealth.lastCheckedAt) {
+      const prefix = model.productionHealth.monitorState === "retrying" ? "Retrying · checked" : "Checked";
+      monitorText = `${prefix} ${relativeTime(model.productionHealth.lastCheckedAt)}`;
+    }
+    healthCopy.append(node("small", "production-health-checked", monitorText));
+  }
   health.append(
     node("span", "production-health-dot", "●"),
-    node("strong", "", model.productionHealth?.line || "Degraded — Production health is unavailable."),
+    healthCopy,
   );
   wrap.append(health);
 

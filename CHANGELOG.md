@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added privacy-bounded continuous production monitoring to the Mac app:
+  per-workspace HTTPS configuration stays in private app data, three consecutive
+  failures trigger degradation, one success recovers, and Today shows the last
+  check without exposing the endpoint or rewriting the workspace.
 - Kept Today usable when a workspace has more activity runs than the bounded
   history window: current work remains available, older activity stays in the
   append-only ledger, and history limiting no longer masquerades as an invalid

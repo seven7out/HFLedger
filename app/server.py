@@ -17,7 +17,7 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from core import (admission, item_metadata, ledger, local_state, orientation,
-                  reconcile, search_links)  # noqa: E402
+                  production_health, reconcile, search_links)  # noqa: E402
 from core.link_safety import resolve_projected_link  # noqa: E402
 from core.store import BoardStore, BoardValidationError, load_config, resolve_home  # noqa: E402
 
@@ -196,7 +196,7 @@ class Runtime:
     """Immutable startup configuration and allowlisted data directories."""
 
     def __init__(self, home, local_state_root=None, local_state_workspace_id=None,
-                 now_fn=None):
+                 production_monitor_config=None, now_fn=None):
         self.home = resolve_home(home)
         self.config = load_config(self.home)
         self.now_fn = now_fn or _utc_now
@@ -234,6 +234,20 @@ class Runtime:
             tuple(self.contexts),
             self.now_fn,
         )
+        self.production_health_monitor = (
+            production_health.ProductionHealthMonitor(
+                production_monitor_config, now_fn=self.now_fn)
+            if production_monitor_config is not None else None
+        )
+
+    def close(self):
+        if self.production_health_monitor is not None:
+            self.production_health_monitor.close()
+
+    def production_health(self, now=None):
+        if self.production_health_monitor is None:
+            return None
+        return self.production_health_monitor.snapshot(now=now)
 
     def context(self, context_id=None):
         context_id = context_id or self.default_context
@@ -281,8 +295,8 @@ def _load_validated(context):
     return board
 
 
-def _build_owner_today(board):
-    health = board.get("meta", {}).get("productionHealth")
+def _build_owner_today(board, observed_health=None):
+    health = observed_health or board.get("meta", {}).get("productionHealth")
     if not isinstance(health, dict):
         health = {
             "state": "degraded",
@@ -290,6 +304,20 @@ def _build_owner_today(board):
         }
     health_state = health.get("state", "degraded")
     health_summary = health.get("summary", "Production health is unavailable.")
+    production_health_model = {
+        "state": health_state,
+        "summary": health_summary,
+        "line": "%s — %s" % (
+            "Healthy" if health_state == "healthy" else "Degraded",
+            health_summary,
+        ),
+    }
+    if observed_health is not None:
+        production_health_model.update({
+            "monitorState": observed_health.get("monitorState"),
+            "lastCheckedAt": observed_health.get("lastCheckedAt"),
+            "lastHealthyAt": observed_health.get("lastHealthyAt"),
+        })
     decisions = board.get("decisions", {})
     card_counts = {kind: 0 for kind in admission.CARD_KINDS}
     for item in decisions.get("items", []) if isinstance(decisions, dict) else []:
@@ -341,14 +369,7 @@ def _build_owner_today(board):
             stage["tone"] = "neutral"
         pipeline.append(stage)
     return {
-        "productionHealth": {
-            "state": health_state,
-            "summary": health_summary,
-            "line": "%s — %s" % (
-                "Healthy" if health_state == "healthy" else "Degraded",
-                health_summary,
-            ),
-        },
+        "productionHealth": production_health_model,
         "cardCounts": [
             {"kind": kind, "label": CARD_KIND_LABELS[kind], "count": card_counts[kind]}
             for kind in admission.CARD_KINDS
@@ -382,7 +403,8 @@ def build_board_view(runtime, context_id=None):
         "project": board.get("meta", {}).get("project", context.config["project"]),
         "updated": board.get("meta", {}).get("updated"),
         "counts": copy.deepcopy(board.get("statusCounts", {})),
-        "ownerToday": _build_owner_today(board),
+        "ownerToday": _build_owner_today(
+            board, observed_health=runtime.production_health(now=now_utc)),
         "decisions": [_decision_view(item) for item in decisions.get("items", [])
                       if isinstance(item, dict)],
         "resolved": [_decision_view(item) for item in decisions.get("resolved", [])[-12:]
@@ -1114,9 +1136,16 @@ class Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
+    def server_close(self):
+        runtime = getattr(self, "runtime", None)
+        if runtime is not None:
+            runtime.close()
+        super().server_close()
+
 
 def make_server(home, port=0, host=HOST, local_state_root=None,
-                local_state_workspace_id=None, now_fn=None):
+                local_state_workspace_id=None, production_monitor_config=None,
+                now_fn=None):
     if host not in (HOST, "localhost"):
         raise ValueError("refusing non-loopback bind host %r" % host)
     bind_host = HOST if host == "localhost" else host
@@ -1124,6 +1153,7 @@ def make_server(home, port=0, host=HOST, local_state_root=None,
         home,
         local_state_root=local_state_root,
         local_state_workspace_id=local_state_workspace_id,
+        production_monitor_config=production_monitor_config,
         now_fn=now_fn,
     )
     httpd = Server((bind_host, port), Handler)
@@ -1132,13 +1162,14 @@ def make_server(home, port=0, host=HOST, local_state_root=None,
 
 
 def serve(home, port=None, host=HOST, local_state_root=None,
-          local_state_workspace_id=None):
+          local_state_workspace_id=None, production_monitor_config=None):
     if host not in (HOST, "localhost"):
         raise ValueError("refusing non-loopback bind host %r" % host)
     runtime = Runtime(
         home,
         local_state_root=local_state_root,
         local_state_workspace_id=local_state_workspace_id,
+        production_monitor_config=production_monitor_config,
     )
     selected_port = runtime.port if port is None else port
     if (not isinstance(selected_port, int) or isinstance(selected_port, bool) or
@@ -1167,6 +1198,9 @@ def main(argv=None):
     parser.add_argument(
         "--local-state-workspace-id",
         help="persisted native workspace registration id")
+    parser.add_argument(
+        "--production-monitor-config",
+        help="trusted absolute native-only production monitor config path")
     args = parser.parse_args(argv)
     if args.host not in (HOST, "localhost"):
         parser.error("refusing non-loopback host")
@@ -1179,6 +1213,7 @@ def main(argv=None):
         args.host,
         local_state_root=args.local_state_root,
         local_state_workspace_id=args.local_state_workspace_id,
+        production_monitor_config=args.production_monitor_config,
     )
 
 

@@ -222,6 +222,9 @@ def build_parser():
     serve.add_argument(
         "--local-state-workspace-id",
         help="trusted native-only stable workspace registration identity")
+    serve.add_argument(
+        "--production-monitor-config",
+        help="trusted native-only production monitor config path")
     search = sub.add_parser(
         "search",
         help="search bounded projected metadata across registered workspaces")
@@ -371,6 +374,7 @@ def main(argv=None):
                 port=args.port,
                 local_state_root=args.local_state_root,
                 local_state_workspace_id=args.local_state_workspace_id,
+                production_monitor_config=args.production_monitor_config,
             )
             return 0
         parser.error("unknown command")

@@ -74,6 +74,14 @@ styling. Card counts and flow labels use the vocabulary above, while any source
 or implementation detail remains available only through secondary links or the
 existing evidence inspector.
 
+When the native production monitor is enabled, its observation replaces the
+stored production-health snapshot on Today without changing the authoritative
+workspace. The primary sentence remains product-shaped. “Checked a minute ago”
+is secondary context; endpoint addresses, response bodies, status codes, and
+network errors never become owner-facing copy. One missed check is a retry, not
+an incident. Three consecutive failures mark production degraded, one success
+recovers it, and a stale monitor says that monitoring stopped updating.
+
 The Decision Deck renders each typed card in the same product language. It
 retains recommendation acceptance, snooze, context requests, completion, and
 provenance. `priority_review` adds its bounded reorder-and-kill response without

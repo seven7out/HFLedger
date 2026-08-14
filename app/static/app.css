@@ -567,6 +567,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .owner-today-summary { border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--content) 96%, var(--accent)); }
 .production-health { min-height: 42px; display: flex; align-items: center; gap: 8px; padding: 9px 18px; border-bottom: 1px solid var(--line); font-size: 13px; }
 .production-health-dot { color: var(--success); font-size: 9px; }
+.production-health-copy { display: grid; gap: 2px; }
+.production-health-checked { color: var(--muted); font-size: 10px; font-weight: 500; }
 .production-health.is-degraded { color: var(--danger); background: color-mix(in srgb, var(--danger) 6%, transparent); }
 .production-health.is-degraded .production-health-dot { color: var(--danger); }
 .owner-card-counts, .owner-pipeline { padding: 10px 18px 12px; border-bottom: 1px solid var(--line); }

@@ -164,6 +164,16 @@ Those actions remain in the Decision Deck or the named authoritative source.
 See [`docs/ui.md`](docs/ui.md) for the nine one-home states, evidence vocabulary,
 coverage model, keyboard/menu behavior, and first-run/degraded limitations.
 
+The native Mac app can continuously check one explicit HTTPS production-health
+address per workspace. The address stays in mode-`0600` app-private settings;
+the engine retains no response body and overlays only a plain healthy/degraded
+observation onto Today. A single missed check remains a quiet retry. Three
+consecutive failures degrade production, while one successful check recovers.
+The monitor runs while HFLedger is running, including when its windows are
+closed; Launch at Login keeps that process available after sign-in.
+See [`docs/production-monitoring.md`](docs/production-monitoring.md) for the
+state machine, privacy boundary, and lifecycle.
+
 It binds only to `127.0.0.1`, rejects non-loopback Host headers, has no CORS opt-in, and is not an authenticated remote service. Do not put an unauthenticated proxy in front of it. See [`docs/ui.md`](docs/ui.md).
 
 Observer workspaces can set `ui.readOnly: true`; the service then exposes the

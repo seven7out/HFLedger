@@ -178,6 +178,7 @@ class CliTests(unittest.TestCase):
     def test_native_serve_state_identity_reaches_server(self):
         namespace = runpy.run_path(CLI, run_name="ledger_cli_under_test")
         state_root = os.path.realpath(os.path.join(self.temp.name, "UIState"))
+        monitor_config = os.path.realpath(os.path.join(self.temp.name, "monitor.json"))
         with mock.patch.object(server, "serve") as launch:
             result = namespace["main"]([
                 "--home", self.temp.name,
@@ -185,6 +186,7 @@ class CliTests(unittest.TestCase):
                 "--port", "17173",
                 "--local-state-root", state_root,
                 "--local-state-workspace-id", "workspace-fictional",
+                "--production-monitor-config", monitor_config,
             ])
         self.assertEqual(result, 0)
         launch.assert_called_once_with(
@@ -192,6 +194,7 @@ class CliTests(unittest.TestCase):
             port=17173,
             local_state_root=state_root,
             local_state_workspace_id="workspace-fictional",
+            production_monitor_config=monitor_config,
         )
 
     def test_full_decision_action_completion_walkthrough(self):
