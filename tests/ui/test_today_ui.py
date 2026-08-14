@@ -46,6 +46,8 @@ class TodayUIContractTests(unittest.TestCase):
                 'id="owner-task-dialog"', "What should change for people?",
                 "Active — agents may pick this up", "owner-priority-row",
                 "dragstart", "moveOwnerTask", "set-priority", "set-task",
+                'id="owner-complete-dialog"', "Mark complete",
+                "complete-owner-task", "ownerCompletionAvailable",
                 "renderOperations", "Show command", "No run has been recorded yet."):
             self.assertIn(required, markup + script + style)
         self.assertIn("Execution status remains agent-reported", script)

@@ -1128,6 +1128,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .dialog-field small { color: var(--subtle); font-size: 10px; line-height: 1.35; }
 .dialog-field-note { display: block; margin-top: 5px; color: var(--subtle); font-size: 10px; line-height: 1.35; }
 .owner-task-dialog { width: min(540px, calc(100vw - 32px)); }
+.owner-complete-dialog { width: min(460px, calc(100vw - 32px)); }
+.owner-complete-title { margin-top: 14px; color: var(--ink); font-weight: 650; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 18px; }
 .search-result-copy { min-width: 0; display: grid; gap: 3px; }
 .search-result-copy strong { overflow: hidden; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }

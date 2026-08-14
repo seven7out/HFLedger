@@ -19,7 +19,7 @@ MAX_FILE_BYTES = 16 * 1024 * 1024
 MAX_EVENTS = 10_000
 MAX_PRIORITY_ITEMS = 500
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/#~-]{0,255}$")
-ACTIONS = frozenset(("task-set", "priority-set"))
+ACTIONS = frozenset(("task-set", "priority-set", "owner-task-complete"))
 TASK_FIELDS = frozenset(("title", "intent", "note", "disposition"))
 EVENT_FIELDS = frozenset((
     "schemaVersion", "revision", "recordedAt", "action", "taskId", "changes",
@@ -167,7 +167,7 @@ def validate_event(event, expected_revision=None, expected_prior=None):
             raise OwnerControlError("disposition must be active, parked, or null")
         if event.get("priorityOrder") is not None:
             raise OwnerControlError("task-set priorityOrder must be null")
-    else:
+    elif action == "priority-set":
         if event.get("taskId") is not None or event.get("changes") is not None:
             raise OwnerControlError("priority-set taskId and changes must be null")
         order = event.get("priorityOrder")
@@ -177,6 +177,11 @@ def validate_event(event, expected_revision=None, expected_prior=None):
             _task_id(item_id)
         if len(order) != len(set(order)):
             raise OwnerControlError("priorityOrder must not contain duplicates")
+    else:
+        _task_id(event.get("taskId"))
+        if event.get("changes") is not None or event.get("priorityOrder") is not None:
+            raise OwnerControlError(
+                "owner-task-complete changes and priorityOrder must be null")
     return event
 
 
@@ -299,6 +304,7 @@ def append(home, expected_revision, action, task_id=None, changes=None,
 def fold(events):
     overrides = {}
     priority_order = []
+    owner_task_completions = {}
     updated_at = None
     for event in events:
         updated_at = event["recordedAt"]
@@ -311,18 +317,35 @@ def fold(events):
                     current[field] = value
             if not current:
                 overrides.pop(event["taskId"], None)
-        else:
+        elif event["action"] == "priority-set":
             priority_order = list(event["priorityOrder"])
+        else:
+            owner_task_completions[event["taskId"]] = event["recordedAt"]
     return {
         "revision": len(events),
         "updatedAt": updated_at,
         "overrides": overrides,
         "priorityOrder": priority_order,
+        "ownerTaskCompletions": owner_task_completions,
     }
 
 
-def build_view(home, candidates):
-    events = read(home)
+def apply_owner_task_completions(board, state):
+    """Overlay owner-reported manual completion without rewriting source facts."""
+    completed = state.get("ownerTaskCompletions", {})
+    for item in board.get("ownerTasks", []) if isinstance(board, dict) else []:
+        if not isinstance(item, dict) or item.get("id") not in completed:
+            continue
+        item["done"] = True
+        item["status"] = "done"
+        item["completionDisposition"] = "completed"
+        item["completionEvidence"] = "The owner marked this manual task complete."
+        item["completionSource"] = "owner-control"
+        item["completionActor"] = "owner"
+
+
+def build_view(home, candidates, events=None):
+    events = read(home) if events is None else events
     state = fold(events)
     effective = []
     for candidate in candidates:
@@ -354,6 +377,11 @@ def build_view(home, candidates):
         "revision": state["revision"],
         "updatedAt": state["updatedAt"],
         "activeOrder": ordered,
+        "completedOwnerTaskIds": list(state["ownerTaskCompletions"]),
+        "ownerTaskCompletions": [
+            {"taskId": task_id, "completedAt": completed_at}
+            for task_id, completed_at in state["ownerTaskCompletions"].items()
+        ],
         "items": effective,
         "counts": {
             "active": sum(item["disposition"] == "active" for item in effective),

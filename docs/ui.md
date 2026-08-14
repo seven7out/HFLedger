@@ -115,6 +115,11 @@ silently overwriting it. `ledger owner-control` exposes the same effective order
 and direction to agents. Owner priority never bypasses a safety or authority
 gate. The full boundary is in [`owner-control.md`](owner-control.md).
 
+An open owner-only manual task in **Needs You** has one additional primary
+action: **Mark complete**. A confirmation dialog explains that this records the
+owner's completed manual action, not agent implementation status. The item then
+leaves the active owner lane. Queue tasks never receive this control.
+
 ## Operations
 
 Operations answers what commands exist, what scheduled work is enabled, when it
@@ -181,7 +186,7 @@ attention in the sources observed through 5:55 PM.”
 
 ## Local presentation state
 
-Today may change only app-private presentation state:
+Today may change app-private presentation state:
 
 - mark exact changes seen after a successful visible render;
 - acknowledge or snooze the current attention generation;
@@ -189,9 +194,12 @@ Today may change only app-private presentation state:
 - remember the selected destination/item, pane widths, and disclosure state.
 
 These actions never edit `board.json`, append `ledger.jsonl`, resolve an ask,
-complete or reorder observed work, configure a collector, merge, or deploy. An
+complete or reorder observed agent work, configure a collector, merge, or deploy. An
 acknowledgement or snooze stops applying when new material evidence rotates the
 item's `attentionKey`. Watched state survives upstream status changes.
+
+Separately, **Mark complete** appends a one-way owner-control event only for an
+exact owner-only manual task. It is durable owner input, not presentation state.
 
 The native app stores one revisioned, locked, atomic JSON document per
 registered workspace under its private Application Support directory. The

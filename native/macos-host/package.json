@@ -1,7 +1,7 @@
 {
   "name": "hfledger-macos-host",
   "private": true,
-  "version": "0.6.0-alpha.11",
+  "version": "0.6.0-alpha.12",
   "type": "module",
   "scripts": {
     "bundle-engine": "python3 scripts/build_engine.py",

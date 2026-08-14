@@ -1,6 +1,6 @@
 [package]
 name = "hfledger-macos-host"
-version = "0.6.0-alpha.11"
+version = "0.6.0-alpha.12"
 description = "Local-first HFLedger macOS host"
 authors = ["HFLedger contributors"]
 edition = "2021"

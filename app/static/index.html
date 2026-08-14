@@ -258,6 +258,22 @@
     </form>
   </dialog>
 
+  <dialog id="owner-complete-dialog" class="ui-dialog owner-complete-dialog">
+    <form id="owner-complete-form" method="dialog">
+      <header>
+        <div><p class="dialog-label">Owner action</p><h2>Mark this task complete?</h2></div>
+        <button class="dialog-close" value="cancel" aria-label="Close">×</button>
+      </header>
+      <p id="owner-complete-title" class="owner-complete-title"></p>
+      <p>This records that you completed the manual action. It does not change agent-reported implementation status.</p>
+      <input id="owner-complete-task-id" type="hidden">
+      <div class="dialog-actions">
+        <button class="control-button" value="cancel">Cancel</button>
+        <button id="owner-complete-save" class="control-button primary-control" value="default">Mark complete</button>
+      </div>
+    </form>
+  </dialog>
+
   <div id="toast" class="toast" role="status" aria-live="polite" hidden>
     <span id="toast-message"></span>
     <button id="toast-undo" type="button" hidden>Undo</button>

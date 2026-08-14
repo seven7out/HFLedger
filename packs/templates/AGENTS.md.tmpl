@@ -26,6 +26,10 @@ safe to execute. Source status and normal safety gates still control
 eligibility. If the projection is unavailable or conflicts with source facts,
 stop selection and report the mismatch instead of guessing.
 
+`completedOwnerTaskIds` are one-way owner reports about manual actions assigned
+to the owner. Reconcile them only through the authoritative source's sanctioned
+completion path. They never complete queue work or prove an agent result.
+
 ## Product-owner cards
 
 The owner is a product owner, not a developer. Every owner-facing card must use

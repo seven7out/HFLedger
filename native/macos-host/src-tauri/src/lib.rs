@@ -676,18 +676,39 @@ fn copy_demo(source: &Path, destination: &Path) -> Result<(), String> {
             }
         }
         private_permissions(destination, 0o700)?;
+        for name in DATA_DIRECTORIES {
+            let path = destination.join(name);
+            if path.exists() {
+                reject_symlink_chain(&path)?;
+                if !path.is_dir() {
+                    return Err(format!(
+                        "the included demo data path is not a directory: {}",
+                        path.display()
+                    ));
+                }
+                private_permissions(&path, 0o700)?;
+            } else {
+                create_private_dir(&path)?;
+            }
+        }
         for name in DEMO_AUXILIARY_FILES {
             let to = destination.join(name);
-            reject_symlink(&to)?;
-            if !to.exists() {
-                let from = source.join(name);
-                reject_symlink(&from)?;
-                fs::copy(&from, &to).map_err(|error| {
-                    format!(
-                        "could not upgrade the fictional demo {}: {error}",
-                        from.display()
-                    )
-                })?;
+            match fs::symlink_metadata(&to) {
+                Ok(metadata) if metadata.file_type().is_symlink() => {
+                    return Err(format!("refusing symlink: {}", to.display()))
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    let from = source.join(name);
+                    reject_symlink(&from)?;
+                    fs::copy(&from, &to).map_err(|error| {
+                        format!(
+                            "could not upgrade the fictional demo {}: {error}",
+                            from.display()
+                        )
+                    })?;
+                }
+                Err(error) => return Err(format!("could not inspect {}: {error}", to.display())),
             }
             private_permissions(&to, 0o600)?;
         }
@@ -3840,23 +3861,25 @@ pub fn run() {
 mod tests {
     use super::{
         active_context_id, allowlisted_deep_link, attention_badge_count,
-        canonical_production_endpoint, current_host_status, decision_count, decode_stored_config,
-        deep_link_board_url, deep_link_window_plan, diagnostic_host_value, engine_serve_arguments,
-        event_is_relevant, guarded_item_menu_accelerator, is_board_settings_navigation,
-        menu_eligibility, merge_watch_signal, native_command_for_menu_id, parse_deep_link,
-        primary_surface_plan, production_health_signature, project_slug, recent_duplicate,
-        refresh_demo_operations, sync_production_monitor_config, text_size_after,
-        validate_search_response, validate_stored_config, watch_snapshot_is_safe, workspace_id,
-        workspace_watch_plan, write_config_unlocked, AppPaths, AppSnapshot, DeepLinkIntent,
-        DeepLinkRejection, DeepLinkWindowPlan, HostRuntime, HostStatus, NativeCommand, Preferences,
+        canonical_production_endpoint, copy_demo, current_host_status, decision_count,
+        decode_stored_config, deep_link_board_url, deep_link_window_plan, diagnostic_host_value,
+        engine_serve_arguments, event_is_relevant, guarded_item_menu_accelerator,
+        is_board_settings_navigation, menu_eligibility, merge_watch_signal,
+        native_command_for_menu_id, parse_deep_link, primary_surface_plan,
+        production_health_signature, project_slug, recent_duplicate, refresh_demo_operations,
+        sync_production_monitor_config, text_size_after, validate_search_response,
+        validate_stored_config, watch_snapshot_is_safe, workspace_id, workspace_watch_plan,
+        write_config_unlocked, AppPaths, AppSnapshot, DeepLinkIntent, DeepLinkRejection,
+        DeepLinkWindowPlan, HostRuntime, HostStatus, NativeCommand, Preferences,
         PrimarySurfacePlan, ProductionMonitorSettings, SearchResponse, StoredConfig, TextSize,
-        TextSizeAction, Workspace, WorkspaceKind, CONFIG_VERSION, DEEP_LINK_REJECTION_MESSAGE,
+        TextSizeAction, Workspace, WorkspaceKind, CONFIG_VERSION, CORE_FILES, DATA_DIRECTORIES,
+        DEEP_LINK_REJECTION_MESSAGE,
     };
     use notify::{Event, EventKind};
     use serde_json::{json, Value};
     use std::collections::HashSet;
     use std::fs;
-    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::fs::{symlink, PermissionsExt};
     use std::path::{Path, PathBuf};
     use std::sync::{mpsc, Arc};
     use std::thread;
@@ -4854,6 +4877,62 @@ mod tests {
                 & 0o777,
             0o600
         );
+        fs::remove_dir_all(root).expect("remove disposable app data");
+    }
+
+    #[test]
+    fn existing_demo_is_upgraded_with_missing_auxiliary_files() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "hfledger-fictional-upgrade-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).expect("create disposable upgrade root");
+        let root = root
+            .canonicalize()
+            .expect("resolve disposable upgrade root");
+        let source = root.join("included");
+        let destination = root.join("installed");
+        fs::create_dir_all(source.join("reports")).expect("create included reports");
+        fs::create_dir_all(&destination).expect("create previous demo");
+        for name in CORE_FILES {
+            fs::write(destination.join(name), format!("previous {name}\n"))
+                .expect("write previous demo core file");
+        }
+        fs::write(source.join("owner-control.jsonl"), b"")
+            .expect("write included owner-control journal");
+        fs::write(
+            source.join("reports/operations-latest.json"),
+            b"{\"observedAt\":\"2000-01-01T00:00:00+00:00\",\"schedules\":[]}",
+        )
+        .expect("write included operations report");
+
+        let board_before =
+            fs::read(destination.join("board.json")).expect("read previous board before upgrade");
+        copy_demo(&source, &destination).expect("upgrade previous fictional demo");
+
+        assert!(destination.join("owner-control.jsonl").is_file());
+        assert!(destination.join("reports/operations-latest.json").is_file());
+        assert_eq!(
+            fs::read(destination.join("board.json")).expect("read board after upgrade"),
+            board_before
+        );
+        for name in DATA_DIRECTORIES {
+            assert!(destination.join(name).is_dir());
+        }
+        fs::remove_file(destination.join("owner-control.jsonl"))
+            .expect("remove upgraded owner-control journal");
+        symlink(
+            root.join("outside-owner-control.jsonl"),
+            destination.join("owner-control.jsonl"),
+        )
+        .expect("create dangling owner-control symlink");
+        assert!(copy_demo(&source, &destination)
+            .expect_err("dangling auxiliary symlink must fail closed")
+            .contains("refusing symlink"));
         fs::remove_dir_all(root).expect("remove disposable app data");
     }
 }
