@@ -175,9 +175,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .compact-modal { width: min(480px, calc(100% - 28px)); }
 .toast { position: fixed; z-index: 20; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 12px 16px; color: white; background: var(--ink); border-radius: 12px; box-shadow: 0 14px 40px rgba(0,0,0,.24); font-size: 13px; }
 
-/* Served ledger browser (orientation V2). Decision Deck rules below are unchanged. */
+/* Served ledger browser (orientation V2). All owner surfaces stay in one light system. */
 .board-page {
-  color-scheme: light dark;
+  color-scheme: light;
   --window: #f5f5f7;
   --content: #fbfbfc;
   --sidebar: rgba(237, 237, 240, .94);
@@ -1047,7 +1047,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .clipboard-helper { position: fixed; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0; }
 
 :root[data-text-size="large"] .ledger-row,
-:root[data-text-size="extraLarge"] .ledger-row {
+:root[data-text-size="extraLarge"] .ledger-row,
+:root[data-text-size="veryLarge"] .ledger-row,
+:root[data-text-size="maximum"] .ledger-row {
   align-items: start;
   min-height: 72px;
   padding-block: 9px;
@@ -1056,37 +1058,30 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 :root[data-text-size="large"] .row-reason,
 :root[data-text-size="extraLarge"] .row-title,
 :root[data-text-size="extraLarge"] .row-reason,
+:root[data-text-size="veryLarge"] .row-title,
+:root[data-text-size="veryLarge"] .row-reason,
+:root[data-text-size="maximum"] .row-title,
+:root[data-text-size="maximum"] .row-reason,
 :root[data-text-size="large"] .run-title,
-:root[data-text-size="extraLarge"] .run-title {
+:root[data-text-size="extraLarge"] .run-title,
+:root[data-text-size="veryLarge"] .run-title,
+:root[data-text-size="maximum"] .run-title {
   overflow: visible;
   text-overflow: clip;
   white-space: normal;
   overflow-wrap: anywhere;
 }
 :root[data-text-size="large"] .row-meta,
-:root[data-text-size="extraLarge"] .row-meta { align-self: start; }
+:root[data-text-size="extraLarge"] .row-meta,
+:root[data-text-size="veryLarge"] .row-meta,
+:root[data-text-size="maximum"] .row-meta { align-self: start; }
 :root[data-text-size="large"] .coverage-footer span,
-:root[data-text-size="extraLarge"] .coverage-footer span {
+:root[data-text-size="extraLarge"] .coverage-footer span,
+:root[data-text-size="veryLarge"] .coverage-footer span,
+:root[data-text-size="maximum"] .coverage-footer span {
   overflow: visible;
   text-overflow: clip;
   white-space: normal;
-}
-
-@media (prefers-color-scheme: dark) {
-  .board-page {
-    --window: #1d1d1f;
-    --content: #232326;
-    --sidebar: rgba(40, 40, 43, .96);
-    --toolbar: rgba(43, 43, 46, .94);
-    --ink: #f2f2f4;
-    --muted: #b2b2b8;
-    --subtle: #8c8c93;
-    --line: rgba(255, 255, 255, .10);
-    --strong-line: rgba(255, 255, 255, .20);
-    --warning: #f0a549;
-    --danger: #ff7770;
-    --success: #6bd2a1;
-  }
 }
 
 @media (prefers-contrast: more) {
@@ -1194,30 +1189,41 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 /* Decision deck */
-.deck-page { color: #f7f5ef; background: #171828; overflow-x: hidden; }
-.deck-page::before { content: ""; position: fixed; inset: -20%; pointer-events: none; background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 32%), radial-gradient(circle at 15% 85%, rgba(238,154,93,.15), transparent 25%); }
-.deck-topbar { position: relative; z-index: 2; min-height: 76px; width: min(720px, calc(100% - 32px)); margin: 0 auto; display: grid; grid-template-columns: 42px 1fr auto; align-items: center; border-bottom: 1px solid rgba(255,255,255,.09); }
-.deck-back { color: white; text-decoration: none; width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.13); border-radius: 50%; }
+.deck-page {
+  color-scheme: light;
+  --window: #f5f5f7;
+  --content: #fbfbfc;
+  --ink: #202124;
+  --muted: #65666c;
+  --subtle: #85868d;
+  --line: rgba(31, 32, 36, .13);
+  --strong-line: rgba(31, 32, 36, .22);
+  --success: #23734f;
+  color: var(--ink);
+  background: var(--window);
+  overflow-x: hidden;
+}
+.deck-page::before { content: none; }
+.deck-topbar { position: relative; z-index: 2; min-height: 58px; width: min(760px, calc(100% - 32px)); margin: 0 auto; display: grid; grid-template-columns: 42px 1fr auto; align-items: center; border-bottom: 1px solid var(--line); }
+.deck-back { color: var(--muted); text-decoration: none; width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--content); }
 .deck-heading { display: grid; justify-items: center; gap: 2px; }
-.deck-heading strong { font: 500 19px Georgia, "Times New Roman", serif; }
-.deck-heading span { color: rgba(255,255,255,.62); font-size: 11px; text-transform: uppercase; letter-spacing: .12em; }
-#deck-context { max-width: 150px; color: white; background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.13); }
-.deck-shell { position: relative; z-index: 1; width: min(600px, calc(100% - 30px)); min-height: calc(100vh - 76px); margin: 0 auto; padding: 42px 0 90px; display: grid; align-items: center; }
-.deck-state { text-align: center; color: rgba(255,255,255,.68); }
-.spinner.light { border-color: rgba(255,255,255,.2); border-top-color: white; }
-.deck-state.empty h1 { margin: 24px 0 8px; color: white; font: 500 38px Georgia, "Times New Roman", serif; }
+.deck-heading strong { font-size: 15px; line-height: 20px; font-weight: 680; }
+.deck-heading span { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+#deck-context { max-width: 150px; color: var(--ink); background: var(--content); border-color: var(--line); }
+.deck-shell { position: relative; z-index: 1; width: min(620px, calc(100% - 30px)); min-height: calc(100vh - 58px); margin: 0 auto; padding: 30px 0 72px; display: grid; align-items: center; }
+.deck-state { text-align: center; color: var(--muted); }
+.spinner.light { border-color: var(--line); border-top-color: var(--accent); }
+.deck-state.empty h1 { margin: 20px 0 8px; color: var(--ink); font-size: 28px; line-height: 34px; font-weight: 680; }
 .deck-state.empty p { max-width: 360px; margin: 0 auto 24px; line-height: 1.6; }
-.empty-orbit { width: 78px; height: 78px; margin: 0 auto; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; color: #b7f2d6; font-size: 28px; box-shadow: 0 0 0 14px rgba(255,255,255,.025), 0 0 0 28px rgba(255,255,255,.015); }
-.light-button { display: inline-block; color: #171828; background: white; }
+.empty-orbit { width: 60px; height: 60px; margin: 0 auto; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 12px; color: var(--success); background: var(--content); font-size: 24px; }
+.light-button { display: inline-block; color: white; background: var(--accent); }
 .deck-stage { position: relative; width: 100%; }
-.stack-card { position: absolute; left: 5%; width: 90%; height: calc(100% - 24px); border: 1px solid rgba(255,255,255,.1); border-radius: 28px; background: rgba(255,255,255,.07); }
-.stack-one { top: -12px; transform: rotate(1.8deg); }
-.stack-two { top: -23px; transform: rotate(-1.4deg); opacity: .55; }
-.decision-card { position: relative; z-index: 2; min-height: 520px; padding: clamp(24px, 6vw, 42px); color: var(--ink); background: #fbfaf6; border-radius: 28px; box-shadow: 0 34px 90px rgba(0,0,0,.32); touch-action: pan-y; transition: transform .18s ease, opacity .18s ease; }
+.stack-card { display: none; }
+.decision-card { position: relative; z-index: 2; min-height: 500px; padding: clamp(24px, 6vw, 38px); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; background: var(--content); box-shadow: 0 8px 26px rgba(32, 27, 55, .07); touch-action: pan-y; transition: transform .18s ease, opacity .18s ease; }
 .card-topline { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 28px; }
 .card-kind { color: var(--accent); font-size: 11px; font-weight: 850; text-transform: uppercase; letter-spacing: .15em; }
 .card-number { color: var(--muted); font-size: 12px; }
-.decision-card h1 { margin: 0; font: 500 clamp(30px, 7vw, 43px)/1.04 Georgia, "Times New Roman", serif; letter-spacing: -.035em; }
+.decision-card h1 { margin: 0; font-size: clamp(26px, 6vw, 36px); line-height: 1.08; font-weight: 680; letter-spacing: -.025em; }
 .card-product-detail { margin: 12px 0 0; color: var(--ink); font-size: 15px; line-height: 1.55; }
 .card-test-evidence, .card-recommendation, .card-rollback { margin-top: 15px; padding: 12px 14px; border-radius: 12px; color: #2d5f4d; background: rgba(45,119,93,.08); font-size: 13px; line-height: 1.45; }
 .card-rollback { color: var(--muted); background: #f1eee6; }
@@ -1248,23 +1254,37 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .recommend-badge { color: var(--accent); font-size: 10px; text-transform: uppercase; font-weight: 850; letter-spacing: .08em; }
 .card-actions { display: grid; grid-template-columns: 1fr 1.5fr; gap: 9px; margin-top: 24px; }
 .deck-button { border: 0; border-radius: 13px; padding: 13px 12px; font-size: 13px; font-weight: 800; }
-.deck-button.primary { color: white; background: var(--accent); box-shadow: 0 9px 25px color-mix(in srgb, var(--accent) 25%, transparent); }
+.deck-button.primary { color: white; background: var(--accent); }
 .deck-button.secondary { color: var(--ink); background: #eeeae2; }
 .deck-button.danger { color: #a4443e; background: rgba(164,68,62,.09); }
 .card-tools { display: flex; justify-content: center; gap: 14px; margin-top: 17px; }
 .card-tools button { border: 0; background: transparent; color: var(--muted); padding: 5px; font-size: 12px; font-weight: 700; }
-.swipe-hint { display: flex; justify-content: space-between; margin: 21px 10px 0; color: rgba(255,255,255,.58); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.swipe-hint { display: flex; justify-content: space-between; margin: 18px 8px 0; color: var(--subtle); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
 
 :root[data-text-size="large"] .option-button,
-:root[data-text-size="extraLarge"] .option-button { align-items: start; }
-:root[data-text-size="extraLarge"] .decision-card { padding: 24px; }
-:root[data-text-size="extraLarge"] .option-button {
+:root[data-text-size="extraLarge"] .option-button,
+:root[data-text-size="veryLarge"] .option-button,
+:root[data-text-size="maximum"] .option-button { align-items: start; }
+:root[data-text-size="extraLarge"] .decision-card,
+:root[data-text-size="veryLarge"] .decision-card,
+:root[data-text-size="maximum"] .decision-card { padding: 24px; }
+:root[data-text-size="extraLarge"] .option-button,
+:root[data-text-size="veryLarge"] .option-button,
+:root[data-text-size="maximum"] .option-button {
   grid-template-columns: auto minmax(0, 1fr);
 }
-:root[data-text-size="extraLarge"] .recommend-badge { grid-column: 2; }
-:root[data-text-size="extraLarge"] .card-actions { grid-template-columns: minmax(0, 1fr); }
-:root[data-text-size="extraLarge"] .priority-build { grid-template-columns: 26px minmax(0, 1fr); }
-:root[data-text-size="extraLarge"] .priority-build-controls { grid-column: 2; }
+:root[data-text-size="extraLarge"] .recommend-badge,
+:root[data-text-size="veryLarge"] .recommend-badge,
+:root[data-text-size="maximum"] .recommend-badge { grid-column: 2; }
+:root[data-text-size="extraLarge"] .card-actions,
+:root[data-text-size="veryLarge"] .card-actions,
+:root[data-text-size="maximum"] .card-actions { grid-template-columns: minmax(0, 1fr); }
+:root[data-text-size="extraLarge"] .priority-build,
+:root[data-text-size="veryLarge"] .priority-build,
+:root[data-text-size="maximum"] .priority-build { grid-template-columns: 26px minmax(0, 1fr); }
+:root[data-text-size="extraLarge"] .priority-build-controls,
+:root[data-text-size="veryLarge"] .priority-build-controls,
+:root[data-text-size="maximum"] .priority-build-controls { grid-column: 2; }
 .deck-toast { background: white; color: var(--ink); }
 
 @media (max-width: 900px) {
@@ -1307,7 +1327,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .deck-heading { justify-items: start; padding-left: 8px; }
   #deck-context { width: 115px; }
   .deck-shell { width: calc(100% - 20px); padding-top: 34px; }
-  .decision-card { min-height: 500px; border-radius: 24px; }
+  .decision-card { min-height: 500px; border-radius: 12px; }
   .priority-build { grid-template-columns: 24px minmax(0, 1fr); }
   .priority-build-controls { grid-column: 2; }
 }

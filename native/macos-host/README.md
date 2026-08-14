@@ -20,6 +20,8 @@ workspace directly in its native Today window.
   filtering, inspector/sidebar visibility, open, acknowledge, snooze, watch,
   and Copy Context;
 - bounded local Command-K search over already-projected metadata;
+- an in-window Settings panel with General, Appearance, Workspaces, and
+  Data & Diagnostics sections, plus persistent 100–200% text scaling;
 - installed-app `hfledger://item/<workspace-id>/<item-id>` navigation through a
   strict Rust parser and registered-workspace allowlist;
 - private seen, snooze, acknowledge, watch, navigation, pane, and disclosure
@@ -30,8 +32,11 @@ workspace directly in its native Today window.
 
 The loopback board has no general Tauri IPC authority. Native commands enter
 the page only as an allowlisted one-way event; page state returns through the
-closed loopback API. The native settings window owns filesystem selection and
-process control, while the served HTML remains the single implementation of
+closed loopback API. Settings is a separate capability-scoped child webview
+shown inside the Today window, so it can own filesystem selection and process
+control without granting IPC to the served board. The standalone native
+settings surface remains only for first-run onboarding and recovery before a
+Today window exists. The served HTML remains the single implementation of
 Today and Decision Deck behavior.
 
 ## Keyboard and menu behavior
