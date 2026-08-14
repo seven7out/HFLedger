@@ -2,6 +2,7 @@
 """Copy the fictional HFLedger example into a disposable private data directory."""
 
 import argparse
+import datetime
 import json
 import os
 import shlex
@@ -18,7 +19,10 @@ from core import store  # noqa: E402
 
 
 SOURCE = os.path.join(ROOT, "example")
-DATA_FILES = ("config.json", "board.json", "ledger.jsonl")
+DATA_FILES = (
+    "config.json", "board.json", "ledger.jsonl", "owner-control.jsonl",
+    os.path.join("reports", "operations-latest.json"),
+)
 DATA_DIRS = ("locks", "backups", "reports")
 
 
@@ -43,6 +47,22 @@ def create_demo(directory):
         destination = os.path.join(target, name)
         shutil.copyfile(os.path.join(SOURCE, name), destination)
         os.chmod(destination, 0o600)
+    operations_path = os.path.join(target, "reports", "operations-latest.json")
+    with open(operations_path, encoding="utf-8") as handle:
+        operations = json.load(handle)
+    now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+    operations["observedAt"] = now.isoformat()
+    for index, schedule in enumerate(operations["schedules"]):
+        schedule["nextRunAt"] = (now + datetime.timedelta(days=index + 1)).isoformat()
+        if schedule.get("lastRun"):
+            completed = now - datetime.timedelta(minutes=index + 1)
+            schedule["lastRun"]["startedAt"] = (
+                completed - datetime.timedelta(minutes=1)).isoformat()
+            schedule["lastRun"]["completedAt"] = completed.isoformat()
+    with open(operations_path, "w", encoding="utf-8") as handle:
+        json.dump(operations, handle, indent=2, ensure_ascii=False)
+        handle.write("\n")
+    os.chmod(operations_path, 0o600)
     config = store.load_config(target)
     errors, warnings = store.BoardStore(target, config=config).validate_current()
     if errors:

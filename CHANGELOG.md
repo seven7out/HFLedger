@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Added a durable owner-control lane with draggable agent priority order,
+  product-facing task edits, active/parked planning state, agent-readable CLI
+  projection, and byte-identical preservation of observed board and ledger.
+- Added a plain-language Operations view and closed private report for command
+  discovery, scheduled-task cadence, next run, and latest success, failure,
+  missed, stale, invalid, or unconfigured state.
 - Added privacy-bounded continuous production monitoring to the Mac app:
   per-workspace HTTPS configuration stays in private app data, three consecutive
   failures trigger degradation, one success recovers, and Today shows the last

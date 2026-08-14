@@ -52,6 +52,25 @@ test("exports the locked navigation and one-home order", () => {
   ]);
 });
 
+test("owner priority movement is deterministic and preserves every task", () => {
+  assert.deepEqual(ui.moveInOrder(["a", "b", "c"], "a", 2), ["b", "c", "a"]);
+  assert.deepEqual(ui.moveInOrder(["a", "b", "c"], "c", 0), ["c", "a", "b"]);
+  assert.deepEqual(ui.moveInOrder(["a", "b", "c"], "missing", 1), ["a", "b", "c"]);
+  assert.deepEqual(ui.NAVIGATION_VIEWS, [
+    "today", "priorities", "operations", "changes", "all-work",
+    "shipped-log", "watched", "projects", "project",
+  ]);
+});
+
+test("operations uses closed owner-facing health labels", () => {
+  assert.equal(ui.operationStateLabel("healthy"), "Reporting normally");
+  assert.equal(ui.operationStateLabel("degraded"), "Needs attention");
+  assert.equal(ui.operationStateLabel("stale"), "Stopped updating");
+  assert.equal(ui.operationStateLabel("anything-else"), "Unknown");
+  assert.equal(ui.operationRunLabel("running"), "Running");
+  assert.equal(ui.operationRunLabel("missed"), "Missed");
+});
+
 test("pane resize continues and cleans up after the pointer leaves the divider", () => {
   const resizer = new FakeResizer();
   const windowTarget = new FakeEventTarget();

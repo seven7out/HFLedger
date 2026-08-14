@@ -11,6 +11,21 @@ This workspace uses HFLedger at `{{LEDGER_HOME}}`. Treat the board and append-on
 - Agent-executable work belongs in the queue; undeveloped ideas belong in the inbox. Only an irreducible {{OWNER_ROLE}} choice or exact manual step that an agent cannot perform may enter the owner lane.
 - Never infer production authority. Phase 3 forbids production writes.
 
+## Owner direction and priority
+
+Before choosing queue work, read the effective owner-control projection:
+
+```sh
+ledger --home {{LEDGER_HOME_SHELL}} owner-control
+```
+
+Honor `activeOrder`, skip items whose owner disposition is `parked`, and use
+the effective product title, `intent`, and `note` as product direction. These
+fields do not claim that implementation started, passed tests, shipped, or is
+safe to execute. Source status and normal safety gates still control
+eligibility. If the projection is unavailable or conflicts with source facts,
+stop selection and report the mismatch instead of guessing.
+
 ## Product-owner cards
 
 The owner is a product owner, not a developer. Every owner-facing card must use

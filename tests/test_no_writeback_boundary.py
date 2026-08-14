@@ -339,6 +339,9 @@ class NoWriteBackBoundaryTests(unittest.TestCase):
         )
         self.assertEqual(
             set(server.LOCAL_POST_ROUTES), {"/api/local-state/command"})
+        self.assertEqual(
+            set(server.OWNER_CONTROL_POST_ROUTES),
+            {"/api/owner-control/command"})
 
         for path, body in route_bodies.items():
             with self.subTest(path=path):
@@ -580,7 +583,8 @@ process.stdout.write(JSON.stringify({
         self.assertNotIn("request(", copy_block)
         post_targets = re.findall(
             r'request\("([^\"]+)"\s*,\s*\{\s*method:\s*"POST"', script)
-        self.assertEqual(post_targets, ["/api/local-state/command"])
+        self.assertEqual(post_targets, [
+            "/api/local-state/command", "/api/owner-control/command"])
 
     def test_projected_link_resolver_rejects_local_and_credentialed_targets(self):
         def web(target):
@@ -648,7 +652,7 @@ process.stdout.write(JSON.stringify({
         ]
         native_menu_ids = set(re.findall(r'"([a-z][a-z0-9.-]+)"', router))
         self.assertEqual(native_menu_ids, {
-            "view.today", "view.changes", "view.all-work", "view.shipped-log",
+            "view.today", "view.priorities", "view.operations", "view.changes", "view.all-work", "view.shipped-log",
             "view.watched", "view.filter", "view.commands", "view.reload",
             "pane.toggle-sidebar", "pane.toggle-inspector", "file.open-source",
             "item.open", "item.acknowledge", "item.snooze", "item.watch",

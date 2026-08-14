@@ -210,6 +210,12 @@ def build_parser():
     sub.add_parser("validate", help="validate config, board, cursor, provenance, and generated counts")
     sub.add_parser("reconcile", help="atomically fold all unprocessed ledger events into the board")
     sub.add_parser("collect", help="write a read-only local/GitHub observation report")
+    sub.add_parser(
+        "owner-control",
+        help="print the effective owner priority order and product directions")
+    sub.add_parser(
+        "operations",
+        help="print observed commands, schedules, and latest run outcomes")
     render = sub.add_parser("render-packs", help="generate configured agent instruction packs")
     render.add_argument("--runtime", action="append", choices=("codex", "generic", "claude-code"),
                         help="runtime to render; repeat as needed")
@@ -361,6 +367,15 @@ def main(argv=None):
                 return 3
             _print_json(result)
             return 1 if result["status"] == "degraded" else 0
+        if args.command in ("owner-control", "operations"):
+            from app.server import Runtime, build_board_view
+            board_view = build_board_view(Runtime(home))
+            result = board_view[
+                "ownerControl" if args.command == "owner-control" else "operations"]
+            _print_json(result)
+            if args.command == "owner-control" and result.get("available") is not True:
+                return 1
+            return 0
         if args.command == "render-packs":
             from packs import render_packs
             result = render_packs(
