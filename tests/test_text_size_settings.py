@@ -52,14 +52,15 @@ class TextSizeSettingsTests(unittest.TestCase):
 
     def test_native_enum_is_the_only_text_size_source_and_applies_on_every_page_load(self):
         source = RUST.read_text(encoding="utf-8")
-        self.assertIn("const CONFIG_VERSION: u32 = 2;", source)
+        self.assertIn("const CONFIG_VERSION: u32 = 3;", source)
         self.assertIn("struct StoredConfigV1", source)
+        self.assertIn("struct StoredConfigV2", source)
         self.assertIn("text_size: TextSize", source)
         self.assertIn("Self::Comfortable", source)
         self.assertIn("webview.set_zoom(text_size.scale())", source)
         self.assertIn('.on_page_load(|webview, payload|', source)
         self.assertIn('for label in ["main", "board", "settings-panel"]', source)
-        self.assertIn("apply_stored_text_size(app, false)?", source)
+        self.assertIn("apply_stored_preferences(app, false)?", source)
         self.assertNotIn("board_zoom", source)
         self.assertNotRegex(source, r"clamp\(0\.75|requested:\s*f64")
 

@@ -3,7 +3,8 @@ const elements = Object.fromEntries([
   "host-pill", "workspace-list", "active-workspace", "connection", "version",
   "error-banner", "error-message", "success-banner", "restart", "stop", "backup",
   "reveal-workspace", "pref-notifications", "pref-login", "pref-restore",
-  "preferences-panel", "pref-text-size", "text-size-status",
+  "preferences-panel", "pref-appearance", "appearance-status",
+  "pref-text-size", "text-size-status",
   "onboarding-panel", "recovery-panel", "recovery-message", "workspaces-panel",
   "settings-content", "settings-back",
   "diagnostics-dialog", "diagnostics-output",
@@ -229,6 +230,7 @@ function renderPreferences() {
   elements["pref-notifications"].checked = snapshot.preferences.notifications;
   elements["pref-login"].checked = snapshot.preferences.launchAtLogin;
   elements["pref-restore"].checked = snapshot.preferences.restoreBoardWindow;
+  elements["pref-appearance"].value = snapshot.preferences.appearance;
   elements["pref-text-size"].value = snapshot.preferences.textSize;
 }
 
@@ -289,6 +291,7 @@ async function savePreferences() {
       notifications: elements["pref-notifications"].checked,
       launchAtLogin: elements["pref-login"].checked,
       restoreBoardWindow: elements["pref-restore"].checked,
+      appearance: elements["pref-appearance"].value,
       textSize: elements["pref-text-size"].value,
     },
   }), "Preferences saved.");
@@ -306,6 +309,7 @@ async function saveTextSize() {
         notifications: elements["pref-notifications"].checked,
         launchAtLogin: elements["pref-login"].checked,
         restoreBoardWindow: elements["pref-restore"].checked,
+        appearance: elements["pref-appearance"].value,
         textSize: requested,
       },
     });
@@ -314,6 +318,34 @@ async function saveTextSize() {
   } catch (error) {
     snapshot.preferences.textSize = prior;
     elements["pref-text-size"].value = prior;
+    showError(error);
+  } finally {
+    setBusy(false);
+    renderHost(snapshot?.host);
+  }
+}
+
+async function saveAppearance() {
+  if (busy) return;
+  const prior = snapshot.preferences.appearance;
+  const requested = elements["pref-appearance"].value;
+  setBusy(true);
+  elements["error-banner"].hidden = true;
+  try {
+    const preferences = await invoke("update_preferences", {
+      preferences: {
+        notifications: elements["pref-notifications"].checked,
+        launchAtLogin: elements["pref-login"].checked,
+        restoreBoardWindow: elements["pref-restore"].checked,
+        appearance: requested,
+        textSize: elements["pref-text-size"].value,
+      },
+    });
+    snapshot.preferences = preferences;
+    await refresh();
+  } catch (error) {
+    snapshot.preferences.appearance = prior;
+    elements["pref-appearance"].value = prior;
     showError(error);
   } finally {
     setBusy(false);
@@ -393,6 +425,18 @@ document.getElementById("reveal-backups").addEventListener("click", () => action
 document.getElementById("reveal-logs").addEventListener("click", () => action(() => invoke("reveal_logs")));
 ["pref-notifications", "pref-login", "pref-restore"].forEach((id) => elements[id].addEventListener("change", savePreferences));
 elements["pref-text-size"].addEventListener("change", saveTextSize);
+elements["pref-appearance"].addEventListener("change", saveAppearance);
+
+window.addEventListener("hfledger:appearance-changed", (event) => {
+  const detail = event.detail || {};
+  if (detail.value) {
+    elements["pref-appearance"].value = detail.value;
+    if (snapshot?.preferences) snapshot.preferences.appearance = detail.value;
+  }
+  if (detail.announce) {
+    elements["appearance-status"].textContent = `${detail.label} appearance applied.`;
+  }
+});
 
 window.addEventListener("hfledger:text-size-changed", (event) => {
   const detail = event.detail || {};

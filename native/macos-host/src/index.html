@@ -39,7 +39,7 @@
               <span aria-hidden="true">⌘</span><b>General</b><small>Mac behavior and engine</small>
             </button>
             <button class="settings-nav-item" type="button" data-settings-target="preferences-panel">
-              <span aria-hidden="true">Aa</span><b>Appearance</b><small>Text size and readability</small>
+              <span aria-hidden="true">Aa</span><b>Appearance</b><small>Theme and text size</small>
             </button>
             <button class="settings-nav-item" type="button" data-settings-target="workspaces-panel">
               <span aria-hidden="true">◇</span><b>Workspaces</b><small>Local projects and folders</small>
@@ -127,9 +127,19 @@
 
           <section id="preferences-panel" class="settings-section preferences-panel" aria-labelledby="prefs-title" tabindex="-1">
             <div class="section-heading">
-              <div><p class="eyebrow">Appearance</p><h2 id="prefs-title">Text &amp; readability</h2></div>
+              <div><p class="eyebrow">Appearance</p><h2 id="prefs-title">Theme &amp; readability</h2></div>
             </div>
             <div class="settings-card appearance-card">
+              <div class="appearance-setting">
+                <label for="pref-appearance">
+                  <b>Appearance</b>
+                  <small id="appearance-description">Uses one restrained palette throughout HFLedger</small>
+                </label>
+                <select id="pref-appearance" aria-describedby="appearance-description appearance-status">
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+              </div>
               <div class="text-size-setting">
                 <label for="pref-text-size">
                   <b>Text size</b>
@@ -149,6 +159,7 @@
                 <p class="preview-secondary">Secondary detail stays readable without competing with the decision.</p>
                 <p class="preview-provenance"><time datetime="2026-07-19T18:42:00Z">Observed 6:42 PM</time> · Verified provenance</p>
               </div>
+              <p id="appearance-status" class="visually-hidden" role="status" aria-live="polite"></p>
               <p id="text-size-status" class="visually-hidden" role="status" aria-live="polite"></p>
             </div>
           </section>

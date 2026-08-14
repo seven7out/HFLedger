@@ -106,8 +106,10 @@ The first path is [`docs/quickstart.md`](docs/quickstart.md): file a real decisi
 The in-repository Mac host turns the same engine and canonical board into a
 native desktop app. It adds explicit workspace management, a self-contained
 runtime, process recovery, validated backups, notifications, a menu-bar item,
-Launch at Login, and DMG/release tooling while keeping all ledger traffic on
-loopback. See [`native/macos-host/README.md`](native/macos-host/README.md).
+Launch at Login, explicit restrained Light and Dark appearances, and DMG/release
+tooling while keeping all ledger traffic on loopback. The appearance choice is
+app-private and applies to Today, the Decision Deck, Settings, onboarding, and
+recovery together. See [`native/macos-host/README.md`](native/macos-host/README.md).
 
 Public Developer ID signing and notarization are deliberately separate from
 ordinary local builds. The Android companion remains a later phase; the Mac app

@@ -23,7 +23,8 @@ workspace directly in its native Today window.
   and Copy Context;
 - bounded local Command-K search over already-projected metadata;
 - an in-window Settings panel with General, Appearance, Workspaces, and
-  Data & Diagnostics sections, plus persistent 100–200% text scaling;
+  Data & Diagnostics sections, plus persistent Light or Dark appearance and
+  100–200% text scaling;
 - installed-app `hfledger://item/<workspace-id>/<item-id>` navigation through a
   strict Rust parser and registered-workspace allowlist;
 - private seen, snooze, acknowledge, watch, navigation, pane, and disclosure
@@ -94,7 +95,8 @@ App settings and managed data live under:
 The app registers only folders the user creates or explicitly chooses. It does
 not silently open conventional project or ledger locations.
 Settings are closed-schema, atomically replaced, and mode `0600`; app-owned
-directories are mode `0700`.
+directories are mode `0700`. Appearance is an explicit app-private choice, not
+an operating-system inference or workspace field.
 
 The included Ovenlight workspace is fictional, is registered only after the
 user explicitly chooses it, and persists across app upgrades once registered.

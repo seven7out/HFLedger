@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[2]
 STATIC = ROOT / "app" / "static"
+NATIVE_STATIC = ROOT / "native" / "macos-host" / "src"
 sys.path.insert(0, str(ROOT))
 
 from core.link_safety import resolve_projected_link
@@ -329,6 +330,36 @@ class Handler(SimpleHTTPRequestHandler):
                        "readOnly": True, "localState": {"mode": "session", "available": True, "schemaVersion": 1, "reason": None}},
                 "orientation": {"version": 1}, "orientationV2": projected(context),
             })
+        if parsed.path == "/api/cards":
+            context = self._context()
+            return self._json(200, {
+                "activeContext": context,
+                "contexts": [{"id": context, "label": "Fictional decisions"}],
+                "ui": {"title": "HFLedger", "accent": "#6956e8", "readOnly": False},
+                "cards": [{
+                    "id": "item-000000000000000000000001",
+                    "srcHash": "a" * 64,
+                    "cardKind": "idea_pick",
+                    "type": "decision",
+                    "priority": "P1",
+                    "title": "Choose the fictional release window",
+                    "idea": "Offer a quieter way for customers to prepare their weekly order.",
+                    "question": "Which prepared direction should the team build first?",
+                    "options": [{
+                        "id": "guided-list",
+                        "label": "Guided list",
+                        "description": "Walk customers through a short list of common choices.",
+                    }, {
+                        "id": "saved-basket",
+                        "label": "Saved basket",
+                        "description": "Let returning customers start from their previous order.",
+                    }],
+                    "recommendedOption": "guided-list",
+                    "recommendationReason": "It helps first-time customers without requiring saved history.",
+                    "riskIfWrong": "Customers may still abandon an order if the choices feel too broad.",
+                    "footnoteLinks": [],
+                }],
+            })
         if parsed.path == "/api/local-state":
             context = self._context()
             local = LOCAL.setdefault(context, fresh_local(context))
@@ -373,35 +404,29 @@ class Handler(SimpleHTTPRequestHandler):
                 "total": len(results),
                 "truncated": len(results) > 50,
             })
-        if parsed.path in {"/", "/index.html"}:
+        if parsed.path == "/settings-fixture":
+            target = NATIVE_STATIC / "index.html"
+        elif parsed.path == "/settings-styles.css":
+            target = NATIVE_STATIC / "styles.css"
+        elif parsed.path in {"/", "/index.html"}:
             target = STATIC / "index.html"
         elif parsed.path == "/deck":
             target = STATIC / "deck.html"
         else:
             target = STATIC / parsed.path.lstrip("/")
-        if not target.is_file() or STATIC not in target.resolve().parents:
+        allowed_roots = (STATIC.resolve(), NATIVE_STATIC.resolve())
+        if not target.is_file() or not any(root in target.resolve().parents for root in allowed_roots):
             self.send_error(404)
             return
         body = target.read_bytes()
+        if target == NATIVE_STATIC / "index.html":
+            body = body.replace(b'href="styles.css"', b'href="/settings-styles.css"')
+            body = body.replace(b'<script src="main.js" defer></script>', b'')
         appearance = parse_qs(parsed.query).get("appearance")
-        if target.name == "index.html" and appearance == ["light"]:
-            light_fixture = b"""<style id="fictional-light-appearance">
-              .board-page { color-scheme: light; --window:#f5f5f7; --content:#fbfbfc;
-                --sidebar:rgba(237,237,240,.94); --toolbar:rgba(250,250,251,.92);
-                --ink:#202124; --muted:#65666c; --subtle:#85868d;
-                --line:rgba(31,32,36,.13); --strong-line:rgba(31,32,36,.22);
-                --warning:#9a5a00; --danger:#a33832; --success:#23734f; }
-            </style></head>"""
-            body = body.replace(b"</head>", light_fixture)
-        elif target.name == "index.html" and appearance == ["dark"]:
-            dark_fixture = b"""<style id="fictional-dark-appearance">
-              .board-page { color-scheme: dark; --window:#1d1d1f; --content:#232326;
-                --sidebar:rgba(40,40,43,.96); --toolbar:rgba(43,43,46,.94);
-                --ink:#f2f2f4; --muted:#b2b2b8; --subtle:#8c8c93;
-                --line:rgba(255,255,255,.10); --strong-line:rgba(255,255,255,.20);
-                --warning:#f0a549; --danger:#ff7770; --success:#6bd2a1; }
-            </style></head>"""
-            body = body.replace(b"</head>", dark_fixture)
+        if target.suffix == ".html" and appearance == ["light"]:
+            body = body.replace(b'<html lang="en">', b'<html lang="en" data-appearance="light">')
+        elif target.suffix == ".html" and appearance == ["dark"]:
+            body = body.replace(b'<html lang="en">', b'<html lang="en" data-appearance="dark">')
         content_type = {
             ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
             ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".webmanifest": "application/manifest+json",

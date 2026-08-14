@@ -587,7 +587,7 @@ function badgeValue(value) {
 function renderShell() {
   const data = state.data;
   const orientation = state.orientation;
-  document.documentElement.style.setProperty("--accent", safeAccent(data?.ui?.accent));
+  document.documentElement.style.setProperty("--workspace-accent", safeAccent(data?.ui?.accent));
   const brand = safeText(data?.ui?.title, 80) || "HFLedger";
   const workspace = safeText(data?.project, 120) || "Ledger";
   document.title = `${brand} — ${workspace}`;
