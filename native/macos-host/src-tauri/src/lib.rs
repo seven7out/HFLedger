@@ -41,6 +41,8 @@ const WATCHED_WORKSPACE_FILES: [&str; 2] = ["board.json", "ledger.jsonl"];
 const WATCHED_REPORT_FILES: [&str; 1] = ["collector-latest.json"];
 const WATCH_DEBOUNCE: Duration = Duration::from_millis(350);
 const NATIVE_CHROME_POLL: Duration = Duration::from_secs(3);
+const PRODUCTION_MONITOR_INTERVAL_SECONDS: u32 = 60;
+const PRODUCTION_ENDPOINT_MAX_BYTES: usize = 2048;
 const DEEP_LINK_PREFIX: &str = "hfledger://item/";
 const DEEP_LINK_MAX_BYTES: usize = 256;
 const WORKSPACE_ID_MAX_BYTES: usize = 160;
@@ -67,6 +69,7 @@ struct AppPaths {
     logs: PathBuf,
     backups: PathBuf,
     ui_state: PathBuf,
+    monitors: PathBuf,
 }
 
 struct HostRuntime {
@@ -82,6 +85,7 @@ struct HostRuntime {
     search_guard: Arc<Mutex<()>>,
     deep_link_sender: Mutex<Option<mpsc::SyncSender<QueuedDeepLink>>>,
     notification_baseline: Mutex<Option<usize>>,
+    production_health_baseline: Mutex<Option<ProductionHealthSignature>>,
     workspace_watcher: Mutex<Option<WorkspaceWatch>>,
     watch_generation: AtomicU64,
     native_menu: Mutex<Option<NativeMenuState>>,
@@ -102,6 +106,7 @@ impl Default for HostRuntime {
             search_guard: Arc::new(Mutex::new(())),
             deep_link_sender: Mutex::new(None),
             notification_baseline: Mutex::new(None),
+            production_health_baseline: Mutex::new(None),
             workspace_watcher: Mutex::new(None),
             watch_generation: AtomicU64::new(0),
             native_menu: Mutex::new(None),
@@ -191,11 +196,19 @@ impl NativeCommand {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProductionMonitorSettings {
+    endpoint: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Workspace {
     id: String,
     label: String,
     path: String,
     kind: WorkspaceKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    production_monitor: Option<ProductionMonitorSettings>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -447,6 +460,13 @@ struct HostStatus {
     workspace: Option<Workspace>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ProductionHealthSignature {
+    state: String,
+    monitor_state: String,
+    last_checked_at: Option<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SearchResult {
@@ -508,7 +528,7 @@ struct BackupResult {
 struct DiagnosticReport {
     app_version: String,
     engine_version: String,
-    host: HostStatus,
+    host: Value,
     app_data: String,
     log_path: String,
     backup_path: String,
@@ -631,6 +651,16 @@ fn validate_stored_config(config: &StoredConfig) -> Result<(), String> {
         if !ids.insert(workspace.id.clone()) || !locations.insert(workspace.path.clone()) {
             return Err("workspace settings contain a duplicate id or path".into());
         }
+        if let Some(monitor) = &workspace.production_monitor {
+            if !workspace
+                .id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+            {
+                return Err("production monitor workspace identity is invalid".into());
+            }
+            canonical_production_endpoint(&monitor.endpoint)?;
+        }
     }
     if let Some(selected) = &config.selected_workspace_id {
         if !ids.contains(selected) {
@@ -638,6 +668,95 @@ fn validate_stored_config(config: &StoredConfig) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn canonical_production_endpoint(value: &str) -> Result<String, String> {
+    if value.is_empty()
+        || value.len() > PRODUCTION_ENDPOINT_MAX_BYTES
+        || !value.is_ascii()
+        || value
+            .bytes()
+            .any(|byte| byte.is_ascii_control() || byte.is_ascii_whitespace())
+    {
+        return Err("Production health address must be one bounded HTTPS URL.".into());
+    }
+    let parsed = tauri::Url::parse(value)
+        .map_err(|_| "Production health address is not a valid URL.".to_string())?;
+    if parsed.scheme() != "https"
+        || parsed.host_str().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return Err(
+            "Production health address must use HTTPS without credentials, a query, or a fragment."
+                .into(),
+        );
+    }
+    Ok(parsed.to_string())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProductionMonitorFile<'a> {
+    version: u32,
+    endpoint: &'a str,
+    interval_seconds: u32,
+}
+
+fn production_monitor_path(app_paths: &AppPaths, workspace_id: &str) -> PathBuf {
+    app_paths.monitors.join(format!("{workspace_id}.json"))
+}
+
+fn sync_production_monitor_config(
+    app_paths: &AppPaths,
+    workspace: &Workspace,
+) -> Result<Option<PathBuf>, String> {
+    let target = production_monitor_path(app_paths, &workspace.id);
+    let Some(monitor) = &workspace.production_monitor else {
+        if target.exists() {
+            reject_symlink(&target)?;
+            fs::remove_file(&target).map_err(|_| {
+                "could not remove the private production monitor settings".to_string()
+            })?;
+        }
+        return Ok(None);
+    };
+    let endpoint = canonical_production_endpoint(&monitor.endpoint)?;
+    let value = ProductionMonitorFile {
+        version: 1,
+        endpoint: &endpoint,
+        interval_seconds: PRODUCTION_MONITOR_INTERVAL_SECONDS,
+    };
+    let bytes = serde_json::to_vec_pretty(&value)
+        .map_err(|_| "could not encode the private production monitor settings".to_string())?;
+    let temporary = target.with_extension("json.tmp");
+    if temporary.exists() {
+        reject_symlink(&temporary)?;
+        fs::remove_file(&temporary)
+            .map_err(|_| "could not replace stale production monitor settings".to_string())?;
+    }
+    let mut file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(&temporary)
+        .map_err(|_| "could not stage the private production monitor settings".to_string())?;
+    file.write_all(&bytes)
+        .and_then(|_| file.write_all(b"\n"))
+        .and_then(|_| file.sync_all())
+        .map_err(|_| "could not save the private production monitor settings".to_string())?;
+    private_permissions(&temporary, 0o600)?;
+    fs::rename(&temporary, &target)
+        .map_err(|_| "could not replace the private production monitor settings".to_string())?;
+    private_permissions(&target, 0o600)?;
+    File::open(&app_paths.monitors)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|_| {
+            "could not finish saving the private production monitor settings".to_string()
+        })?;
+    Ok(Some(target))
 }
 
 fn is_deep_link_id_byte(byte: u8) -> bool {
@@ -872,7 +991,8 @@ fn initialize_app(app: &tauri::App, state: &HostRuntime) -> Result<StoredConfig,
     let backups = app_data.join("Backups");
     let managed = app_data.join("Workspaces");
     let ui_state = app_data.join("UIState");
-    for directory in [&logs, &backups, &managed, &ui_state] {
+    let monitors = app_data.join("ProductionMonitors");
+    for directory in [&logs, &backups, &managed, &ui_state, &monitors] {
         create_private_dir(directory)?;
     }
     let engine = resource_root.join("engine/hfledger-engine/hfledger-engine");
@@ -889,6 +1009,7 @@ fn initialize_app(app: &tauri::App, state: &HostRuntime) -> Result<StoredConfig,
         logs,
         backups,
         ui_state,
+        monitors,
         app_data: app_data.clone(),
     };
     *state
@@ -1028,8 +1149,13 @@ fn reserve_port() -> Result<u16, String> {
     ))
 }
 
-fn engine_serve_arguments(workspace: &Workspace, ui_state: &Path, port: u16) -> Vec<OsString> {
-    vec![
+fn engine_serve_arguments(
+    workspace: &Workspace,
+    ui_state: &Path,
+    production_monitor_config: Option<&Path>,
+    port: u16,
+) -> Vec<OsString> {
+    let mut arguments = vec![
         OsString::from("--home"),
         OsString::from(&workspace.path),
         OsString::from("serve"),
@@ -1039,7 +1165,14 @@ fn engine_serve_arguments(workspace: &Workspace, ui_state: &Path, port: u16) -> 
         OsString::from(&workspace.id),
         OsString::from("--port"),
         OsString::from(port.to_string()),
-    ]
+    ];
+    if let Some(path) = production_monitor_config {
+        arguments.extend([
+            OsString::from("--production-monitor-config"),
+            path.as_os_str().to_os_string(),
+        ]);
+    }
+    arguments
 }
 
 fn rotate_log(path: &Path) -> Result<(), String> {
@@ -1312,6 +1445,9 @@ fn stop_host(state: &HostRuntime) {
         *active = None;
     }
     if let Ok(mut baseline) = state.notification_baseline.lock() {
+        *baseline = None;
+    }
+    if let Ok(mut baseline) = state.production_health_baseline.lock() {
         *baseline = None;
     }
     set_observer_error(state, None);
@@ -1596,11 +1732,17 @@ fn start_workspace_inner(
     }
     let port = reserve_port()?;
     let app_paths = paths(state)?;
+    let production_monitor_config = sync_production_monitor_config(&app_paths, &workspace)?;
     let stdout = log_file(&app_paths.logs.join("engine.log"))?;
     let stderr = stdout
         .try_clone()
         .map_err(|error| format!("could not clone the engine log handle: {error}"))?;
-    let arguments = engine_serve_arguments(&workspace, &app_paths.ui_state, port);
+    let arguments = engine_serve_arguments(
+        &workspace,
+        &app_paths.ui_state,
+        production_monitor_config.as_deref(),
+        port,
+    );
     let child = Command::new(&app_paths.engine)
         .args(&arguments)
         .env("PYTHONDONTWRITEBYTECODE", "1")
@@ -2273,6 +2415,7 @@ fn open_fictional_demo(
             label,
             path: canonical.display().to_string(),
             kind: WorkspaceKind::Demo,
+            production_monitor: None,
         };
         config.workspaces.push(workspace.clone());
         workspace
@@ -2316,6 +2459,7 @@ fn add_existing_workspace(
         label,
         path: canonical_text,
         kind: WorkspaceKind::Existing,
+        production_monitor: None,
     };
     if config.workspaces.iter().any(|item| item.id == workspace.id) {
         return Err("workspace id collision; choose a different canonical location".into());
@@ -2369,6 +2513,7 @@ fn create_workspace(project: String, state: State<'_, HostRuntime>) -> Result<Wo
         label,
         path: canonical.display().to_string(),
         kind: WorkspaceKind::Managed,
+        production_monitor: None,
     };
     let mut config = read_config(&state)?;
     config.workspaces.push(workspace.clone());
@@ -2418,7 +2563,15 @@ fn remove_workspace(
     if config.selected_workspace_id.as_deref() == Some(&workspace_id) {
         config.selected_workspace_id = config.workspaces.first().map(|item| item.id.clone());
     }
-    write_config(&state, &config)
+    let app_paths = paths(&state)?;
+    let mut disabled = workspace.clone();
+    disabled.production_monitor = None;
+    sync_production_monitor_config(&app_paths, &disabled)?;
+    if let Err(error) = write_config(&state, &config) {
+        let _ = sync_production_monitor_config(&app_paths, &workspace);
+        return Err(error);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -2516,6 +2669,76 @@ fn create_backup(app: AppHandle, state: State<'_, HostRuntime>) -> Result<Backup
 }
 
 #[tauri::command]
+fn update_production_monitor(
+    app: AppHandle,
+    workspace_id: String,
+    endpoint: Option<String>,
+    state: State<'_, HostRuntime>,
+) -> Result<Workspace, String> {
+    let _transition = state
+        .transition_guard
+        .lock()
+        .map_err(|_| "workspace transition lock was poisoned")?;
+    let mut config = read_config(&state)?;
+    let index = config
+        .workspaces
+        .iter()
+        .position(|workspace| workspace.id == workspace_id)
+        .ok_or_else(|| "workspace is not registered".to_string())?;
+    if config.workspaces[index].kind == WorkspaceKind::Demo && endpoint.is_some() {
+        return Err("Production monitoring is unavailable for the fictional demo.".into());
+    }
+    let production_monitor = match endpoint {
+        Some(value) => {
+            let endpoint = canonical_production_endpoint(value.trim())?;
+            Some(ProductionMonitorSettings { endpoint })
+        }
+        None => None,
+    };
+    let prior = config.clone();
+    config.workspaces[index].production_monitor = production_monitor;
+    let updated = config.workspaces[index].clone();
+    write_config(&state, &config)?;
+
+    let app_paths = paths(&state)?;
+    if let Err(error) = sync_production_monitor_config(&app_paths, &updated) {
+        let _ = write_config(&state, &prior);
+        if let Some(previous) = prior
+            .workspaces
+            .iter()
+            .find(|workspace| workspace.id == workspace_id)
+        {
+            let _ = sync_production_monitor_config(&app_paths, previous);
+        }
+        return Err(error);
+    }
+
+    let is_active = state
+        .active_workspace
+        .lock()
+        .map_err(|_| "active workspace lock was poisoned")?
+        .as_ref()
+        .is_some_and(|workspace| workspace.id == workspace_id);
+    if is_active {
+        if let Err(error) = start_workspace_inner(&app, &state, &workspace_id) {
+            let _ = write_config(&state, &prior);
+            if let Some(previous) = prior
+                .workspaces
+                .iter()
+                .find(|workspace| workspace.id == workspace_id)
+            {
+                let _ = sync_production_monitor_config(&app_paths, previous);
+            }
+            let _ = start_workspace_inner(&app, &state, &workspace_id);
+            return Err(format!(
+                "Production monitoring could not be applied. Previous settings were restored. {error}"
+            ));
+        }
+    }
+    Ok(updated)
+}
+
+#[tauri::command]
 fn update_preferences(
     app: AppHandle,
     preferences: Preferences,
@@ -2584,13 +2807,22 @@ fn reveal_backups(state: State<'_, HostRuntime>) -> Result<(), String> {
     open_path(&paths(&state)?.backups)
 }
 
+fn diagnostic_host_value(status: HostStatus) -> Result<Value, String> {
+    let mut value = serde_json::to_value(status)
+        .map_err(|_| "could not prepare private diagnostics".to_string())?;
+    if let Some(workspace) = value.get_mut("workspace").and_then(Value::as_object_mut) {
+        workspace.remove("productionMonitor");
+    }
+    Ok(value)
+}
+
 #[tauri::command]
 fn diagnostics(state: State<'_, HostRuntime>) -> Result<DiagnosticReport, String> {
     let app_paths = paths(&state)?;
     Ok(DiagnosticReport {
         app_version: env!("CARGO_PKG_VERSION").into(),
         engine_version: engine_version(&state),
-        host: current_host_status(&state),
+        host: diagnostic_host_value(current_host_status(&state))?,
         app_data: app_paths.app_data.display().to_string(),
         log_path: app_paths.logs.join("engine.log").display().to_string(),
         backup_path: app_paths.backups.display().to_string(),
@@ -3109,6 +3341,38 @@ fn coverage_is_invalid(value: &Value) -> bool {
         == Some("invalid")
 }
 
+fn production_health_signature(value: &Value) -> Option<ProductionHealthSignature> {
+    let health = value.pointer("/ownerToday/productionHealth")?;
+    let state = health.get("state")?.as_str()?;
+    if !matches!(state, "healthy" | "degraded") {
+        return None;
+    }
+    let monitor_state = health.get("monitorState")?.as_str()?;
+    if !matches!(
+        monitor_state,
+        "starting" | "active" | "retrying" | "degraded" | "stale"
+    ) {
+        return None;
+    }
+    let last_checked_at = match health.get("lastCheckedAt") {
+        Some(Value::String(value))
+            if !value.is_empty()
+                && value.len() <= 64
+                && value.is_ascii()
+                && !value.bytes().any(|byte| byte.is_ascii_control()) =>
+        {
+            Some(value.clone())
+        }
+        Some(Value::Null) | None => None,
+        _ => return None,
+    };
+    Some(ProductionHealthSignature {
+        state: state.into(),
+        monitor_state: monitor_state.into(),
+        last_checked_at,
+    })
+}
+
 fn refresh_native_chrome(app: &AppHandle) {
     let state = app.state::<HostRuntime>();
     let Some(port) = state.port.lock().ok().and_then(|value| *value) else {
@@ -3117,6 +3381,36 @@ fn refresh_native_chrome(app: &AppHandle) {
     let Some(board) = fetch_board(port) else {
         return;
     };
+
+    let current_health = production_health_signature(&board);
+    let previous_health = {
+        let Ok(mut baseline) = state.production_health_baseline.lock() else {
+            return;
+        };
+        let previous = baseline.clone();
+        *baseline = current_health.clone();
+        previous
+    };
+    if previous_health.is_some() && current_health != previous_health {
+        let _ = dispatch_native_command(app, NativeCommand::ViewReload);
+        if previous_health
+            .as_ref()
+            .is_some_and(|value| value.state == "healthy")
+            && current_health
+                .as_ref()
+                .is_some_and(|value| value.state == "degraded")
+            && read_config(&state)
+                .map(|config| config.preferences.notifications)
+                .unwrap_or(false)
+        {
+            let _ = app
+                .notification()
+                .builder()
+                .title("Production needs attention")
+                .body("Production health changed to degraded. Open Today for the product impact.")
+                .show();
+        }
+    }
 
     if let Some(count) = attention_badge_count(&board) {
         if let Some(window) = app.get_webview_window("main") {
@@ -3389,6 +3683,7 @@ pub fn run() {
             restart_workspace,
             stop_workspace,
             create_backup,
+            update_production_monitor,
             update_preferences,
             reveal_workspace,
             reveal_logs,
@@ -3414,22 +3709,24 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        active_context_id, allowlisted_deep_link, attention_badge_count, current_host_status,
-        decision_count, decode_stored_config, deep_link_board_url, deep_link_window_plan,
-        engine_serve_arguments, event_is_relevant, guarded_item_menu_accelerator,
-        is_board_settings_navigation, menu_eligibility, merge_watch_signal,
-        native_command_for_menu_id, parse_deep_link, primary_surface_plan, project_slug,
-        recent_duplicate, text_size_after, validate_search_response, validate_stored_config,
-        watch_snapshot_is_safe, workspace_id, workspace_watch_plan, write_config_unlocked,
-        AppPaths, AppSnapshot, DeepLinkIntent, DeepLinkRejection, DeepLinkWindowPlan, HostRuntime,
-        HostStatus, NativeCommand, Preferences, PrimarySurfacePlan, SearchResponse, StoredConfig,
-        TextSize, TextSizeAction, Workspace, WorkspaceKind, CONFIG_VERSION,
-        DEEP_LINK_REJECTION_MESSAGE,
+        active_context_id, allowlisted_deep_link, attention_badge_count,
+        canonical_production_endpoint, current_host_status, decision_count, decode_stored_config,
+        deep_link_board_url, deep_link_window_plan, diagnostic_host_value, engine_serve_arguments,
+        event_is_relevant, guarded_item_menu_accelerator, is_board_settings_navigation,
+        menu_eligibility, merge_watch_signal, native_command_for_menu_id, parse_deep_link,
+        primary_surface_plan, production_health_signature, project_slug, recent_duplicate,
+        sync_production_monitor_config, text_size_after, validate_search_response,
+        validate_stored_config, watch_snapshot_is_safe, workspace_id, workspace_watch_plan,
+        write_config_unlocked, AppPaths, AppSnapshot, DeepLinkIntent, DeepLinkRejection,
+        DeepLinkWindowPlan, HostRuntime, HostStatus, NativeCommand, Preferences,
+        PrimarySurfacePlan, ProductionMonitorSettings, SearchResponse, StoredConfig, TextSize,
+        TextSizeAction, Workspace, WorkspaceKind, CONFIG_VERSION, DEEP_LINK_REJECTION_MESSAGE,
     };
     use notify::{Event, EventKind};
     use serde_json::json;
     use std::collections::HashSet;
     use std::fs;
+    use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
     use std::sync::{mpsc, Arc};
     use std::thread;
@@ -3455,6 +3752,7 @@ mod tests {
             label: label.into(),
             path: canonical.display().to_string(),
             kind: WorkspaceKind::Existing,
+            production_monitor: None,
         };
         (canonical, workspace)
     }
@@ -3469,6 +3767,7 @@ mod tests {
             label: "Private Client Display Name".into(),
             path: "/tmp/private-client-display-name".into(),
             kind: WorkspaceKind::Existing,
+            production_monitor: None,
         };
         let item_id = "item-0123456789abcdef01234567".to_string();
         (
@@ -3756,11 +4055,13 @@ mod tests {
             label: "Fictional".into(),
             path: "/tmp/fictional-ledger".into(),
             kind: WorkspaceKind::Existing,
+            production_monitor: None,
         };
-        let arguments = engine_serve_arguments(&workspace, Path::new("/tmp/app/UIState"), 17173)
-            .into_iter()
-            .map(|value| value.to_string_lossy().into_owned())
-            .collect::<Vec<_>>();
+        let arguments =
+            engine_serve_arguments(&workspace, Path::new("/tmp/app/UIState"), None, 17173)
+                .into_iter()
+                .map(|value| value.to_string_lossy().into_owned())
+                .collect::<Vec<_>>();
         assert_eq!(
             arguments,
             vec![
@@ -3775,6 +4076,122 @@ mod tests {
                 "17173",
             ]
         );
+    }
+
+    #[test]
+    fn production_monitor_configuration_is_private_bounded_and_native_only() {
+        for rejected in [
+            "http://status.example.test/health",
+            "https://person:secret@status.example.test/health",
+            "https://status.example.test/health?token=secret",
+            "https://status.example.test/health#details",
+        ] {
+            assert!(canonical_production_endpoint(rejected).is_err());
+        }
+        let endpoint = canonical_production_endpoint("https://status.example.test/health")
+            .expect("fictional production endpoint");
+        let (root, mut workspace) = disposable_workspace("production-monitor");
+        workspace.production_monitor = Some(ProductionMonitorSettings { endpoint });
+        let monitors = root.join("private-monitors");
+        fs::create_dir(&monitors).expect("create monitor directory");
+        let paths = AppPaths {
+            app_data: root.clone(),
+            config: root.join("app.json"),
+            engine: root.join("engine"),
+            logs: root.join("logs"),
+            backups: root.join("backups"),
+            ui_state: root.join("ui-state"),
+            monitors: monitors.clone(),
+        };
+
+        let config_path = sync_production_monitor_config(&paths, &workspace)
+            .expect("write private monitor config")
+            .expect("enabled monitor path");
+        assert_eq!(
+            fs::metadata(&config_path)
+                .expect("monitor metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+        let value: serde_json::Value =
+            serde_json::from_slice(&fs::read(&config_path).expect("read private monitor config"))
+                .expect("decode private monitor config");
+        assert_eq!(value["version"], 1);
+        assert_eq!(value["intervalSeconds"], 60);
+        assert_eq!(value["endpoint"], "https://status.example.test/health");
+
+        let arguments =
+            engine_serve_arguments(&workspace, &paths.ui_state, Some(&config_path), 17173)
+                .into_iter()
+                .map(|value| value.to_string_lossy().into_owned())
+                .collect::<Vec<_>>();
+        assert!(arguments.contains(&"--production-monitor-config".into()));
+        assert!(!arguments
+            .iter()
+            .any(|value| value.contains("status.example.test")));
+
+        workspace.production_monitor = None;
+        assert!(sync_production_monitor_config(&paths, &workspace)
+            .expect("disable production monitor")
+            .is_none());
+        assert!(!config_path.exists());
+        remove_disposable(&root);
+    }
+
+    #[test]
+    fn production_health_refresh_signature_accepts_only_sanitized_monitor_state() {
+        let signature = production_health_signature(&json!({
+            "ownerToday": {"productionHealth": {
+                "state": "healthy",
+                "monitorState": "active",
+                "lastCheckedAt": "2026-08-13T12:00:00+00:00"
+            }}
+        }))
+        .expect("valid health signature");
+        assert_eq!(signature.state, "healthy");
+        assert_eq!(signature.monitor_state, "active");
+        assert!(production_health_signature(&json!({
+            "ownerToday": {"productionHealth": {
+                "state": "healthy",
+                "monitorState": "active",
+                "lastCheckedAt": {"private": "detail"}
+            }}
+        }))
+        .is_none());
+        assert!(production_health_signature(&json!({
+            "ownerToday": {"productionHealth": {"state": "healthy"}}
+        }))
+        .is_none());
+    }
+
+    #[test]
+    fn diagnostics_omit_the_private_production_endpoint() {
+        let status = HostStatus {
+            phase: "ready".into(),
+            ready: true,
+            error: None,
+            observer_error: None,
+            navigation_notice: None,
+            url: Some("http://127.0.0.1:17173/".into()),
+            port: Some(17173),
+            workspace: Some(Workspace {
+                id: "workspace-fictional".into(),
+                label: "Fictional".into(),
+                path: "/tmp/fictional-ledger".into(),
+                kind: WorkspaceKind::Existing,
+                production_monitor: Some(ProductionMonitorSettings {
+                    endpoint: "https://status.example.test/health".into(),
+                }),
+            }),
+        };
+        let encoded =
+            serde_json::to_string(&diagnostic_host_value(status).expect("sanitized diagnostics"))
+                .expect("encode diagnostics");
+        assert!(!encoded.contains("productionMonitor"));
+        assert!(!encoded.contains("status.example.test"));
+        assert!(encoded.contains("workspace-fictional"));
     }
 
     #[test]
@@ -3986,6 +4403,7 @@ mod tests {
                 label: "Fictional".into(),
                 path: "/tmp/fictional".into(),
                 kind: WorkspaceKind::Existing,
+                production_monitor: None,
             }],
             selected_workspace_id: None,
             preferences: Preferences::default(),
@@ -4002,6 +4420,7 @@ mod tests {
                 label: "Fictional ledger".into(),
                 path: "/tmp/fictional-ledger".into(),
                 kind: WorkspaceKind::Existing,
+                production_monitor: None,
             }],
             selected_workspace_id: Some("workspace-fictional".into()),
             preferences: Preferences::default(),
@@ -4243,6 +4662,7 @@ mod tests {
             logs: root.join("Logs"),
             backups: root.join("Backups"),
             ui_state: root.join("UIState"),
+            monitors: root.join("ProductionMonitors"),
         };
         let mut config = StoredConfig::default();
         config.preferences.text_size = TextSize::ExtraLarge;

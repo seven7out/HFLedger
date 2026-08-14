@@ -222,8 +222,43 @@ class ServerCase(unittest.TestCase):
         with open(os.path.join(self.home, "board.json"), "rb") as handle:
             return handle.read()
 
+    def assert_production_monitor_overlays_today_without_writing_workspace(self):
+        class Monitor:
+            def snapshot(self, now=None):
+                del now
+                return {
+                    "state": "healthy",
+                    "summary": "The live service is responding normally.",
+                    "monitorState": "active",
+                    "lastCheckedAt": "2026-08-13T12:00:00+00:00",
+                    "lastHealthyAt": "2026-08-13T12:00:00+00:00",
+                }
+
+            def close(self):
+                pass
+
+        before = self.board_bytes()
+        self.httpd.runtime.production_health_monitor = Monitor()
+
+        response, body, _connection = self.get("/api/board")
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(
+            body["ownerToday"]["productionHealth"], {
+                "state": "healthy",
+                "summary": "The live service is responding normally.",
+                "line": "Healthy — The live service is responding normally.",
+                "monitorState": "active",
+                "lastCheckedAt": "2026-08-13T12:00:00+00:00",
+                "lastHealthyAt": "2026-08-13T12:00:00+00:00",
+            })
+        self.assertEqual(self.board_bytes(), before)
+
 
 class ViewAndStaticTests(ServerCase):
+    def test_production_monitor_overlays_today_without_writing_workspace(self):
+        self.assert_production_monitor_overlays_today_without_writing_workspace()
+
     def test_board_view_has_neutral_shell_and_lanes(self):
         package = self.decision()
         response, body, _connection = self.get("/api/board")
@@ -711,6 +746,7 @@ class LocalStateRouteTests(ServerCase):
             os.path.abspath(self.home), 17173, server.HOST,
             local_state_root=root,
             local_state_workspace_id="workspace-fictional",
+            production_monitor_config=None,
         )
 
     def test_durable_workspace_ids_do_not_share_local_state(self):

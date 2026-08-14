@@ -248,6 +248,15 @@ input[role="switch"]:checked::after { transform: translateX(16px); }
 .workspace-meta { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; }
 .workspace-actions { display: grid; min-width: 92px; gap: 4px; }
 .workspace-actions .text-button { font-size: 10px; }
+.production-monitor-controls { grid-column: 2 / -1; padding-top: 12px; border-top: 1px solid var(--line); }
+.production-monitor-heading, .monitor-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.monitor-toggle { width: 100%; margin: 0; }
+.monitor-toggle > span { min-width: 0; }
+.monitor-toggle b, .monitor-toggle small { display: block; }
+.monitor-toggle b { margin-bottom: 3px; font-size: 12px; }
+.monitor-toggle small { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.production-monitor-fields { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 9px; margin-top: 11px; }
+.production-monitor-privacy { margin: 7px 0 0; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .kind { padding: 2px 5px; border-radius: 5px; background: color-mix(in srgb, var(--ink) 5%, transparent); text-transform: capitalize; }
 .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .create-card { margin-top: 12px; padding: 17px; }
@@ -255,7 +264,7 @@ input[role="switch"]:checked::after { transform: translateX(16px); }
 .create-card p { margin: 4px 0 0; font-size: 11px; line-height: 1.45; }
 .create-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 9px; }
 label > span { display: block; margin-bottom: 6px; color: var(--muted); font-size: 11px; font-weight: 620; }
-input[type="text"], input[type="search"], input:not([type]) {
+input[type="text"], input[type="search"], input[type="url"], input:not([type]) {
   width: 100%;
   min-height: 36px;
   padding: 0 10px;
@@ -380,6 +389,8 @@ dialog::backdrop { background: rgba(24, 24, 30, .38); backdrop-filter: blur(5px)
   .section-heading { align-items: flex-start; flex-direction: column; }
   .workspace-card { grid-template-columns: auto minmax(0, 1fr); }
   .workspace-actions { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .production-monitor-controls { grid-column: 1 / -1; }
+  .production-monitor-fields { grid-template-columns: minmax(0, 1fr); }
   .create-controls, .text-size-setting { grid-template-columns: minmax(0, 1fr); }
   #pref-text-size { width: 100%; min-width: 0; }
   .action-list > div { align-items: flex-start; flex-direction: column; gap: 10px; }

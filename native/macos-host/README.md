@@ -11,6 +11,8 @@ workspace directly in its native Today window.
 - a pinned, frozen Python 3.9 engine with no system-Python dependency;
 - single-instance lifecycle, dynamic loopback ports, crash status, and restart;
 - private rotating logs, validated manual backups, and diagnostics;
+- per-workspace continuous HTTPS production checks whose addresses and results
+  remain in app-private data and never rewrite the workspace;
 - a searchable in-app guide to optional runtime-adapter workflow shortcuts,
   including the difference between read-only, planning, autonomous, and
   attended-build commands;
@@ -103,6 +105,11 @@ tree with mode-`0600` files. It is excluded from workspace backups and public
 artifacts. Browser-only use has process-session state instead; it does not
 provide native menus, file watching, Dock badges, window restoration, or
 durability after the server process exits.
+
+Production monitoring is optional and configured per workspace in native
+Settings. It checks one explicit HTTPS address every minute while HFLedger is
+running. Redirects are refused, response bodies are not retained, transient
+misses retry quietly, and only the sanitized health state reaches Today.
 
 ## Public release gate
 

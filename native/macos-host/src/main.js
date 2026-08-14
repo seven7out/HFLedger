@@ -68,6 +68,71 @@ function kindLabel(kind) {
   return { demo: "Fictional demo", managed: "Managed", existing: "Existing folder" }[kind] || kind;
 }
 
+function productionMonitorControls(workspace) {
+  const form = document.createElement("form");
+  form.className = "production-monitor-controls";
+
+  const heading = document.createElement("div");
+  heading.className = "production-monitor-heading";
+  const label = document.createElement("label");
+  label.className = "monitor-toggle";
+  const copy = document.createElement("span");
+  const title = document.createElement("b");
+  title.textContent = "Continuous production health";
+  const detail = document.createElement("small");
+  detail.textContent = "Checks the live service every minute while HFLedger is running.";
+  copy.append(title, detail);
+  const toggle = document.createElement("input");
+  toggle.type = "checkbox";
+  toggle.setAttribute("role", "switch");
+  toggle.checked = Boolean(workspace.productionMonitor);
+  label.append(copy, toggle);
+  heading.append(label);
+
+  const fields = document.createElement("div");
+  fields.className = "production-monitor-fields";
+  const endpointLabel = document.createElement("label");
+  const endpointTitle = document.createElement("span");
+  endpointTitle.textContent = "Production health address";
+  const endpoint = document.createElement("input");
+  endpoint.type = "url";
+  endpoint.required = true;
+  endpoint.maxLength = 2048;
+  endpoint.placeholder = "https://status.example.test/health";
+  endpoint.autocomplete = "url";
+  endpoint.spellcheck = false;
+  endpoint.value = workspace.productionMonitor?.endpoint || "";
+  endpoint.disabled = !toggle.checked;
+  endpointLabel.append(endpointTitle, endpoint);
+  const save = document.createElement("button");
+  save.className = "button secondary";
+  save.type = "submit";
+  save.textContent = "Save monitoring";
+  fields.append(endpointLabel, save);
+
+  const privacy = document.createElement("p");
+  privacy.className = "production-monitor-privacy";
+  privacy.textContent = "This address stays in private app settings and is never added to the workspace.";
+
+  toggle.addEventListener("change", () => {
+    endpoint.disabled = !toggle.checked;
+    if (toggle.checked) endpoint.focus();
+  });
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (toggle.checked && !endpoint.reportValidity()) return;
+    await action(
+      () => invoke("update_production_monitor", {
+        workspaceId: workspace.id,
+        endpoint: toggle.checked ? endpoint.value.trim() : null,
+      }),
+      toggle.checked ? "Continuous production monitoring saved." : "Production monitoring turned off.",
+    );
+  });
+  form.append(heading, fields, privacy);
+  return form;
+}
+
 function workspaceCard(workspace) {
   const card = document.createElement("article");
   const active = snapshot.host.workspace?.id === workspace.id;
@@ -128,6 +193,7 @@ function workspaceCard(workspace) {
     actions.append(remove);
   }
   card.append(icon, copy, actions);
+  if (workspace.kind !== "demo") card.append(productionMonitorControls(workspace));
   return card;
 }
 

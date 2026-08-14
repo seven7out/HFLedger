@@ -59,7 +59,8 @@ The sidebar order is fixed:
 Today starts with the owner model in this exact order:
 
 1. one plain production-health line: **Healthy**, or **Degraded** with a
-   one-sentence product reason;
+   one-sentence product reason; when continuous monitoring is enabled, a quiet
+   secondary line says when production was last checked;
 2. cards awaiting the owner, grouped as idea picks, production outcomes, risk
    judgments, agent blockers, and priority reviews; and
 3. product flow: **Ideas waiting on pick → Being specced → Being built → On the
@@ -245,9 +246,15 @@ reference lives in a separate Help dialog.
 The native host watches only already configured, allowlisted board, ledger,
 collector, and adapter report files. It rejects symlinks, debounces write
 bursts, and refreshes without a primary Refresh button, recursive discovery,
-polling, `git pull`, or collector enablement. The Today and Dock badges use the
-visible attention total; observer failure becomes a coverage alert, not a
-reassuring zero.
+`git pull`, or collector enablement. Separately, an owner may enable one
+production-health check for a workspace in native Settings. That address stays
+in private app data, requires HTTPS, follows no redirects, and never enters the
+board or ledger. The monitor checks once per minute while HFLedger is running,
+degrades after three consecutive failures, recovers after one success, and
+retains no response body. The Today and Dock badges use the visible attention
+total; observer failure becomes a coverage alert, not a reassuring zero.
+The complete monitor contract is in
+[`production-monitoring.md`](production-monitoring.md).
 
 ## Public engine and private adapters
 

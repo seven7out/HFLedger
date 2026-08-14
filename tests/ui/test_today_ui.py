@@ -120,6 +120,27 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertNotIn(".state-failing", failing_rule)
         self.assertIn(".owner-pipeline-stage.tone-alarm", style)
 
+    def test_continuous_health_is_secondary_plain_language_status(self):
+        script = JS.read_text(encoding="utf-8")
+        style = CSS.read_text(encoding="utf-8")
+        native = (ROOT / "native" / "macos-host" / "src" / "main.js").read_text(
+            encoding="utf-8")
+        settings_style = (
+            ROOT / "native" / "macos-host" / "src" / "styles.css").read_text(
+                encoding="utf-8")
+        summary = script[script.index("function renderOwnerTodaySummary()"):
+                         script.index("function renderToday()")]
+        for required in (
+                "monitorState", "lastCheckedAt", "Continuous monitoring is starting",
+                "production-health-checked"):
+            self.assertIn(required, summary + style)
+        for required in (
+                "Continuous production health", "Production health address",
+                "update_production_monitor", "private app settings"):
+            self.assertIn(required, native)
+        self.assertIn(".production-monitor-controls", settings_style)
+        self.assertNotIn("response body", summary.lower())
+
     def test_typed_deck_shows_product_evidence_recommendation_and_rollback(self):
         deck = (ROOT / "app" / "static" / "deck.js").read_text(encoding="utf-8")
         render = deck[deck.index("function renderCard()"):
