@@ -6,10 +6,11 @@ is not expected to evaluate code. Its primary check-in loop is:
 > Is production healthy, what product judgment needs me, and where is work in
 > the path from idea to production?
 
-The loopback service serves a Mac-oriented Today browser and the existing
+The loopback service serves a Mac-oriented owner workspace and the existing
 phone-sized Decision Deck from the same validated board and append-only ledger.
-There is no UI task database. Today is a read-only orientation projection; the
-Decision Deck remains the owner outcome surface.
+Today is a read-only orientation projection; the Decision Deck remains the
+owner outcome surface. A separate append-only owner-control lane powers product
+edits and priority order without rewriting observed execution facts.
 
 ## Visual contract
 
@@ -49,12 +50,14 @@ points instead of compressing evidence into unreadable columns.
 The sidebar order is fixed:
 
 1. Today
-2. Changes
-3. All Work
-4. Shipped Log
-5. Watched
-6. Projects
-7. coverage footer
+2. Priorities
+3. Operations
+4. Changes
+5. All Work
+6. Shipped Log
+7. Watched
+8. Projects
+9. coverage footer
 
 Today starts with the owner model in this exact order:
 
@@ -93,6 +96,36 @@ Changes is a journal, not a second home. A run may refer to an item already in
 All Work without duplicating it as another status row. Watched is also a local
 filter, never a primary home. Shipped Log defaults to independently verified
 shipments.
+
+## Priorities and owner task editing
+
+Priorities is the owner's durable product-direction surface. Active queue work
+appears in the order agents should consider it. The owner can drag a row, use
+the accessible Up and Down buttons, or edit:
+
+- the product-facing title;
+- the intended outcome for people;
+- one owner note; and
+- whether the task is active or parked.
+
+These edits append revisioned events to `owner-control.jsonl`. They never alter
+observed status, tests, releases, evidence, `board.json`, or `ledger.jsonl`.
+Stale concurrent edits return a conflict and reload the latest order instead of
+silently overwriting it. `ledger owner-control` exposes the same effective order
+and direction to agents. Owner priority never bypasses a safety or authority
+gate. The full boundary is in [`owner-control.md`](owner-control.md).
+
+## Operations
+
+Operations answers what commands exist, what scheduled work is enabled, when it
+should run next, and whether its latest run succeeded or failed. Product purpose
+and consequence are primary; invocation text is hidden in a secondary
+disclosure. Failed, missed, stale, invalid, and unconfigured reporting cannot
+appear healthy.
+
+The source is an optional private `reports/operations-latest.json` observation.
+The view never runs a command, installs a schedule, retries work, or grants new
+authority. `ledger operations` returns the same bounded projection for agents.
 
 ## Evidence, provenance, and two clocks
 
@@ -156,7 +189,7 @@ Today may change only app-private presentation state:
 - remember the selected destination/item, pane widths, and disclosure state.
 
 These actions never edit `board.json`, append `ledger.jsonl`, resolve an ask,
-complete or reorder work, configure a collector, merge, or deploy. An
+complete or reorder observed work, configure a collector, merge, or deploy. An
 acknowledgement or snooze stops applying when new material evidence rotates the
 item's `attentionKey`. Watched state survives upstream status changes.
 
@@ -175,7 +208,8 @@ authoritative files.
 
 Today can open one named authoritative source. For an admitted owner decision,
 that action is **Open Decision Deck**. Today does not reproduce Answer, Resolve,
-Complete, Skip, reorder, merge, or deploy controls.
+Complete, Skip, observed-board reorder, merge, or deploy controls. Owner
+priority ordering lives only in the separate Priorities surface.
 
 The Decision Deck supports prepared product choices, recommendation acceptance,
 need-more-info, authoritative snooze, stuck-alarm completion or skip, and
@@ -185,7 +219,8 @@ mutation routes remain separate from private local-state routes.
 
 Set `ui.readOnly` to `true` for observer or imported-snapshot workspaces. The
 service still returns validated orientation and local presentation state, while
-every authoritative mutation route returns `403` before invoking a writer.
+every observed-board mutation route returns `403` before invoking a writer.
+Owner direction can still be written to its independent append-only lane.
 
 ## First run, empty, and degraded behavior
 
@@ -206,6 +241,8 @@ every authoritative mutation route returns `403` before invoking a writer.
 - **Browser-only:** supports session triage state but not native menus, durable
   state across process restarts, file watching, Dock badges, or native window
   restoration.
+- **Operations unconfigured:** says commands and scheduled work have not been
+  connected; it never substitutes an empty green success state.
 
 ## Keyboard and native menus
 
@@ -282,14 +319,24 @@ GET  /api/local-state?context=<allowlisted-id>
 POST /api/local-state/command
 ```
 
+Owner product direction uses a separate closed route:
+
+```text
+POST /api/owner-control/command
+```
+
+It accepts only revisioned `set-task` and `set-priority` commands and writes
+only `owner-control.jsonl`.
+
 Commands are closed absolute set operations with an expected revision. The
 request cannot provide a filesystem path, workspace id, replacement document,
 decision outcome, completion, evidence object, collector setting, or ledger
 action. All stateful reads use `Cache-Control: no-store`.
 
-Existing authoritative routes remain documented in the protocol and Decision
+Existing observed-board routes remain documented in the protocol and Decision
 Deck implementation. They use a separate registry and are blocked together by
-`ui.readOnly`; the local-state route can modify only private presentation state.
+`ui.readOnly`; the local-state route can modify only private presentation state,
+and the owner-control route can modify only owner product direction.
 
 ## Security and deferred capabilities
 
@@ -312,7 +359,8 @@ over projected metadata and do not change those authority boundaries; see
 V1 does not ship transition-based attention notifications, a rich menu-bar
 status UI, effectiveness analytics, broader dispute analytics,
 multi-machine skew detection, search beyond that bounded local surface, cloud
-triage sync, authoritative Today write-back, notarized publication, updater
+triage sync, observed-board Today write-back, command execution, schedule
+installation, notarized publication, updater
 delivery, remote serving, collector auto-enable, or private authoritative
 cutover. The UI contains no permanent empty controls that imply these are
 available.

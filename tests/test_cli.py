@@ -125,13 +125,25 @@ class CliTests(unittest.TestCase):
             ["done", "--help"], ["skip", "--help"],
             ["event", "--help"],
             ["validate", "--help"], ["reconcile", "--help"],
-            ["collect", "--help"], ["render-packs", "--help"],
+            ["collect", "--help"], ["owner-control", "--help"],
+            ["operations", "--help"], ["render-packs", "--help"],
             ["serve", "--help"], ["search", "--help"],
         )
         for command in commands:
             result = self.run_cli(command)
             self.assertEqual(result.returncode, 0, (command, result.stderr))
             self.assertIn("usage:", result.stdout)
+
+    def test_owner_control_and_operations_are_agent_readable(self):
+        owner = self.run_cli(["owner-control"])
+        self.assertEqual(owner.returncode, 0, owner.stderr)
+        owner_view = json.loads(owner.stdout)
+        self.assertEqual(owner_view["version"], 1)
+        self.assertEqual(owner_view["revision"], 0)
+        operations = self.run_cli(["operations"])
+        self.assertEqual(operations.returncode, 0, operations.stderr)
+        operations_view = json.loads(operations.stdout)
+        self.assertEqual(operations_view["state"], "unconfigured")
 
     def test_typed_card_cli_validates_and_files_the_product_kind(self):
         dry_run = self.run_cli(self.idea_card_args() + ["--dry-run"])

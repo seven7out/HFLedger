@@ -31,9 +31,10 @@ File responsibilities are strict:
 | `config.json` | Local policy, writer registry, schema configuration | Installation administrator |
 | `board.json` | Current materialized state | Core store transaction only |
 | `ledger.jsonl` | Immutable event sequence | Registry-authorized append writer |
+| `owner-control.jsonl` | Optional append-only product direction and active priority order | Owner-control writer only |
 | `locks/` | POSIX advisory lock files | Core engine |
 | `backups/` | Timestamped pre-mutation board copies | Core store transaction |
-| `reports/` | Reserved for derived reports | Later phases or local tools |
+| `reports/` | Derived collector and operations observations | Local observation tools |
 
 The Phase 1 locking implementation uses `fcntl.flock` and is POSIX-only.
 
@@ -52,7 +53,8 @@ The Phase 1 locking implementation uses `fcntl.flock` and is POSIX-only.
 
 The optional `ui.readOnly` boolean is a reference-service enforcement setting,
 not an event-ledger authority grant. When true, the shipped HTTP service rejects
-every mutation route while continuing to serve validated projections.
+every observed-board and decision mutation route while continuing to serve
+validated projections. It does not disable the independent owner-control lane.
 
 ### 3.1 Writer registry
 
@@ -426,6 +428,23 @@ owner report -> completion event -> exact match -> target tombstone
 ```
 
 Escrow is a successful durable outcome, not an error. A later reviewed workflow may match it without deleting its history.
+
+### 9.4 Owner product direction
+
+`owner-control.jsonl` is a supplemental version-1 journal, not a replacement
+for the event ledger or materialized board. Each private, newline-terminated
+JSON event has a contiguous revision and SHA-256 predecessor link. `task-set`
+events set or clear a product title, intended outcome, owner note, or
+active/parked disposition for an exact queue id. `priority-set` events contain
+a duplicate-free ordered list of active queue ids.
+
+The projection overlays these directives while retaining source title and
+observed status. It never claims execution progress, changes safety metadata,
+or rewrites `board.json` or `ledger.jsonl`. Writers use optimistic revisions;
+a stale revision conflicts instead of overwriting a newer owner choice. Agents
+read the folded projection with `ledger owner-control` before selecting work.
+See [`owner-control.md`](owner-control.md) for the product boundary and
+Operations observation contract.
 
 ## 10. Store invariants
 

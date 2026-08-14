@@ -104,6 +104,8 @@ class PackTests(unittest.TestCase):
         self.assertIn("Translate before you file", text)
         self.assertIn("secondary `footnoteLinks`", text)
         self.assertIn("The owner is a product owner, not a developer", text)
+        self.assertIn("owner-control", text)
+        self.assertIn("activeOrder", text)
         self.assertNotIn("{{", text)
 
 

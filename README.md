@@ -7,6 +7,12 @@ and where work is flowing from idea to production. Ranked attention,
 run-grouped changes, source health, and evidence dossiers remain available
 under that owner-facing summary.
 
+The owner can also shape active work without editing code or pretending to
+control implementation status. Priorities provides a durable drag-and-drop
+order plus product titles, intended outcomes, notes, and active/parked choices.
+Operations shows available commands, scheduled tasks, and their latest success
+or failure in plain language.
+
 Most agent tools make it easy to start work inside one task. HFLedger provides
 the missing product orientation across tasks and runtimes while retaining its
 strict boundary for owner interruptions: when may an agent interrupt the
@@ -84,6 +90,7 @@ Mutable state lives in the selected data directory, never in the public engine c
 config.json       local policy, writers, UI, collectors, and pack settings
 board.json        validated human/agent coordination state
 ledger.jsonl      append-only events
+owner-control.jsonl  append-only owner product direction and priority
 locks/            process-coordination locks
 backups/          retained board snapshots
 reports/          private collector output
@@ -118,6 +125,8 @@ ledger validate
 ledger reconcile
 ledger serve
 ledger collect
+ledger owner-control
+ledger operations
 ledger render-packs
 ```
 
@@ -151,6 +160,10 @@ The standard-library HTTP service provides:
   only when the required sources were actually observed;
 - Changes, All Work, Shipped Log, Watched, Projects, and an evidence inspector
   with explicit provenance and separate item-change/source-observation clocks;
+- Priorities with durable drag, accessible move controls, owner product edits,
+  and active/parked planning state that agents can read through the CLI;
+- Operations with a product-facing command catalog, schedule cadence, next run,
+  latest outcome, and explicit failed/stale/unconfigured states;
 - a responsive board for queue, inbox, owner tasks, admitted asks, and outcomes;
 - a mobile decision deck with option selection, recommendation acceptance, snooze, need-more-info, completion, skip, and digest-bound undo where safe;
 - bounded deterministic Command-K search over projected metadata plus
@@ -160,7 +173,9 @@ The standard-library HTTP service provides:
 Today can acknowledge, snooze, watch, and mark changes seen only in private
 presentation state. It never answers a decision, completes work, edits the
 board, appends evidence, changes collector configuration, merges, or deploys.
-Those actions remain in the Decision Deck or the named authoritative source.
+Separately, Priorities writes only the append-only owner-control lane; it never
+rewrites the observed board or event ledger. Those other actions remain in the
+Decision Deck or the named authoritative source.
 See [`docs/ui.md`](docs/ui.md) for the nine one-home states, evidence vocabulary,
 coverage model, keyboard/menu behavior, and first-run/degraded limitations.
 
@@ -179,7 +194,9 @@ It binds only to `127.0.0.1`, rejects non-loopback Host headers, has no CORS opt
 Observer workspaces can set `ui.readOnly: true`; the service then exposes the
 same validated views while refusing authoritative mutation requests with `403`.
 Private seen, acknowledgement, snooze, watch, navigation, and pane state remain
-presentation-only and leave `board.json` and `ledger.jsonl` byte-identical.
+presentation-only. Owner product direction remains writable in its separate
+control lane. Both leave `board.json` and `ledger.jsonl` byte-identical. See
+[`docs/owner-control.md`](docs/owner-control.md).
 
 ## Current limits
 
@@ -191,7 +208,8 @@ presentation-only and leave `board.json` and `ledger.jsonl` byte-identical.
 - GitHub collection requires a separately installed and authenticated `gh` CLI.
 - Collectors are explicit and off by default. Disabled or never-observed
   sources are shown as unobserved, never as quiet or all clear.
-- Schedules are generated for inspection but never installed or activated automatically.
+- HFLedger observes commands and schedules but does not execute, install,
+  enable, or repair them from the Operations view.
 - Production writes are unsupported by the automation policy.
 - Transition notifications, a rich menu-bar popover, Quick Look, analytics,
   advanced disputes, and multi-machine skew remain deferred.

@@ -1,4 +1,4 @@
-use chrono::Local;
+use chrono::{Duration as ChronoDuration, Local, SecondsFormat, Utc};
 use notify::{Config as NotifyConfig, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -37,8 +37,10 @@ const PREVIOUS_CONFIG_VERSION: u32 = 1;
 const LOG_LIMIT_BYTES: u64 = 1_048_576;
 const CORE_FILES: [&str; 3] = ["config.json", "board.json", "ledger.jsonl"];
 const DATA_DIRECTORIES: [&str; 3] = ["locks", "backups", "reports"];
+const DEMO_AUXILIARY_FILES: [&str; 2] = ["owner-control.jsonl", "reports/operations-latest.json"];
 const WATCHED_WORKSPACE_FILES: [&str; 2] = ["board.json", "ledger.jsonl"];
-const WATCHED_REPORT_FILES: [&str; 1] = ["collector-latest.json"];
+const WATCHED_OPTIONAL_WORKSPACE_FILES: [&str; 1] = ["owner-control.jsonl"];
+const WATCHED_REPORT_FILES: [&str; 2] = ["collector-latest.json", "operations-latest.json"];
 const WATCH_DEBOUNCE: Duration = Duration::from_millis(350);
 const NATIVE_CHROME_POLL: Duration = Duration::from_secs(3);
 const PRODUCTION_MONITOR_INTERVAL_SECONDS: u32 = 60;
@@ -133,6 +135,8 @@ struct NativeMenuState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NativeCommand {
     ViewToday,
+    ViewPriorities,
+    ViewOperations,
     ViewChanges,
     ViewAllWork,
     ViewShippedLog,
@@ -154,6 +158,8 @@ impl NativeCommand {
     fn id(self) -> &'static str {
         match self {
             Self::ViewToday => "view.today",
+            Self::ViewPriorities => "view.priorities",
+            Self::ViewOperations => "view.operations",
             Self::ViewChanges => "view.changes",
             Self::ViewAllWork => "view.all-work",
             Self::ViewShippedLog => "view.shipped-log",
@@ -175,6 +181,8 @@ impl NativeCommand {
     fn event_script(self) -> &'static str {
         match self {
             Self::ViewToday => native_event_script!("view.today"),
+            Self::ViewPriorities => native_event_script!("view.priorities"),
+            Self::ViewOperations => native_event_script!("view.operations"),
             Self::ViewChanges => native_event_script!("view.changes"),
             Self::ViewAllWork => native_event_script!("view.all-work"),
             Self::ViewShippedLog => native_event_script!("view.shipped-log"),
@@ -580,6 +588,79 @@ fn reject_symlink_chain(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn refresh_demo_operations(destination: &Path) -> Result<(), String> {
+    let path = destination.join("reports/operations-latest.json");
+    reject_symlink(&path)?;
+    let bytes = fs::read(&path)
+        .map_err(|error| format!("could not read the fictional operations report: {error}"))?;
+    let mut report: Value = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("fictional operations report is invalid: {error}"))?;
+    let object = report
+        .as_object_mut()
+        .ok_or_else(|| "fictional operations report must be an object".to_string())?;
+    let now = Utc::now();
+    object.insert(
+        "observedAt".into(),
+        Value::String(now.to_rfc3339_opts(SecondsFormat::Secs, false)),
+    );
+    let schedules = object
+        .get_mut("schedules")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| "fictional operations schedules are invalid".to_string())?;
+    for (index, schedule) in schedules.iter_mut().enumerate() {
+        let schedule = schedule
+            .as_object_mut()
+            .ok_or_else(|| "fictional operations schedule is invalid".to_string())?;
+        let completed = now - ChronoDuration::minutes(index as i64 + 1);
+        schedule.insert(
+            "nextRunAt".into(),
+            Value::String(
+                (now + ChronoDuration::days(index as i64 + 1))
+                    .to_rfc3339_opts(SecondsFormat::Secs, false),
+            ),
+        );
+        if let Some(last_run) = schedule.get_mut("lastRun").and_then(Value::as_object_mut) {
+            last_run.insert(
+                "startedAt".into(),
+                Value::String(
+                    (completed - ChronoDuration::minutes(1))
+                        .to_rfc3339_opts(SecondsFormat::Secs, false),
+                ),
+            );
+            last_run.insert(
+                "completedAt".into(),
+                Value::String(completed.to_rfc3339_opts(SecondsFormat::Secs, false)),
+            );
+        }
+    }
+    let temporary = path.with_extension("json.tmp");
+    if temporary.exists() {
+        reject_symlink(&temporary)?;
+        fs::remove_file(&temporary).map_err(|error| {
+            format!("could not clear the fictional report staging file: {error}")
+        })?;
+    }
+    let encoded = serde_json::to_vec_pretty(&report)
+        .map_err(|error| format!("could not encode the fictional operations report: {error}"))?;
+    let mut file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(&temporary)
+        .map_err(|error| format!("could not stage the fictional operations report: {error}"))?;
+    file.write_all(&encoded)
+        .and_then(|_| file.write_all(b"\n"))
+        .and_then(|_| file.sync_all())
+        .map_err(|error| format!("could not save the fictional operations report: {error}"))?;
+    fs::rename(&temporary, &path)
+        .map_err(|error| format!("could not replace the fictional operations report: {error}"))?;
+    private_permissions(&path, 0o600)?;
+    File::open(path.parent().unwrap_or(destination))
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| format!("could not finish the fictional operations report: {error}"))?;
+    Ok(())
+}
+
 fn copy_demo(source: &Path, destination: &Path) -> Result<(), String> {
     reject_symlink(source)?;
     if destination.exists() {
@@ -595,6 +676,22 @@ fn copy_demo(source: &Path, destination: &Path) -> Result<(), String> {
             }
         }
         private_permissions(destination, 0o700)?;
+        for name in DEMO_AUXILIARY_FILES {
+            let to = destination.join(name);
+            reject_symlink(&to)?;
+            if !to.exists() {
+                let from = source.join(name);
+                reject_symlink(&from)?;
+                fs::copy(&from, &to).map_err(|error| {
+                    format!(
+                        "could not upgrade the fictional demo {}: {error}",
+                        from.display()
+                    )
+                })?;
+            }
+            private_permissions(&to, 0o600)?;
+        }
+        refresh_demo_operations(destination)?;
         return Ok(());
     }
     create_private_dir(destination)?;
@@ -613,6 +710,19 @@ fn copy_demo(source: &Path, destination: &Path) -> Result<(), String> {
         })?;
         private_permissions(&to, 0o600)?;
     }
+    for name in DEMO_AUXILIARY_FILES {
+        let from = source.join(name);
+        reject_symlink(&from)?;
+        let to = destination.join(name);
+        fs::copy(&from, &to).map_err(|error| {
+            format!(
+                "could not install the fictional demo {}: {error}",
+                from.display()
+            )
+        })?;
+        private_permissions(&to, 0o600)?;
+    }
+    refresh_demo_operations(destination)?;
     Ok(())
 }
 
@@ -1260,6 +1370,18 @@ fn workspace_watch_plan(workspace: &Workspace) -> Result<WatchPlan, String> {
         }
         allowed_files.insert(path.clone());
         required_files.insert(path);
+    }
+    for name in WATCHED_OPTIONAL_WORKSPACE_FILES {
+        let path = canonical.join(name);
+        if path.exists() {
+            reject_symlink(&path)?;
+            if !path.is_file() {
+                return Err(format!(
+                    "workspace optional watcher input is not a file: {name}"
+                ));
+            }
+        }
+        allowed_files.insert(path);
     }
 
     let mut roots = vec![canonical.clone()];
@@ -2960,6 +3082,8 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
     )?;
 
     let today = custom_menu_item(app, "view.today", "Today", false, Some("CmdOrCtrl+1"))?;
+    let priorities = custom_menu_item(app, "view.priorities", "Priorities", false, None)?;
+    let operations = custom_menu_item(app, "view.operations", "Operations", false, None)?;
     let changes = custom_menu_item(app, "view.changes", "Changes", false, Some("CmdOrCtrl+2"))?;
     let all_work = custom_menu_item(app, "view.all-work", "All Work", false, Some("CmdOrCtrl+3"))?;
     let shipped = custom_menu_item(
@@ -3025,6 +3149,8 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
         true,
         &[
             &today,
+            &priorities,
+            &operations,
             &changes,
             &all_work,
             &shipped,
@@ -3148,6 +3274,8 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
         reload.clone(),
         edit_find,
         today.clone(),
+        priorities.clone(),
+        operations.clone(),
         changes.clone(),
         all_work.clone(),
         shipped.clone(),
@@ -3468,6 +3596,8 @@ fn start_native_chrome_monitor(app: AppHandle) {
 fn native_command_for_menu_id(id: &str) -> Option<NativeCommand> {
     match id {
         "view.today" => Some(NativeCommand::ViewToday),
+        "view.priorities" => Some(NativeCommand::ViewPriorities),
+        "view.operations" => Some(NativeCommand::ViewOperations),
         "view.changes" => Some(NativeCommand::ViewChanges),
         "view.all-work" => Some(NativeCommand::ViewAllWork),
         "view.shipped-log" => Some(NativeCommand::ViewShippedLog),
@@ -3715,15 +3845,15 @@ mod tests {
         event_is_relevant, guarded_item_menu_accelerator, is_board_settings_navigation,
         menu_eligibility, merge_watch_signal, native_command_for_menu_id, parse_deep_link,
         primary_surface_plan, production_health_signature, project_slug, recent_duplicate,
-        sync_production_monitor_config, text_size_after, validate_search_response,
-        validate_stored_config, watch_snapshot_is_safe, workspace_id, workspace_watch_plan,
-        write_config_unlocked, AppPaths, AppSnapshot, DeepLinkIntent, DeepLinkRejection,
-        DeepLinkWindowPlan, HostRuntime, HostStatus, NativeCommand, Preferences,
+        refresh_demo_operations, sync_production_monitor_config, text_size_after,
+        validate_search_response, validate_stored_config, watch_snapshot_is_safe, workspace_id,
+        workspace_watch_plan, write_config_unlocked, AppPaths, AppSnapshot, DeepLinkIntent,
+        DeepLinkRejection, DeepLinkWindowPlan, HostRuntime, HostStatus, NativeCommand, Preferences,
         PrimarySurfacePlan, ProductionMonitorSettings, SearchResponse, StoredConfig, TextSize,
         TextSizeAction, Workspace, WorkspaceKind, CONFIG_VERSION, DEEP_LINK_REJECTION_MESSAGE,
     };
     use notify::{Event, EventKind};
-    use serde_json::json;
+    use serde_json::{json, Value};
     use std::collections::HashSet;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
@@ -4212,6 +4342,12 @@ mod tests {
             .contains(&first_root.join("reports/collector-latest.json")));
         assert!(first_plan
             .allowed_files
+            .contains(&first_root.join("owner-control.jsonl")));
+        assert!(first_plan
+            .allowed_files
+            .contains(&first_root.join("reports/operations-latest.json")));
+        assert!(first_plan
+            .allowed_files
             .is_disjoint(&second_plan.allowed_files));
 
         let board_event = Event::new(EventKind::Any).add_path(first_root.join("board.json"));
@@ -4269,6 +4405,8 @@ mod tests {
     fn menu_routes_only_the_locked_one_way_command_allowlist() {
         let cases = [
             ("view.today", NativeCommand::ViewToday),
+            ("view.priorities", NativeCommand::ViewPriorities),
+            ("view.operations", NativeCommand::ViewOperations),
             ("view.changes", NativeCommand::ViewChanges),
             ("view.all-work", NativeCommand::ViewAllWork),
             ("view.shipped-log", NativeCommand::ViewShippedLog),
@@ -4669,6 +4807,53 @@ mod tests {
         write_config_unlocked(&paths, &config).expect("write app-private preference");
         assert_eq!(fs::read(&board).expect("read board after"), before_board);
         assert_eq!(fs::read(&ledger).expect("read ledger after"), before_ledger);
+        fs::remove_dir_all(root).expect("remove disposable app data");
+    }
+
+    #[test]
+    fn fictional_operations_report_is_freshened_for_each_installed_demo() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "hfledger-fictional-operations-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(root.join("reports")).expect("create reports directory");
+        let path = root.join("reports/operations-latest.json");
+        fs::write(
+            &path,
+            serde_json::to_vec(&json!({
+                "observedAt": "2000-01-01T00:00:00+00:00",
+                "schedules": [{
+                    "nextRunAt": "2000-01-02T00:00:00+00:00",
+                    "lastRun": {
+                        "startedAt": "2000-01-01T23:58:00+00:00",
+                        "completedAt": "2000-01-01T23:59:00+00:00"
+                    }
+                }]
+            }))
+            .expect("encode fictional report"),
+        )
+        .expect("write fictional report");
+        refresh_demo_operations(&root).expect("freshen fictional report");
+        let refreshed: Value =
+            serde_json::from_slice(&fs::read(&path).expect("read refreshed report"))
+                .expect("decode refreshed report");
+        assert_ne!(refreshed["observedAt"], "2000-01-01T00:00:00+00:00");
+        assert_ne!(
+            refreshed["schedules"][0]["nextRunAt"],
+            "2000-01-02T00:00:00+00:00"
+        );
+        assert_eq!(
+            fs::metadata(&path)
+                .expect("report metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
         fs::remove_dir_all(root).expect("remove disposable app data");
     }
 }

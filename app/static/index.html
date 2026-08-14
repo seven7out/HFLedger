@@ -55,6 +55,12 @@
               <span class="source-icon" aria-hidden="true">⌾</span><span>Today</span>
               <span id="today-badge" class="nav-badge" hidden></span>
             </button>
+            <button class="source-row" type="button" data-view="priorities">
+              <span class="source-icon" aria-hidden="true">↕</span><span>Priorities</span>
+            </button>
+            <button class="source-row" type="button" data-view="operations">
+              <span class="source-icon" aria-hidden="true">◷</span><span>Operations</span>
+            </button>
             <button class="source-row" type="button" data-view="changes">
               <span class="source-icon" aria-hidden="true">↺</span><span>Changes</span>
               <span id="changes-badge" class="nav-badge" hidden></span>
@@ -210,6 +216,44 @@
       <div class="dialog-actions">
         <button class="control-button" value="cancel">Cancel</button>
         <button class="control-button primary-control" value="default">Snooze locally</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="owner-task-dialog" class="ui-dialog owner-task-dialog">
+    <form id="owner-task-form" method="dialog">
+      <header>
+        <div><p class="dialog-label">Owner direction</p><h2>Edit product task</h2></div>
+        <button class="dialog-close" value="cancel" aria-label="Close">×</button>
+      </header>
+      <p>Shape the product outcome and priority. Agents still own implementation status and evidence.</p>
+      <input id="owner-task-id" type="hidden">
+      <label class="dialog-field">
+        <span>Product title</span>
+        <input id="owner-task-title" type="text" maxlength="160" required
+               aria-describedby="owner-task-source-title">
+      </label>
+      <small id="owner-task-source-title" class="dialog-field-note"></small>
+      <label class="dialog-field">
+        <span>What should change for people?</span>
+        <textarea id="owner-task-intent" maxlength="1200" rows="4"
+                  placeholder="Describe the intended product outcome in plain language."></textarea>
+      </label>
+      <label class="dialog-field">
+        <span>Owner note</span>
+        <textarea id="owner-task-note" maxlength="1000" rows="3"
+                  placeholder="Add a constraint, preference, or useful context."></textarea>
+      </label>
+      <label class="dialog-field">
+        <span>Planning state</span>
+        <select id="owner-task-disposition">
+          <option value="active">Active — agents may pick this up</option>
+          <option value="parked">Parked — do not start yet</option>
+        </select>
+      </label>
+      <div class="dialog-actions">
+        <button class="control-button" value="cancel">Cancel</button>
+        <button id="owner-task-save" class="control-button primary-control" value="default">Save direction</button>
       </div>
     </form>
   </dialog>

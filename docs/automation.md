@@ -87,6 +87,20 @@ The local adapter walks configured roots without following directory or file sym
 
 Collector reports are observations. An agent must not treat a title, path, status, or report change as authority to execute work, create an owner ask, merge, or deploy.
 
+## Operations observation
+
+The owner-facing Operations view reads an optional private
+`reports/operations-latest.json` report. It is a closed observation contract,
+not a scheduler or command runner. Installations may map their explicitly known
+commands and scheduled tasks into that report with product labels, product
+descriptions, cadence, enabled state, next expected run, and the latest bounded
+outcome. Invocation text is secondary and secret-shaped text is rejected.
+
+Use `ledger operations` to inspect the same projection agents receive. Missing,
+stale, invalid, failed, or missed reporting remains explicit. HFLedger never
+discovers arbitrary machine commands, scans scheduler configuration, installs a
+schedule, starts a process, or retries a failed task from this report.
+
 ## Installation adapters
 
 The public engine accepts only generic normalized sources, items, runs,
@@ -100,6 +114,10 @@ not copy them into the engine repository, public fixture catalog, screenshots,
 diagnostics, or release artifacts. The public fictional catalog under
 `tests/fixtures/redesign-v2/` documents the generic shapes and coverage cases
 without providing a production-specific mapping.
+
+An adapter that atomically replaces an observed workspace must carry the
+independent `owner-control.jsonl` journal forward byte for byte. Regenerating a
+board is not authority to discard or rewrite owner priorities.
 
 ## Instruction packs
 

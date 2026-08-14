@@ -16,8 +16,9 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from core import (admission, item_metadata, ledger, local_state, orientation,
-                  production_health, reconcile, search_links)  # noqa: E402
+from core import (admission, item_metadata, ledger, local_state, operations,
+                  orientation, owner_control, production_health, reconcile,
+                  search_links)  # noqa: E402
 from core.link_safety import resolve_projected_link  # noqa: E402
 from core.store import BoardStore, BoardValidationError, load_config, resolve_home  # noqa: E402
 
@@ -397,6 +398,84 @@ def build_board_view(runtime, context_id=None):
         # App-private state failure cannot make validated authoritative data
         # unavailable. The capability still advertises the closed failure.
         local_view_state = None
+    orientation_v2 = orientation.build_v2(
+        board,
+        entries,
+        context.config,
+        now_utc,
+        local_view_state=local_view_state,
+        context_id=context.context_id,
+    )
+    queue_items = {
+        item.get("sourceItemRef"): item
+        for item in orientation_v2.get("items", [])
+        if isinstance(item, dict) and item.get("entityKind") == "queue-task"
+    }
+    candidates = []
+    for raw in board.get("queue", []):
+        if not isinstance(raw, dict) or not isinstance(raw.get("id"), str):
+            continue
+        projected = queue_items.get(raw["id"])
+        if not projected or projected.get("primaryHome") in (
+                "shipped-verified", "shipped-unverified"):
+            continue
+        candidates.append({
+            "id": raw["id"],
+            "itemId": projected["id"],
+            "title": raw.get("title") or raw["id"],
+            "project": projected.get("project"),
+            "observedStatus": projected.get("statusLabel"),
+            "sourceHome": projected.get("primaryHome"),
+        })
+    try:
+        owner_control_view = owner_control.build_view(context.home, candidates)
+    except owner_control.OwnerControlError:
+        owner_control_view = {
+            "version": owner_control.VERSION,
+            "available": False,
+            "revision": None,
+            "updatedAt": None,
+            "activeOrder": [],
+            "items": [],
+            "counts": {"active": 0, "parked": 0},
+            "summary": "Owner priorities could not be read.",
+        }
+    owner_by_item_id = {
+        item["itemId"]: item for item in owner_control_view["items"]
+        if isinstance(item.get("itemId"), str)
+    }
+    for item in orientation_v2.get("items", []):
+        directive = owner_by_item_id.get(item.get("id"))
+        if directive is None:
+            continue
+        item.update({
+            "sourceTitle": item.get("title"),
+            "title": directive["title"],
+            "ownerIntent": directive["intent"],
+            "ownerNote": directive["note"],
+            "ownerDisposition": directive["disposition"],
+            "ownerPriorityRank": directive["rank"],
+        })
+        copy_context = item.get("copyContext")
+        if isinstance(copy_context, dict) and isinstance(copy_context.get("text"), str):
+            lines = copy_context["text"].splitlines()
+            for index, line in enumerate(lines):
+                if line.startswith("Item: "):
+                    lines[index] = "Item: %s" % directive["title"]
+                    break
+            insert_at = next(
+                (index + 1 for index, line in enumerate(lines) if line.startswith("ID: ")), 2)
+            owner_lines = [
+                "Owner disposition: %s" % directive["disposition"],
+                "Owner priority: %s" % (
+                    directive["rank"] if directive["rank"] is not None else "parked"),
+            ]
+            if directive["intent"]:
+                owner_lines.append("Owner intent: %s" % directive["intent"])
+            if directive["note"]:
+                owner_lines.append("Owner note: %s" % directive["note"])
+            copy_context["text"] = "\n".join(
+                lines[:insert_at] + owner_lines + lines[insert_at:])[:4000]
     decisions = board.get("decisions", {})
     response = runtime.shell(context.context_id)
     response.update({
@@ -415,14 +494,9 @@ def build_board_view(runtime, context_id=None):
         "retriage": copy.deepcopy(board.get("retriage", [])),
         "unmatchedCompletions": copy.deepcopy(board.get("unmatchedCompletions", [])),
         "orientation": orientation.build(board, entries, context.config, now=now_utc),
-        "orientationV2": orientation.build_v2(
-            board,
-            entries,
-            context.config,
-            now_utc,
-            local_view_state=local_view_state,
-            context_id=context.context_id,
-        ),
+        "orientationV2": orientation_v2,
+        "ownerControl": owner_control_view,
+        "operations": operations.build_view(context.home, now=now_utc),
     })
     return response
 
@@ -895,6 +969,73 @@ def local_state_command(backend, allowed_context_ids, body):
     return response
 
 
+def _owner_control_body(runtime, body):
+    if not isinstance(body, dict):
+        raise ApiError(400, "body must be a JSON object")
+    fields = {"schemaVersion", "context", "expectedRevision", "command", "arguments"}
+    unknown = sorted(set(body) - fields)
+    missing = sorted(fields - set(body))
+    if missing:
+        raise ApiError(400, "missing field(s): %s" % ", ".join(missing))
+    if unknown:
+        raise ApiError(400, "unsupported field(s): %s" % ", ".join(unknown))
+    if body.get("schemaVersion") != 1:
+        raise ApiError(400, "schemaVersion must be 1")
+    context_id = body.get("context")
+    if not isinstance(context_id, str) or context_id not in runtime.contexts:
+        raise ApiError(400, "context is invalid")
+    expected = body.get("expectedRevision")
+    if (not isinstance(expected, int) or isinstance(expected, bool) or expected < 0):
+        raise ApiError(400, "expectedRevision must be a non-negative integer")
+    command = body.get("command")
+    if command not in ("set-task", "set-priority"):
+        raise ApiError(400, "command is invalid")
+    if not isinstance(body.get("arguments"), dict):
+        raise ApiError(400, "arguments must be an object")
+    return context_id, expected, command, body["arguments"]
+
+
+def owner_control_command(runtime, body):
+    context_id, expected, command, arguments = _owner_control_body(runtime, body)
+    board_view = build_board_view(runtime, context_id)
+    current = board_view["ownerControl"]
+    if current.get("available") is not True:
+        raise owner_control.OwnerControlError(
+            "owner priorities are unavailable until their journal is repaired", 503)
+    if current["revision"] != expected:
+        raise owner_control.OwnerControlError(
+            "owner priorities changed; reload before saving", 409, "stale-revision")
+    context = runtime.context(context_id)
+    by_id = {item["id"]: item for item in current["items"]}
+    if command == "set-task":
+        if set(arguments) != {"taskId", "changes"}:
+            raise ApiError(400, "set-task arguments must contain taskId and changes")
+        task_id = arguments.get("taskId")
+        if task_id not in by_id:
+            raise ApiError(404, "task is not available for owner control")
+        changes = arguments.get("changes")
+        if not isinstance(changes, dict) or not changes:
+            raise ApiError(400, "changes must be a non-empty object")
+        event = owner_control.append(
+            context.home, expected, "task-set", task_id=task_id, changes=changes,
+            now_fn=runtime.now_fn)
+    else:
+        if set(arguments) != {"taskIds"}:
+            raise ApiError(400, "set-priority arguments must contain taskIds")
+        task_ids = arguments.get("taskIds")
+        active_ids = {
+            item["id"] for item in current["items"] if item["disposition"] == "active"
+        }
+        if (not isinstance(task_ids, list) or len(task_ids) != len(active_ids) or
+                len(set(task_ids)) != len(task_ids) or set(task_ids) != active_ids):
+            raise ApiError(400, "taskIds must order every active task exactly once")
+        event = owner_control.append(
+            context.home, expected, "priority-set", priority_order=task_ids,
+            now_fn=runtime.now_fn)
+    refreshed = build_board_view(runtime, context_id)["ownerControl"]
+    return {"event": event, "ownerControl": refreshed}
+
+
 POST_ROUTES = {
     "/api/decisions/reorder": lambda runtime, body: reorder(runtime, body, "decisions"),
     "/api/decisions/resolve": resolve_decision,
@@ -906,6 +1047,10 @@ POST_ROUTES = {
 
 LOCAL_POST_ROUTES = {
     "/api/local-state/command": local_state_command,
+}
+
+OWNER_CONTROL_POST_ROUTES = {
+    "/api/owner-control/command": owner_control_command,
 }
 
 
@@ -1075,18 +1220,21 @@ class Handler(BaseHTTPRequestHandler):
         try:
             path = urlparse(self.path).path
             is_local = path in LOCAL_POST_ROUTES
+            is_owner_control = path in OWNER_CONTROL_POST_ROUTES
             raw = self._read_raw(
                 LOCAL_STATE_MAX_BODY_BYTES if is_local else MAX_BODY_BYTES)
             if not self._host_ok():
                 self._send_json({"error": "forbidden: non-loopback Host"}, status=403)
                 return
-            route = LOCAL_POST_ROUTES.get(path) if is_local else POST_ROUTES.get(path)
+            route = (LOCAL_POST_ROUTES.get(path) if is_local else
+                     OWNER_CONTROL_POST_ROUTES.get(path) if is_owner_control else
+                     POST_ROUTES.get(path))
             if route is None:
                 self._send_json({"error": "not found"}, status=404)
                 return
             body = self._json_body(raw)
             context_id = body.get("context") if isinstance(body.get("context"), str) else None
-            if not is_local and self.runtime.context(context_id).read_only:
+            if not is_local and not is_owner_control and self.runtime.context(context_id).read_only:
                 self._send_json({"error": "workspace is read-only"}, status=403)
                 return
             with _WRITE_LOCK:
@@ -1106,6 +1254,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"error": exc.message}, status=exc.status)
         except local_state.LocalStateError as exc:
             self._send_local_state_error(exc, context_id)
+        except owner_control.OwnerControlError as exc:
+            self._send_json({"error": str(exc), "code": exc.code}, status=exc.status)
         except BoardValidationError as exc:
             self._send_json({"error": "board validation failed", "details": exc.errors}, status=500)
         except (OSError, ValueError) as exc:

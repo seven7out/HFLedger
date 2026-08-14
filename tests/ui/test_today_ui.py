@@ -26,7 +26,8 @@ class TodayUIContractTests(unittest.TestCase):
     def test_sidebar_order_and_three_pane_shell(self):
         markup = HTML.read_text(encoding="utf-8")
         positions = [markup.index(f'data-view="{view}"') for view in (
-            "today", "changes", "all-work", "shipped-log", "watched", "projects"
+            "today", "priorities", "operations", "changes", "all-work",
+            "shipped-log", "watched", "projects"
         )]
         self.assertEqual(positions, sorted(positions))
         for element_id in ("ledger-sidebar", "ledger-center", "ledger-inspector", "coverage-footer"):
@@ -37,6 +38,19 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertNotIn("Mark done", markup)
         self.assertNotIn("Record outcome", markup)
 
+    def test_owner_control_and_operations_are_product_facing_real_surfaces(self):
+        markup = HTML.read_text(encoding="utf-8")
+        script = JS.read_text(encoding="utf-8")
+        style = CSS.read_text(encoding="utf-8")
+        for required in (
+                'id="owner-task-dialog"', "What should change for people?",
+                "Active — agents may pick this up", "owner-priority-row",
+                "dragstart", "moveOwnerTask", "set-priority", "set-task",
+                "renderOperations", "Show command", "No run has been recorded yet."):
+            self.assertIn(required, markup + script + style)
+        self.assertIn("Execution status remains agent-reported", script)
+        self.assertNotIn("Run command", script)
+
     def test_client_has_no_authoritative_write_or_browser_storage_path(self):
         script = JS.read_text(encoding="utf-8")
         for forbidden in (
@@ -45,7 +59,10 @@ class TodayUIContractTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, script)
         post_paths = re.findall(r'request\("([^\"]+)"\s*,\s*\{\s*method:\s*"POST"', script)
-        self.assertEqual(post_paths, ["/api/local-state/command"])
+        self.assertEqual(post_paths, [
+            "/api/local-state/command", "/api/owner-control/command"])
+        self.assertNotIn("/api/tasks/reorder", script)
+        self.assertNotIn("/api/tasks/done", script)
         self.assertIn("textContent", script)
         self.assertIn('window.addEventListener("hfledger:native-command"', script)
 
