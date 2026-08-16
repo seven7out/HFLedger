@@ -90,6 +90,8 @@ granting any deployment or production-write authority.
 The durable Priorities surface uses the same priority-setting zone after a
 review: short owner headlines and one-line outcomes are grouped under explicit
 product sections for scanning. Exact rank remains separate and authoritative
-for agent selection. HFLedger supplies deterministic automatic starting
-sections for existing work, labels them as suggestions, and lets the owner move
-any item. An owner-chosen section always overrides the automatic suggestion.
+for agent selection. The first five active items appear in an open **Urgent**
+group; changing Exact order changes that membership without creating another
+priority field. HFLedger supplies deterministic automatic starting sections for
+the remaining work, labels them as suggestions, and lets the owner move any
+item. An owner-chosen section always overrides the automatic suggestion.

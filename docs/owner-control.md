@@ -33,8 +33,11 @@ Every edit is an append-only event with a revision; concurrent stale edits fail
 and reload rather than silently overwriting a newer choice.
 
 Priorities opens in **By section**, which groups related product work without
-changing sequence: the visible rank numbers remain the exact agent order. The
-owner switches to **Exact order** to drag or use accessible move controls. A
+changing sequence. **Urgent** stays open at the top and contains exactly the
+first five active items from the authoritative order; it is not a second stored
+priority field. The visible rank numbers remain the exact agent order, and the
+owner switches to **Exact order** to change urgent membership by dragging or
+using accessible move controls. A
 deterministic title-based organizer supplies editable starting sections for
 existing work. The interface labels these as automatic; **Move…** opens the
 section control, and an owner choice always replaces the suggestion. Starting
@@ -101,7 +104,8 @@ instead of refusing to show the rest of the workspace.
 
 - **Today** keeps production health, owner cards, and product flow first.
 - **Priorities** provides a sectioned product overview, a separate exact-order
-  drag mode, parked work, and the task product-edit sheet.
+  drag mode, an automatic top-five Urgent group, parked work, and the task
+  product-edit sheet.
 - **Operations** lists commands, schedules, their next expected run, latest
   outcome, and a bounded error summary.
 - **All Work** and the inspector show the effective owner title and intent while

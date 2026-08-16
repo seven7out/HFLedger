@@ -79,6 +79,15 @@ test("owner priority sections preserve automatic starts and owner moves", () => 
   ]);
 });
 
+test("urgent priorities are the first five items in exact owner order", () => {
+  const ordered = ["a", "b", "c", "d", "e", "f", "g"].map((id) => ({ id }));
+  const split = ui.splitUrgentPriorities(ordered);
+  assert.deepEqual(split.urgent.map((item) => item.id), ["a", "b", "c", "d", "e"]);
+  assert.deepEqual(split.remaining.map((item) => item.id), ["f", "g"]);
+  assert.deepEqual(ordered.map((item) => item.id), ["a", "b", "c", "d", "e", "f", "g"]);
+  assert.equal(ui.URGENT_PRIORITY_COUNT, 5);
+});
+
 test("operations uses closed owner-facing health labels", () => {
   assert.equal(ui.operationStateLabel("healthy"), "Reporting normally");
   assert.equal(ui.operationStateLabel("degraded"), "Needs attention");

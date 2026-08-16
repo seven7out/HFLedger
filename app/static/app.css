@@ -823,7 +823,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   text-align: left;
 }
 .owner-priority-group-toggle:hover { background: color-mix(in srgb, var(--ink) 5%, var(--content)); }
+.owner-priority-group.is-urgent { border-color: color-mix(in srgb, var(--accent) 42%, var(--line)); }
+.owner-priority-group.is-urgent .owner-priority-group-toggle { background: var(--selection); }
 .priority-group-chevron { color: var(--subtle); font-size: 16px; line-height: 1; }
+.priority-group-label { min-width: 0; display: flex; align-items: baseline; gap: 7px; }
+.priority-group-label small { overflow: hidden; color: var(--muted); font-size: 9px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .priority-group-count { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .owner-priority-list,
 .owner-parked-list,

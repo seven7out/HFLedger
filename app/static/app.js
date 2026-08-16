@@ -58,6 +58,7 @@ const WORK_TYPE_LABELS = Object.freeze({
   research: "Research",
 });
 const OTHER_PRODUCT_WORK_SECTION = "Other product work";
+const URGENT_PRIORITY_COUNT = 5;
 const PRIORITY_SECTION_SUGGESTIONS = Object.freeze([
   "UX & interface", "Directory data", "New features", "Reliability & automation",
   "Safety & privacy", "Content & outreach", "Internal tools",
@@ -1091,6 +1092,15 @@ function groupOwnerPriorities(items) {
   });
 }
 
+function splitUrgentPriorities(items, count = URGENT_PRIORITY_COUNT) {
+  const ordered = Array.isArray(items) ? [...items] : [];
+  const limit = Number.isInteger(count) && count > 0 ? count : URGENT_PRIORITY_COUNT;
+  return {
+    urgent: ordered.slice(0, limit),
+    remaining: ordered.slice(limit),
+  };
+}
+
 function ownerTask(taskId) {
   return (state.data?.ownerControl?.items || []).find((item) => item.id === taskId) || null;
 }
@@ -1201,7 +1211,7 @@ async function completeOwnerTask() {
   }
 }
 
-function renderPriorityRow(item, index, total, { ordering = true } = {}) {
+function renderPriorityRow(item, index, total, { ordering = true, sectionMove = true } = {}) {
   const row = node("article", `owner-priority-row${ordering ? " is-ordering" : " is-overview"}`);
   row.draggable = ordering;
   row.dataset.taskId = safeText(item.id, 256);
@@ -1228,7 +1238,7 @@ function renderPriorityRow(item, index, total, { ordering = true } = {}) {
     down.disabled = index === total - 1;
     actions.append(up, down);
   }
-  if (!ordering) {
+  if (!ordering && sectionMove) {
     actions.append(button(
       "control-button", "Move…", () => openOwnerTaskEditor(item.id, { focusSection: true })));
   }
@@ -1282,33 +1292,50 @@ function priorityModeControl() {
   return control;
 }
 
+function renderPriorityGroup(group, positions, total, { sectionMove = true } = {}) {
+  const section = node("section", `owner-priority-group${group.urgent ? " is-urgent" : ""}`);
+  const collapsed = state.collapsedPrioritySections.has(group.key);
+  const toggle = button("owner-priority-group-toggle", "", () => {
+    if (collapsed) state.collapsedPrioritySections.delete(group.key);
+    else state.collapsedPrioritySections.add(group.key);
+    renderCenter();
+  });
+  toggle.setAttribute("aria-expanded", String(!collapsed));
+  const label = node("span", "priority-group-label");
+  label.append(node("strong", "", group.label));
+  if (group.detail) label.append(node("small", "", group.detail));
+  toggle.append(
+    node("span", "priority-group-chevron", collapsed ? "›" : "⌄"),
+    label,
+    node("span", "priority-group-count", group.items.length),
+  );
+  section.append(toggle);
+  if (!collapsed) {
+    const list = node("div", "owner-priority-list");
+    for (const item of group.items) {
+      const index = positions.get(item.id) ?? 0;
+      list.append(renderPriorityRow(item, index, total, { ordering: false, sectionMove }));
+    }
+    section.append(list);
+  }
+  return section;
+}
+
 function renderPrioritySections(active) {
   const wrapper = node("div", "owner-priority-groups");
   const positions = new Map(active.map((item, index) => [item.id, index]));
-  for (const group of groupOwnerPriorities(active)) {
-    const section = node("section", "owner-priority-group");
-    const collapsed = state.collapsedPrioritySections.has(group.key);
-    const toggle = button("owner-priority-group-toggle", "", () => {
-      if (collapsed) state.collapsedPrioritySections.delete(group.key);
-      else state.collapsedPrioritySections.add(group.key);
-      renderCenter();
-    });
-    toggle.setAttribute("aria-expanded", String(!collapsed));
-    toggle.append(
-      node("span", "priority-group-chevron", collapsed ? "›" : "⌄"),
-      node("strong", "", group.label),
-      node("span", "priority-group-count", group.items.length),
-    );
-    section.append(toggle);
-    if (!collapsed) {
-      const list = node("div", "owner-priority-list");
-      for (const item of group.items) {
-        const index = positions.get(item.id) ?? 0;
-        list.append(renderPriorityRow(item, index, active.length, { ordering: false }));
-      }
-      section.append(list);
-    }
-    wrapper.append(section);
+  const { urgent, remaining } = splitUrgentPriorities(active);
+  if (urgent.length) {
+    wrapper.append(renderPriorityGroup({
+      key: "__urgent__",
+      label: "Urgent",
+      detail: "Top five in exact order",
+      items: urgent,
+      urgent: true,
+    }, positions, active.length, { sectionMove: false }));
+  }
+  for (const group of groupOwnerPriorities(remaining)) {
+    wrapper.append(renderPriorityGroup(group, positions, active.length));
   }
   return wrapper;
 }
@@ -1337,7 +1364,7 @@ function renderPriorities() {
     node("strong", "", state.priorityViewMode === "sections"
       ? "Scan work by product section." : "Edit the exact order agents should follow."),
     node("span", "", state.priorityViewMode === "sections"
-      ? "Starting sections are automatic. Move anything; priority numbers keep the exact agent order."
+      ? "Urgent is always the first five in Exact order. Other starting sections are automatic and editable."
       : "Drag active work or use the arrow buttons. Execution status remains agent-reported."),
   );
   fragment.append(explainer, priorityModeControl());
@@ -2874,11 +2901,13 @@ globalThis.HFLedgerUI = Object.freeze({
   moveInOrder,
   ownerSectionLabel,
   groupOwnerPriorities,
+  splitUrgentPriorities,
   operationStateLabel,
   operationRunLabel,
   PRIORITY_LABELS,
   WORK_TYPE_LABELS,
   PRIORITY_SECTION_SUGGESTIONS,
+  URGENT_PRIORITY_COUNT,
   OTHER_PRODUCT_WORK_SECTION,
 });
 

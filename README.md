@@ -9,9 +9,10 @@ under that owner-facing summary.
 
 The owner can also shape active work without editing code or pretending to
 control implementation status. Priorities provides a sectioned product overview,
-a separate durable drag-and-drop order, concise owner headlines, intended
-outcomes, notes, and active/parked choices. Existing work starts in deterministic,
-editable product sections so a large queue is useful before manual cleanup.
+a top-five **Urgent** section derived from the durable order, a separate
+drag-and-drop ordering mode, concise owner headlines, intended outcomes, notes,
+and active/parked choices. Existing work starts in deterministic, editable
+product sections so a large queue is useful before manual cleanup.
 Operations shows available commands, scheduled tasks, and their latest success
 or failure in plain language. An owner-only manual task has a separate **Mark
 complete** action because the owner, not an agent, knows whether that action was

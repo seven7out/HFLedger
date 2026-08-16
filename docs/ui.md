@@ -103,9 +103,12 @@ shipments.
 ## Priorities and owner task editing
 
 Priorities is the owner's durable product-direction surface. Active queue work
-opens grouped into explicit owner sections for scanning. Rank numbers still show
-the exact order agents should consider, while the separate **Exact order** mode
-provides drag and accessible Up and Down controls. The owner can edit:
+opens with **Urgent**, the first five items from the exact owner order, followed
+by explicit owner sections for scanning. Urgent is open by default; the topical
+groups start collapsed. Rank numbers still show the exact order agents should
+consider, while the separate **Exact order** mode provides drag and accessible
+Up and Down controls. Reordering automatically changes Urgent membership. The
+owner can edit:
 
 - a concise owner headline;
 - the product section;
@@ -114,7 +117,7 @@ provides drag and accessible Up and Down controls. The owner can edit:
 - whether the task is active or parked.
 
 HFLedger supplies editable automatic starting sections for older work using
-deterministic title rules. Category groups start collapsed; **Move…** opens the
+deterministic title rules. **Move…** opens the
 section field, where the owner can choose a suggested section or write a custom
 one. Owner choices always override automatic suggestions. The technical source
 title remains secondary provenance in Details and the edit sheet.

@@ -6,7 +6,8 @@
   concise owner headlines, one-line outcomes, custom product sections, and a
   separate **Exact order** mode for drag-and-drop agent sequencing. Existing
   work receives editable automatic starting sections; owner moves always win
-  and never change the exact priority order.
+  and never change the exact priority order. The first five active items now
+  appear in an open **Urgent** group whose membership always follows Exact order.
 - Added an explicit **Mark complete** action for owner-only manual tasks. The
   one-way owner report uses the revisioned owner-control journal, immediately
   leaves the active owner lane, and never changes agent-reported work status.
