@@ -46,6 +46,7 @@ class TodayUIContractTests(unittest.TestCase):
                 'id="owner-task-dialog"', "Owner headline", "Outcome for people",
                 'id="owner-task-section"', "By section", "Exact order",
                 "groupOwnerPriorities", "Needs sorting",
+                "parkedPriorityExpanded", "priority-section-disclosure",
                 "Active — agents may pick this up", "owner-priority-row",
                 "dragstart", "moveOwnerTask", "set-priority", "set-task",
                 'id="owner-complete-dialog"', "Mark complete",

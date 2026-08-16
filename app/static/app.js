@@ -96,6 +96,7 @@ const state = {
   pendingItemNavigation: null,
   draggedOwnerTaskId: null,
   priorityViewMode: "sections",
+  parkedPriorityExpanded: false,
   collapsedPrioritySections: new Set([NEEDS_SORTING_SECTION.toLocaleLowerCase()]),
 };
 
@@ -1301,6 +1302,22 @@ function renderPrioritySections(active) {
   return wrapper;
 }
 
+function renderParkedPrioritySection(parked, content) {
+  const wrapper = node("section", "ledger-section owner-priority-section");
+  const toggle = button("section-heading priority-section-disclosure", "", () => {
+    state.parkedPriorityExpanded = !state.parkedPriorityExpanded;
+    renderCenter();
+  });
+  toggle.setAttribute("aria-expanded", String(state.parkedPriorityExpanded));
+  toggle.append(
+    node("span", "priority-section-disclosure-label", `${state.parkedPriorityExpanded ? "⌄" : "›"} Parked`),
+    node("span", "section-count", parked.length),
+  );
+  wrapper.append(toggle);
+  if (state.parkedPriorityExpanded) wrapper.append(content);
+  return wrapper;
+}
+
 function renderPriorities() {
   const model = state.data?.ownerControl;
   const fragment = document.createDocumentFragment();
@@ -1340,7 +1357,7 @@ function renderPriorities() {
     parkedList.append(row);
   });
   if (!parked.length) parkedList.append(emptyState("Nothing is parked", "All owner-controlled work is active."));
-  fragment.append(section("Parked", parked.length, parkedList));
+  fragment.append(renderParkedPrioritySection(parked, parkedList));
   return fragment;
 }
 
