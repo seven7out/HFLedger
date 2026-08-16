@@ -57,9 +57,51 @@ test("owner priority movement is deterministic and preserves every task", () => 
   assert.deepEqual(ui.moveInOrder(["a", "b", "c"], "c", 0), ["c", "a", "b"]);
   assert.deepEqual(ui.moveInOrder(["a", "b", "c"], "missing", 1), ["a", "b", "c"]);
   assert.deepEqual(ui.NAVIGATION_VIEWS, [
-    "today", "priorities", "operations", "changes", "all-work",
+    "today", "priorities", "calendar", "operations", "changes", "all-work",
     "shipped-log", "watched", "projects", "project",
   ]);
+});
+
+test("calendar uses real dates, a six-week month grid, and local scheduled days", () => {
+  assert.equal(ui.calendarDateKey("2026-08-20"), "2026-08-20");
+  assert.equal(ui.calendarDateKey("2026-02-29"), null);
+  assert.equal(ui.calendarDateKey("not-a-date"), null);
+  const cells = ui.calendarMonthCells(2026, 7, "2026-08-16");
+  assert.equal(cells.length, 42);
+  assert.equal(cells[0].key, "2026-07-26");
+  assert.equal(cells[41].key, "2026-09-05");
+  assert.equal(cells.find((cell) => cell.key === "2026-08-16").isToday, true);
+  assert.equal(ui.calendarEventDateKey({ allDay: true, date: "2026-08-20" }), "2026-08-20");
+  assert.equal(ui.calendarEventDateKey({
+    allDay: false, startsAt: "2026-08-20T12:00:00Z",
+  }), "2026-08-20");
+  assert.equal(ui.calendarKindLabel("scheduled_run"), "Scheduled work");
+});
+
+test("owner priority sections preserve automatic starts and owner moves", () => {
+  const other = { id: "a", title: "Technical source title" };
+  const experience = { id: "b", title: "Simplify pickup", section: "UX & interface" };
+  const sameSection = { id: "c", title: "Clarify the menu", section: "ux & INTERFACE" };
+  const data = { id: "d", title: "Correct store hours", section: "Directory data" };
+  const groups = ui.groupOwnerPriorities([other, experience, sameSection, data]);
+  assert.deepEqual(groups.map((group) => group.label), ["UX & interface", "Directory data", "Other product work"]);
+  assert.deepEqual(groups[0].items.map((item) => item.id), ["b", "c"]);
+  assert.deepEqual(groups[2].items.map((item) => item.id), ["a"]);
+  assert.equal(ui.ownerSectionLabel({ section: "" }), "Other product work");
+  assert.deepEqual(ui.PRIORITY_SECTION_SUGGESTIONS, [
+    "UX & interface", "Directory data", "New features", "Reliability & automation",
+    "Safety & privacy", "Content & outreach", "Internal tools", "Release & operations",
+    "Research & planning", "Other product work",
+  ]);
+});
+
+test("urgent priorities are the first five items in exact owner order", () => {
+  const ordered = ["a", "b", "c", "d", "e", "f", "g"].map((id) => ({ id }));
+  const split = ui.splitUrgentPriorities(ordered);
+  assert.deepEqual(split.urgent.map((item) => item.id), ["a", "b", "c", "d", "e"]);
+  assert.deepEqual(split.remaining.map((item) => item.id), ["f", "g"]);
+  assert.deepEqual(ordered.map((item) => item.id), ["a", "b", "c", "d", "e", "f", "g"]);
+  assert.equal(ui.URGENT_PRIORITY_COUNT, 5);
 });
 
 test("operations uses closed owner-facing health labels", () => {
@@ -69,6 +111,25 @@ test("operations uses closed owner-facing health labels", () => {
   assert.equal(ui.operationStateLabel("anything-else"), "Unknown");
   assert.equal(ui.operationRunLabel("running"), "Running");
   assert.equal(ui.operationRunLabel("missed"), "Missed");
+  assert.equal(ui.operationHealth({ enabled: true, lastRun: { status: "succeeded" } }), "healthy");
+  assert.equal(ui.operationHealth({ enabled: true, lastRun: { status: "failed" } }), "problematic");
+  assert.equal(ui.operationHealthLabel("problematic"), "Problematic");
+  assert.equal(ui.operationRunnerLabel({ runner: { name: "Example Agent", model: "Model One" } }), "Example Agent · Model One");
+});
+
+test("operations groups recurring jobs by runner with problems first", () => {
+  const groups = ui.groupOperationsByRunner([{
+    id: "healthy", label: "Healthy job", health: "healthy",
+    runner: { type: "agent", name: "Example Agent", model: "Model One" },
+  }, {
+    id: "problem", label: "Problem job", health: "problematic",
+    runner: { type: "agent", name: "Example Agent", model: "Model One" },
+  }, {
+    id: "local", label: "Local job", health: "healthy",
+    runner: { type: "local_automation", name: "Local automation", model: "Python" },
+  }]);
+  assert.deepEqual(groups.map((group) => group.name), ["Example Agent", "Local automation"]);
+  assert.deepEqual(groups[0].schedules.map((schedule) => schedule.id), ["problem", "healthy"]);
 });
 
 test("pane resize continues and cleans up after the pointer leaves the divider", () => {

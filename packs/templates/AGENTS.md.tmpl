@@ -19,8 +19,14 @@ Before choosing queue work, read the effective owner-control projection:
 ledger --home {{LEDGER_HOME_SHELL}} owner-control
 ```
 
-Honor `activeOrder`, skip items whose owner disposition is `parked`, and use
-the effective product title, `intent`, and `note` as product direction. These
+Honor `activeOrder`, skip items whose owner disposition is `parked` or
+`completed`, and use the effective owner headline, `section`, `intent`,
+`importance`, `done`, `dueDate`, `parts`, and `note` as product direction. A
+`dueDate` is the owner's need-by date for planning and appears on Calendar; it
+does not waive safety gates or prove delivery. A
+`sectionSource` of `automatic` is a starting organizer; `owner` is
+an explicit owner choice. Either section helps orient related work but never
+changes `activeOrder`. These
 fields do not claim that implementation started, passed tests, shipped, or is
 safe to execute. Source status and normal safety gates still control
 eligibility. If the projection is unavailable or conflicts with source facts,
@@ -28,7 +34,10 @@ stop selection and report the mismatch instead of guessing.
 
 `completedOwnerTaskIds` are one-way owner reports about manual actions assigned
 to the owner. Reconcile them only through the authoritative source's sanctioned
-completion path. They never complete queue work or prove an agent result.
+completion path. `completedQueueTaskIds` and completed product parts are the
+owner's product-outcome judgments. Do not redo those outcomes, but do not treat
+them as proof that code passed or shipped; reconcile source status only through
+the authoritative workflow.
 
 ## Product-owner cards
 

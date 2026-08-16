@@ -26,7 +26,7 @@ class TodayUIContractTests(unittest.TestCase):
     def test_sidebar_order_and_three_pane_shell(self):
         markup = HTML.read_text(encoding="utf-8")
         positions = [markup.index(f'data-view="{view}"') for view in (
-            "today", "priorities", "operations", "changes", "all-work",
+            "today", "priorities", "calendar", "operations", "changes", "all-work",
             "shipped-log", "watched", "projects"
         )]
         self.assertEqual(positions, sorted(positions))
@@ -43,15 +43,55 @@ class TodayUIContractTests(unittest.TestCase):
         script = JS.read_text(encoding="utf-8")
         style = CSS.read_text(encoding="utf-8")
         for required in (
-                'id="owner-task-dialog"', "What should change for people?",
+                'id="owner-task-dialog"', "Owner headline", "Outcome for people",
+                "Why this matters", "Done when",
+                'id="owner-task-section"', "By section", "Exact order",
+                'id="owner-task-parts"', "Separate product outcomes",
+                "Add outcome", "Mark product outcome complete",
+                "Mark whole task complete", "complete-task-part",
+                "complete-queue-task", "Completed by owner",
+                "groupOwnerPriorities", "splitUrgentPriorities", "Other product work",
+                'label: "Urgent"', "Top five in exact order",
+                "Urgent is always the first five in Exact order",
+                '"Move…"', "Suggested automatically from the current title",
+                "parkedPriorityExpanded", "priority-section-disclosure",
                 "Active — agents may pick this up", "owner-priority-row",
                 "dragstart", "moveOwnerTask", "set-priority", "set-task",
                 'id="owner-complete-dialog"', "Mark complete",
                 "complete-owner-task", "ownerCompletionAvailable",
-                "renderOperations", "Show command", "No run has been recorded yet."):
+                "renderOperations", "Recurring jobs", "Runs through",
+                "groupOperationsByRunner", "Healthy", "Problematic",
+                "Show command", "No run has been recorded yet."):
             self.assertIn(required, markup + script + style)
         self.assertIn("Execution status remains agent-reported", script)
+        self.assertIn("Urgent is always the first five in Exact order", script)
         self.assertNotIn("Run command", script)
+
+    def test_calendar_is_a_real_owner_view_with_editable_need_by_dates(self):
+        markup = HTML.read_text(encoding="utf-8")
+        script = JS.read_text(encoding="utf-8")
+        style = CSS.read_text(encoding="utf-8")
+        for required in (
+                'data-view="calendar"', 'id="owner-task-due-date"',
+                "Need this by", "renderCalendar", "calendarMonthCells",
+                "Routine update timestamps are excluded", ".month-calendar",
+                ".calendar-grid", ".calendar-agenda"):
+            self.assertIn(required, markup + script + style)
+        self.assertIn('setView("operations")', script)
+        self.assertNotIn("Google Calendar", markup + script + style)
+
+    def test_task_details_lead_with_product_meaning_and_collapse_diagnostics(self):
+        script = JS.read_text(encoding="utf-8")
+        style = CSS.read_text(encoding="utf-8")
+        for required in (
+                '"What changes"', '"Why it matters"', '"What done looks like"',
+                '"Risks or constraints"', '"Current state"',
+                'node("details", "dossier-diagnostics")',
+                '"Agent evidence & diagnostics"', '"Observation gaps"'):
+            self.assertIn(required, script)
+        self.assertIn(".dossier-diagnostics", style)
+        self.assertNotIn("No product outcome has been added yet.", script)
+        self.assertNotIn("Open source unavailable", script)
 
     def test_client_has_no_authoritative_write_or_browser_storage_path(self):
         script = JS.read_text(encoding="utf-8")

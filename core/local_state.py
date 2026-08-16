@@ -42,7 +42,7 @@ MAX_PROJECT_ID_CHARS = 160
 LOCK_TIMEOUT_SECONDS = 3.0
 
 CURSOR_VIEWS = ("today", "changes", "all-work", "shipped-log", "watched")
-NAVIGATION_VIEWS = CURSOR_VIEWS + ("priorities", "operations", "project")
+NAVIGATION_VIEWS = CURSOR_VIEWS + ("priorities", "calendar", "operations", "project")
 DISCLOSURE_KEYS = frozenset(("inspector.evidence", "inspector.runtime"))
 COMMANDS = frozenset((
     "record-successful-visit",

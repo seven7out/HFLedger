@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "observedAt": "2026-08-02T12:00:00+00:00",
   "staleAfterSeconds": 604800,
   "commands": [
@@ -22,6 +22,11 @@
       "label": "Morning workspace refresh",
       "description": "Makes new fictional bakery work visible before morning planning.",
       "cadence": "Every weekday morning",
+      "runner": {
+        "type": "agent",
+        "name": "Claude Code",
+        "model": "Configured default"
+      },
       "enabled": true,
       "commandId": "refresh-workspace",
       "nextRunAt": "2026-08-03T08:00:00+00:00",
@@ -37,6 +42,11 @@
       "label": "Weekly workspace check",
       "description": "Checks the fictional bakery planning record before weekly review.",
       "cadence": "Every Monday morning",
+      "runner": {
+        "type": "agent",
+        "name": "Codex",
+        "model": "GPT-5"
+      },
       "enabled": true,
       "commandId": "validate-workspace",
       "nextRunAt": "2026-08-04T08:30:00+00:00",
@@ -45,6 +55,26 @@
         "startedAt": "2026-07-28T08:30:00+00:00",
         "completedAt": "2026-07-28T08:31:00+00:00",
         "summary": "The weekly check stopped before confirming the fictional planning record."
+      }
+    },
+    {
+      "id": "evening-counter-summary",
+      "label": "Prepare the evening counter summary",
+      "description": "Summarizes the fictional bakery's completed orders for the next morning.",
+      "cadence": "Every evening",
+      "runner": {
+        "type": "local_automation",
+        "name": "Local automation",
+        "model": "Python"
+      },
+      "enabled": true,
+      "commandId": null,
+      "nextRunAt": "2026-08-03T18:00:00+00:00",
+      "lastRun": {
+        "status": "succeeded",
+        "startedAt": "2026-08-01T18:00:00+00:00",
+        "completedAt": "2026-08-01T18:01:00+00:00",
+        "summary": "The evening order summary was ready for the fictional bakery team."
       }
     }
   ]

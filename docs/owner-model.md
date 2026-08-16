@@ -86,3 +86,35 @@ The Decision Deck renders each typed card in the same product language. It
 retains recommendation acceptance, snooze, context requests, completion, and
 provenance. `priority_review` adds its bounded reorder-and-kill response without
 granting any deployment or production-write authority.
+
+The durable Priorities surface uses the same priority-setting zone after a
+review: short owner headlines and one-line outcomes are grouped under explicit
+product sections for scanning. Exact rank remains separate and authoritative
+for agent selection. The first five active items appear in an open **Urgent**
+group; changing Exact order changes that membership without creating another
+priority field. HFLedger supplies deterministic automatic starting sections for
+the remaining work, labels them as suggestions, and lets the owner move any
+item. An owner-chosen section always overrides the automatic suggestion.
+
+Calendar supports priority-setting and keeping agents unblocked. It combines
+only dates that imply future action: owner need-by dates, source deadlines,
+decision deadlines, deferred items returning for attention, and the next run of
+enabled scheduled work. Routine created, edited, and evidence timestamps do not
+become calendar events. Task dates are owner-editable from Priorities; decision
+and schedule dates remain read-only projections of their authoritative source.
+
+Opening queue work leads with a bounded product brief derived from the
+authoritative task: **What changes**, **Why it matters**, **What done looks
+like**, and **Risks or constraints**. Rank and workflow status never substitute
+for missing product meaning. Agent evidence, observation gaps, freshness,
+history, source links, and provenance remain available in a collapsed secondary
+disclosure; their absence is an audit limitation, not the product explanation.
+If a legacy task supplies code-shaped text in a product-brief field, the
+projection omits that text and says translation is needed instead of making the
+owner interpret it.
+
+When one queue record combines several product results, the owner may split it
+into bounded plain-language outcomes. Each outcome has a one-way completion
+report, and an unsplit task has the same product-completion control. This is a
+priority-setting judgment, not an execution claim: observed agent status,
+tests, and release evidence stay unchanged and visible.

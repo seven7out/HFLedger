@@ -2,7 +2,7 @@
 
 const TESTING = globalThis.__HFLEDGER_TESTING__ === true;
 const PRIMARY_VIEWS = ["today", "changes", "all-work", "shipped-log", "watched"];
-const NAVIGATION_VIEWS = ["today", "priorities", "operations", "changes", "all-work", "shipped-log", "watched", "projects", "project"];
+const NAVIGATION_VIEWS = ["today", "priorities", "calendar", "operations", "changes", "all-work", "shipped-log", "watched", "projects", "project"];
 const HOME_ORDER = [
   "needs-you", "disputed", "silent-while-observed", "shipped-unverified",
   "in-motion", "queued", "shipped-verified", "parked", "unobserved",
@@ -57,6 +57,13 @@ const WORK_TYPE_LABELS = Object.freeze({
   documentation: "Documentation",
   research: "Research",
 });
+const OTHER_PRODUCT_WORK_SECTION = "Other product work";
+const URGENT_PRIORITY_COUNT = 5;
+const PRIORITY_SECTION_SUGGESTIONS = Object.freeze([
+  "UX & interface", "Directory data", "New features", "Reliability & automation",
+  "Safety & privacy", "Content & outreach", "Internal tools",
+  "Release & operations", "Research & planning", OTHER_PRODUCT_WORK_SECTION,
+]);
 const METADATA_EDITABLE_KINDS = new Set(["queue-task", "inbox-item"]);
 const PRIORITY_RANK = Object.freeze({ P0: 0, P1: 1, P2: 2 });
 const ITEM_ID_PATTERN = /^item-[0-9a-f]{24}$/;
@@ -91,6 +98,12 @@ const state = {
   toastUndo: null,
   pendingItemNavigation: null,
   draggedOwnerTaskId: null,
+  priorityViewMode: "sections",
+  parkedPriorityExpanded: false,
+  completedPriorityExpanded: false,
+  calendarMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+  collapsedPrioritySections: new Set(
+    PRIORITY_SECTION_SUGGESTIONS.map((section) => section.toLocaleLowerCase())),
 };
 
 function safeText(value, maximum = 500) {
@@ -135,6 +148,68 @@ function exactTime(value) {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium", timeStyle: "short",
   }).format(parsed);
+}
+
+function calendarDateKey(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(safeText(value, 10));
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+  if (parsed.getFullYear() !== year || parsed.getMonth() !== month - 1 || parsed.getDate() !== day) return null;
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function localDateKey(value) {
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.valueOf())) return null;
+  return `${String(parsed.getFullYear()).padStart(4, "0")}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+}
+
+function calendarEventDateKey(event) {
+  if (event?.allDay === false && event?.startsAt) return localDateKey(event.startsAt);
+  return calendarDateKey(event?.date);
+}
+
+function formatCalendarDate(value, options = { month: "short", day: "numeric" }) {
+  const key = calendarDateKey(value);
+  if (!key) return "Date unknown";
+  const [year, month, day] = key.split("-").map(Number);
+  return new Intl.DateTimeFormat(undefined, options).format(new Date(year, month - 1, day));
+}
+
+function calendarMonthCells(year, monthIndex, todayKey = localDateKey(new Date())) {
+  if (!Number.isInteger(year) || !Number.isInteger(monthIndex)) return [];
+  const first = new Date(year, monthIndex, 1);
+  if (Number.isNaN(first.valueOf())) return [];
+  const start = new Date(year, monthIndex, 1 - first.getDay());
+  return Array.from({ length: 42 }, (_unused, index) => {
+    const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index);
+    const key = localDateKey(date);
+    return {
+      key,
+      day: date.getDate(),
+      inMonth: date.getMonth() === first.getMonth(),
+      isToday: key === todayKey,
+    };
+  });
+}
+
+function calendarKindLabel(kind) {
+  return ({
+    task_due: "Task due",
+    decision_due: "Owner decision",
+    scheduled_run: "Scheduled work",
+    returns: "Returns",
+  })[kind] || "Dated work";
+}
+
+function calendarTimeLabel(event) {
+  if (event?.allDay !== false || !event?.startsAt) return "All day";
+  const parsed = new Date(event.startsAt);
+  if (Number.isNaN(parsed.valueOf())) return "Time unknown";
+  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(parsed);
 }
 
 function relativeTime(value, estimated = false) {
@@ -1055,8 +1130,124 @@ function moveInOrder(order, itemId, targetIndex) {
   return next;
 }
 
+function ownerSectionLabel(item) {
+  return safeText(item?.section, 48) || OTHER_PRODUCT_WORK_SECTION;
+}
+
+function groupOwnerPriorities(items) {
+  const groups = [];
+  const byKey = new Map();
+  for (const item of items || []) {
+    const label = ownerSectionLabel(item);
+    const key = label.toLocaleLowerCase();
+    let group = byKey.get(key);
+    if (!group) {
+      group = { key, label, items: [] };
+      byKey.set(key, group);
+      groups.push(group);
+    }
+    group.items.push(item);
+  }
+  return groups.sort((left, right) => {
+    const otherKey = OTHER_PRODUCT_WORK_SECTION.toLocaleLowerCase();
+    if (left.key === otherKey) return 1;
+    if (right.key === otherKey) return -1;
+    return 0;
+  });
+}
+
+function splitUrgentPriorities(items, count = URGENT_PRIORITY_COUNT) {
+  const ordered = Array.isArray(items) ? [...items] : [];
+  const limit = Number.isInteger(count) && count > 0 ? count : URGENT_PRIORITY_COUNT;
+  return {
+    urgent: ordered.slice(0, limit),
+    remaining: ordered.slice(limit),
+  };
+}
+
 function ownerTask(taskId) {
   return (state.data?.ownerControl?.items || []).find((item) => item.id === taskId) || null;
+}
+
+function newOwnerPartId() {
+  const bytes = new Uint8Array(8);
+  globalThis.crypto.getRandomValues(bytes);
+  return `part-${[...bytes].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function ownerPartDefinition(part) {
+  return {
+    id: safeText(part?.id, 32),
+    title: safeText(part?.title, 80),
+    outcome: safePlainText(part?.outcome, 600),
+  };
+}
+
+function appendOwnerPartEditor(part = {}) {
+  const definition = ownerPartDefinition(part);
+  const done = part?.done === true;
+  const row = node("div", `owner-part-editor-row${done ? " is-complete" : ""}`);
+  row.dataset.partId = definition.id || newOwnerPartId();
+  row.dataset.done = String(done);
+  const heading = node("div", "owner-part-editor-heading");
+  heading.append(node("strong", "", done ? "Completed outcome" : "Product outcome"));
+  const remove = button("control-button owner-part-remove", "Remove", () => {
+    row.remove();
+    $("#owner-task-add-part").disabled = $("#owner-task-parts").children.length >= 12;
+  });
+  remove.type = "button";
+  remove.disabled = done;
+  heading.append(remove);
+  const titleLabel = node("label", "dialog-field");
+  titleLabel.append(node("span", "", "Short headline"));
+  const title = document.createElement("input");
+  title.type = "text";
+  title.maxLength = 80;
+  title.required = true;
+  title.value = definition.title;
+  title.disabled = done;
+  title.placeholder = "Name one independently finishable result";
+  title.className = "owner-part-title";
+  titleLabel.append(title);
+  const outcomeLabel = node("label", "dialog-field");
+  outcomeLabel.append(node("span", "", "What changes for people"));
+  const outcome = document.createElement("textarea");
+  outcome.maxLength = 600;
+  outcome.rows = 2;
+  outcome.required = true;
+  outcome.value = definition.outcome;
+  outcome.disabled = done;
+  outcome.placeholder = "Describe the visible product result in plain language.";
+  outcome.className = "owner-part-outcome";
+  outcomeLabel.append(outcome);
+  row.append(heading, titleLabel, outcomeLabel);
+  $("#owner-task-parts").append(row);
+  $("#owner-task-add-part").disabled = $("#owner-task-parts").children.length >= 12;
+  if (!done && !definition.title) title.focus();
+}
+
+function renderOwnerPartEditor(parts) {
+  $("#owner-task-parts").replaceChildren();
+  (Array.isArray(parts) ? parts : []).forEach((part) => appendOwnerPartEditor(part));
+  $("#owner-task-add-part").disabled = $("#owner-task-parts").children.length >= 12;
+}
+
+function collectOwnerPartDefinitions() {
+  const rows = [...$("#owner-task-parts").children];
+  if (rows.length === 1) throw new Error("Add at least two outcomes, or remove the split.");
+  const parts = rows.map((row) => ({
+    id: safeText(row.dataset.partId, 32),
+    title: safeText(row.querySelector(".owner-part-title")?.value, 80),
+    outcome: safePlainText(row.querySelector(".owner-part-outcome")?.value, 600),
+  }));
+  if (parts.some((part) => !part.id || !part.title || !part.outcome)) {
+    throw new Error("Every product outcome needs a short headline and a plain-language result.");
+  }
+  const normalizedTitles = parts.map((part) => part.title.toLocaleLowerCase());
+  if (new Set(normalizedTitles).size !== normalizedTitles.length) {
+    throw new Error("Product outcome headlines must be unique within a task.");
+  }
+  return parts;
 }
 
 async function saveOwnerOrder(order, message = "Priority order saved for agents.") {
@@ -1076,41 +1267,73 @@ function moveOwnerTask(taskId, delta) {
   saveOwnerOrder(moveInOrder(order, taskId, target), `Moved to priority ${target + 1}.`);
 }
 
-function openOwnerTaskEditor(taskId) {
+function openOwnerTaskEditor(taskId, { focusSection = false } = {}) {
   const item = ownerTask(taskId);
   if (!item) return announce("That task is no longer available for owner editing.");
   $("#owner-task-id").value = item.id;
   $("#owner-task-title").value = safeText(item.title, 160);
+  $("#owner-task-section").value = safeText(item.section, 48);
+  $("#owner-task-section-note").textContent = item.sectionSource === "automatic"
+    ? "Suggested automatically from the current title. Choose any section to override it."
+    : "This section was chosen by the owner.";
+  $("#owner-task-due-date").value = calendarDateKey(item.dueDate) || "";
+  $("#owner-task-due-date-note").textContent = item.dueDateSource === "source"
+    ? "This date came from the source task. Change or clear it here to set the owner calendar."
+    : "Optional. Dated work appears automatically in Calendar.";
   $("#owner-task-intent").value = safePlainText(item.intent, 1200);
+  $("#owner-task-importance").value = safePlainText(item.importance, 1200);
+  $("#owner-task-done").value = safePlainText(item.done, 1200);
+  renderOwnerPartEditor(item.parts);
   $("#owner-task-note").value = safePlainText(item.note, 1000);
   $("#owner-task-disposition").value = item.disposition === "parked" ? "parked" : "active";
   const sourceTitle = safeText(item.sourceTitle, 160);
   $("#owner-task-source-title").textContent = item.title !== sourceTitle
-    ? `Observed title: ${sourceTitle}` : "Leave this unchanged to keep the observed title.";
+    ? `Technical source title: ${sourceTitle}`
+    : "Aim for 4–10 plain words. The technical source title remains in Details.";
   $("#owner-task-dialog").showModal();
-  $("#owner-task-title").focus();
-  $("#owner-task-title").select();
+  const focusTarget = focusSection ? $("#owner-task-section") : $("#owner-task-title");
+  focusTarget.focus();
+  focusTarget.select();
 }
 
 async function saveOwnerTask() {
   const taskId = safeText($("#owner-task-id").value, 256);
   const item = ownerTask(taskId);
   if (!item) return announce("That task is no longer available for owner editing.");
+  let parts;
+  try {
+    parts = collectOwnerPartDefinitions();
+  } catch (error) {
+    return announce(error.message);
+  }
   const desired = {
     title: safeText($("#owner-task-title").value, 160),
     intent: safeText($("#owner-task-intent").value, 1200),
+    importance: safeText($("#owner-task-importance").value, 1200),
+    done: safeText($("#owner-task-done").value, 1200),
+    parts,
     note: safeText($("#owner-task-note").value, 1000),
+    section: safeText($("#owner-task-section").value, 48),
+    dueDate: calendarDateKey($("#owner-task-due-date").value),
     disposition: $("#owner-task-disposition").value === "parked" ? "parked" : "active",
   };
   if (!desired.title) return announce("Product title cannot be empty.");
   const changed = {};
   if (desired.title !== safeText(item.title, 160)) {
+    if (desired.title.length > 80) return announce("Owner headline must be 80 characters or fewer.");
     changed.title = desired.title === safeText(item.sourceTitle, 160) ? null : desired.title;
   }
-  for (const field of ["intent", "note"]) {
-    if (desired[field] !== safeText(item[field], field === "intent" ? 1200 : 1000)) {
+  for (const field of ["intent", "importance", "done", "note", "section"]) {
+    const limit = ["intent", "importance", "done"].includes(field)
+      ? 1200 : (field === "note" ? 1000 : 48);
+    if (desired[field] !== safeText(item[field], limit)) {
       changed[field] = desired[field] || null;
     }
+  }
+  if (desired.dueDate !== calendarDateKey(item.dueDate)) changed.dueDate = desired.dueDate;
+  const currentParts = (item.parts || []).map(ownerPartDefinition);
+  if (JSON.stringify(desired.parts) !== JSON.stringify(currentParts)) {
+    changed.parts = desired.parts.length ? desired.parts : null;
   }
   if (desired.disposition !== item.disposition) changed.disposition = desired.disposition;
   if (!Object.keys(changed).length) {
@@ -1156,33 +1379,86 @@ async function completeOwnerTask() {
   }
 }
 
-function renderPriorityRow(item, index, total) {
-  const row = node("article", "owner-priority-row");
-  row.draggable = true;
+function openOwnerProductCompletion(item, part = null) {
+  const taskId = safeText(item?.sourceItemRef, 256);
+  if (!taskId) return announce("This product task has no stable reference.");
+  $("#owner-product-complete-task-id").value = taskId;
+  $("#owner-product-complete-part-id").value = safeText(part?.id, 32);
+  $("#owner-product-complete-title").textContent = safeText(
+    part?.title || item?.title, 180) || "Product outcome";
+  $("#owner-product-complete-explanation").textContent = part
+    ? "This records that this product outcome is complete. Other outcomes and the observed agent status remain unchanged."
+    : "This records your product judgment that the whole outcome is complete. The observed agent status and evidence remain unchanged.";
+  $("#owner-product-complete-dialog").showModal();
+  $("#owner-product-complete-save").focus();
+}
+
+async function completeOwnerProductOutcome() {
+  const taskId = safeText($("#owner-product-complete-task-id").value, 256);
+  const partId = safeText($("#owner-product-complete-part-id").value, 32);
+  if (!taskId) return announce("This product task has no stable reference.");
+  $("#owner-product-complete-save").disabled = true;
+  try {
+    await ownerCommand(
+      partId ? "complete-task-part" : "complete-queue-task",
+      partId ? { taskId, partId } : { taskId },
+    );
+    $("#owner-product-complete-dialog").close();
+    announce(partId ? "Product outcome marked complete." : "Product task marked complete.");
+  } catch (error) {
+    announce(error.message);
+  } finally {
+    $("#owner-product-complete-save").disabled = false;
+  }
+}
+
+function renderPriorityRow(item, index, total, { ordering = true, sectionMove = true } = {}) {
+  const row = node("article", `owner-priority-row${ordering ? " is-ordering" : " is-overview"}`);
+  row.draggable = ordering;
   row.dataset.taskId = safeText(item.id, 256);
   row.setAttribute("aria-label", `Priority ${index + 1}: ${safeText(item.title, 160)}`);
 
-  const handle = node("span", "priority-drag-handle", "⠿");
-  handle.setAttribute("aria-hidden", "true");
   const rank = node("strong", "priority-rank", String(index + 1));
   const copy = node("div", "priority-copy");
   const title = button("priority-title", item.title || item.id, () => {
     if (item.itemId) selectDescriptor({ kind: "item", id: item.itemId }, { focus: false });
   });
-  copy.append(title, node("p", "", item.intent || "No product outcome has been added yet."));
+  copy.append(title);
+  if (item.intent) copy.append(node("p", "", item.intent));
+  else copy.append(node("span", "priority-missing-outcome", "Outcome needed"));
+  if (item.partCounts?.total) copy.append(node(
+    "span", "priority-part-count",
+    `${item.partCounts.done} of ${item.partCounts.total} outcomes complete`,
+  ));
+  if (item.dueDate) copy.append(node(
+    "span", "priority-due-date", `Due ${formatCalendarDate(item.dueDate)}`));
   copy.append(node("small", "", [item.project, item.observedStatus].filter(Boolean).join(" · ")));
   const actions = node("div", "priority-actions");
-  const up = button("icon-control", "↑", () => moveOwnerTask(item.id, -1));
-  up.title = "Move up";
-  up.setAttribute("aria-label", `Move ${safeText(item.title, 120)} up`);
-  up.disabled = index === 0;
-  const down = button("icon-control", "↓", () => moveOwnerTask(item.id, 1));
-  down.title = "Move down";
-  down.setAttribute("aria-label", `Move ${safeText(item.title, 120)} down`);
-  down.disabled = index === total - 1;
-  actions.append(up, down, button("control-button", "Edit", () => openOwnerTaskEditor(item.id)));
-  row.append(handle, rank, copy, actions);
+  if (ordering) {
+    const up = button("icon-control", "↑", () => moveOwnerTask(item.id, -1));
+    up.title = "Move up";
+    up.setAttribute("aria-label", `Move ${safeText(item.title, 120)} up`);
+    up.disabled = index === 0;
+    const down = button("icon-control", "↓", () => moveOwnerTask(item.id, 1));
+    down.title = "Move down";
+    down.setAttribute("aria-label", `Move ${safeText(item.title, 120)} down`);
+    down.disabled = index === total - 1;
+    actions.append(up, down);
+  }
+  if (!ordering && sectionMove) {
+    actions.append(button(
+      "control-button", "Move…", () => openOwnerTaskEditor(item.id, { focusSection: true })));
+  }
+  actions.append(button("control-button", "Edit", () => openOwnerTaskEditor(item.id)));
+  if (ordering) {
+    const handle = node("span", "priority-drag-handle", "⠿");
+    handle.setAttribute("aria-hidden", "true");
+    row.append(handle, rank, copy, actions);
+  } else {
+    row.append(rank, copy, actions);
+  }
 
+  if (!ordering) return row;
   row.addEventListener("dragstart", (event) => {
     state.draggedOwnerTaskId = item.id;
     row.classList.add("is-dragging");
@@ -1209,36 +1485,157 @@ function renderPriorityRow(item, index, total) {
   return row;
 }
 
+function priorityModeControl() {
+  const control = node("div", "priority-mode-control");
+  control.setAttribute("aria-label", "Priority view");
+  for (const [mode, label] of [["sections", "By section"], ["order", "Exact order"]]) {
+    const choice = button("priority-mode-button", label, () => {
+      state.priorityViewMode = mode;
+      renderCenter();
+    });
+    choice.setAttribute("aria-pressed", String(state.priorityViewMode === mode));
+    control.append(choice);
+  }
+  return control;
+}
+
+function renderPriorityGroup(group, positions, total, { sectionMove = true } = {}) {
+  const section = node("section", `owner-priority-group${group.urgent ? " is-urgent" : ""}`);
+  const collapsed = state.collapsedPrioritySections.has(group.key);
+  const toggle = button("owner-priority-group-toggle", "", () => {
+    if (collapsed) state.collapsedPrioritySections.delete(group.key);
+    else state.collapsedPrioritySections.add(group.key);
+    renderCenter();
+  });
+  toggle.setAttribute("aria-expanded", String(!collapsed));
+  const label = node("span", "priority-group-label");
+  label.append(node("strong", "", group.label));
+  if (group.detail) label.append(node("small", "", group.detail));
+  toggle.append(
+    node("span", "priority-group-chevron", collapsed ? "›" : "⌄"),
+    label,
+    node("span", "priority-group-count", group.items.length),
+  );
+  section.append(toggle);
+  if (!collapsed) {
+    const list = node("div", "owner-priority-list");
+    for (const item of group.items) {
+      const index = positions.get(item.id) ?? 0;
+      list.append(renderPriorityRow(item, index, total, { ordering: false, sectionMove }));
+    }
+    section.append(list);
+  }
+  return section;
+}
+
+function renderPrioritySections(active) {
+  const wrapper = node("div", "owner-priority-groups");
+  const positions = new Map(active.map((item, index) => [item.id, index]));
+  const { urgent, remaining } = splitUrgentPriorities(active);
+  if (urgent.length) {
+    wrapper.append(renderPriorityGroup({
+      key: "__urgent__",
+      label: "Urgent",
+      detail: "Top five in exact order",
+      items: urgent,
+      urgent: true,
+    }, positions, active.length, { sectionMove: false }));
+  }
+  for (const group of groupOwnerPriorities(remaining)) {
+    wrapper.append(renderPriorityGroup(group, positions, active.length));
+  }
+  return wrapper;
+}
+
+function renderParkedPrioritySection(parked, content) {
+  const wrapper = node("section", "ledger-section owner-priority-section");
+  const toggle = button("section-heading priority-section-disclosure", "", () => {
+    state.parkedPriorityExpanded = !state.parkedPriorityExpanded;
+    renderCenter();
+  });
+  toggle.setAttribute("aria-expanded", String(state.parkedPriorityExpanded));
+  toggle.append(
+    node("span", "priority-section-disclosure-label", `${state.parkedPriorityExpanded ? "⌄" : "›"} Parked`),
+    node("span", "section-count", parked.length),
+  );
+  wrapper.append(toggle);
+  if (state.parkedPriorityExpanded) wrapper.append(content);
+  return wrapper;
+}
+
+function renderCompletedPrioritySection(completed, content) {
+  const wrapper = node("section", "ledger-section owner-priority-section");
+  const toggle = button("section-heading priority-section-disclosure", "", () => {
+    state.completedPriorityExpanded = !state.completedPriorityExpanded;
+    renderCenter();
+  });
+  toggle.setAttribute("aria-expanded", String(state.completedPriorityExpanded));
+  toggle.append(
+    node("span", "priority-section-disclosure-label", `${state.completedPriorityExpanded ? "⌄" : "›"} Completed by owner`),
+    node("span", "section-count", completed.length),
+  );
+  wrapper.append(toggle);
+  if (state.completedPriorityExpanded) wrapper.append(content);
+  return wrapper;
+}
+
 function renderPriorities() {
   const model = state.data?.ownerControl;
   const fragment = document.createDocumentFragment();
   const explainer = node("div", "owner-control-explainer");
   explainer.append(
-    node("strong", "", "This is the order agents should follow."),
-    node("span", "", "Drag active work, use the arrow buttons, or edit a task's product direction. Execution status remains agent-reported."),
+    node("strong", "", state.priorityViewMode === "sections"
+      ? "Scan work by product section." : "Edit the exact order agents should follow."),
+    node("span", "", state.priorityViewMode === "sections"
+      ? "Urgent is always the first five in Exact order. Other starting sections are automatic and editable."
+      : "Drag active work or use the arrow buttons. Execution status remains agent-reported."),
   );
-  fragment.append(explainer);
+  fragment.append(explainer, priorityModeControl());
   if (!model || model.available !== true) {
     fragment.append(emptyState("Priorities are unavailable", "The owner-control projection could not be loaded."));
     return fragment;
   }
   const active = (model.items || []).filter((item) => item.disposition === "active");
-  const activeList = node("div", "owner-priority-list");
-  active.forEach((item, index) => activeList.append(renderPriorityRow(item, index, active.length)));
+  const activeList = state.priorityViewMode === "sections"
+    ? renderPrioritySections(active) : node("div", "owner-priority-list");
+  if (state.priorityViewMode === "order") {
+    active.forEach((item, index) => activeList.append(renderPriorityRow(item, index, active.length)));
+  }
   if (!active.length) activeList.append(emptyState("No active product work", "Move a parked task to Active when agents should consider it."));
-  fragment.append(section("Active order", active.length, activeList, "owner-priority-section"));
+  fragment.append(section(
+    state.priorityViewMode === "sections" ? "Active work" : "Active order",
+    active.length, activeList, "owner-priority-section"));
 
   const parked = (model.items || []).filter((item) => item.disposition === "parked");
   const parkedList = node("div", "owner-parked-list");
   parked.forEach((item) => {
     const row = node("article", "owner-parked-row");
     const copy = node("div", "priority-copy");
-    copy.append(node("strong", "", item.title || item.id), node("p", "", item.intent || "No product outcome has been added yet."));
+    copy.append(node("strong", "", item.title || item.id));
+    if (item.intent) copy.append(node("p", "", item.intent));
+    else copy.append(node("span", "priority-missing-outcome", "Outcome needed"));
     row.append(copy, button("control-button", "Edit", () => openOwnerTaskEditor(item.id)));
     parkedList.append(row);
   });
   if (!parked.length) parkedList.append(emptyState("Nothing is parked", "All owner-controlled work is active."));
-  fragment.append(section("Parked", parked.length, parkedList));
+  fragment.append(renderParkedPrioritySection(parked, parkedList));
+
+  const completed = (model.items || []).filter((item) => item.disposition === "completed");
+  const completedList = node("div", "owner-parked-list");
+  completed.forEach((item) => {
+    const row = node("article", "owner-parked-row");
+    const copy = node("div", "priority-copy");
+    copy.append(
+      node("strong", "", item.title || item.id),
+      node("p", "", "The owner reported that the product outcome is complete."),
+      node("small", "", [item.project, `Observed status: ${item.observedStatus || "Unknown"}`].filter(Boolean).join(" · ")),
+    );
+    row.append(copy);
+    completedList.append(row);
+  });
+  if (!completed.length) completedList.append(emptyState(
+    "No owner-completed work", "Completed product outcomes will remain available here."));
+  fragment.append(renderCompletedPrioritySection(completed, completedList));
   return fragment;
 }
 
@@ -1250,6 +1647,188 @@ function operationRunLabel(value) {
   return ({ succeeded: "Succeeded", failed: "Failed", running: "Running", missed: "Missed", unknown: "Unknown", disabled: "Disabled" })[value] || "Unknown";
 }
 
+function operationHealth(schedule) {
+  const reported = safeText(schedule?.health, 24);
+  if (["healthy", "problematic", "running", "unknown", "paused"].includes(reported)) return reported;
+  if (schedule?.enabled === false) return "paused";
+  return ({ succeeded: "healthy", failed: "problematic", missed: "problematic", running: "running" })[
+    safeText(schedule?.lastRun?.status, 24)
+  ] || "unknown";
+}
+
+function operationHealthLabel(value) {
+  return ({ healthy: "Healthy", problematic: "Problematic", running: "Running", unknown: "Unknown", paused: "Paused" })[value] || "Unknown";
+}
+
+function operationRunnerLabel(schedule) {
+  const name = safeText(schedule?.runner?.name, 80) || "Runner not reported";
+  const model = safeText(schedule?.runner?.model, 120);
+  return model ? `${name} · ${model}` : name;
+}
+
+function groupOperationsByRunner(schedules) {
+  const groups = new Map();
+  (Array.isArray(schedules) ? schedules : []).forEach((schedule) => {
+    const type = ["agent", "local_automation", "unknown"].includes(schedule?.runner?.type)
+      ? schedule.runner.type : "unknown";
+    const name = safeText(schedule?.runner?.name, 80) || "Runner not reported";
+    const key = `${type}\u0000${name}`;
+    if (!groups.has(key)) groups.set(key, { type, name, schedules: [] });
+    groups.get(key).schedules.push(schedule);
+  });
+  const typeOrder = { agent: 0, local_automation: 1, unknown: 2 };
+  const healthOrder = { problematic: 0, running: 1, unknown: 2, healthy: 3, paused: 4 };
+  return [...groups.values()]
+    .sort((left, right) => (typeOrder[left.type] - typeOrder[right.type]) || left.name.localeCompare(right.name))
+    .map((group) => ({
+      ...group,
+      schedules: [...group.schedules].sort((left, right) => (
+        (healthOrder[operationHealth(left)] - healthOrder[operationHealth(right)]) ||
+        safeText(left.label || left.id, 120).localeCompare(safeText(right.label || right.id, 120))
+      )),
+    }));
+}
+
+function openCalendarEvent(event) {
+  const itemId = safeText(event?.itemId, 160);
+  if (itemId && itemMap().has(itemId)) {
+    selectDescriptor({ kind: "item", id: itemId }, { focus: false });
+    announce(`Opened ${safeText(event.title, 120)} in Details.`);
+    return;
+  }
+  if (event?.destination === "operations") {
+    setView("operations");
+    return;
+  }
+  announce("This calendar item has no additional details.");
+}
+
+function setCalendarMonth(delta) {
+  const current = state.calendarMonth instanceof Date && !Number.isNaN(state.calendarMonth.valueOf())
+    ? state.calendarMonth : new Date();
+  state.calendarMonth = new Date(current.getFullYear(), current.getMonth() + delta, 1);
+  renderCenter();
+}
+
+function resetCalendarMonth() {
+  const today = new Date();
+  state.calendarMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  renderCenter();
+}
+
+function renderCalendarEvent(event, compact = false) {
+  const action = button(
+    `calendar-event kind-${safeText(event.kind, 24)} state-${safeText(event.status, 16) || "none"}${compact ? " is-agenda" : ""}`,
+    "", () => openCalendarEvent(event));
+  action.append(
+    node("span", "calendar-event-time", calendarTimeLabel(event)),
+    node("strong", "", event.title || "Dated work"),
+  );
+  if (compact) {
+    const meta = [calendarKindLabel(event.kind), event.project, event.detail]
+      .map((value) => safeText(value, 180)).filter(Boolean).join(" · ");
+    if (meta) action.append(node("small", "", meta));
+  }
+  action.setAttribute("aria-label", [
+    event.title, calendarKindLabel(event.kind), calendarTimeLabel(event), event.detail,
+  ].filter(Boolean).join(", "));
+  return action;
+}
+
+function renderCalendar() {
+  const model = state.data?.calendar || { events: [], counts: {} };
+  const events = (Array.isArray(model.events) ? model.events : [])
+    .map((event) => ({ ...event, localDate: calendarEventDateKey(event) }))
+    .filter((event) => event.localDate);
+  const fragment = document.createDocumentFragment();
+  const month = state.calendarMonth instanceof Date && !Number.isNaN(state.calendarMonth.valueOf())
+    ? state.calendarMonth : new Date();
+  const year = month.getFullYear();
+  const monthIndex = month.getMonth();
+  const monthLabel = new Intl.DateTimeFormat(undefined, {
+    month: "long", year: "numeric",
+  }).format(month);
+
+  const toolbar = node("section", "calendar-toolbar");
+  const navigation = node("div", "calendar-navigation");
+  const previous = button("icon-control", "‹", () => setCalendarMonth(-1));
+  previous.setAttribute("aria-label", "Previous month");
+  const next = button("icon-control", "›", () => setCalendarMonth(1));
+  next.setAttribute("aria-label", "Next month");
+  navigation.append(
+    button("control-button", "Today", resetCalendarMonth),
+    previous,
+    next,
+    node("h2", "calendar-month-title", monthLabel),
+  );
+  const monthPrefix = `${String(year).padStart(4, "0")}-${String(monthIndex + 1).padStart(2, "0")}-`;
+  const monthEvents = events.filter((event) => event.localDate.startsWith(monthPrefix));
+  const todayKey = localDateKey(new Date());
+  const overdue = events.filter((event) => event.localDate < todayKey &&
+    ["task_due", "decision_due", "returns"].includes(event.kind)).length;
+  const dueCount = monthEvents.filter((event) => ["task_due", "decision_due"].includes(event.kind)).length;
+  const scheduleCount = monthEvents.filter((event) => event.kind === "scheduled_run").length;
+  const summary = node("div", "calendar-summary");
+  summary.append(
+    node("strong", "", `${dueCount} due this month`),
+    node("span", "", `${scheduleCount} scheduled run${scheduleCount === 1 ? "" : "s"}`),
+  );
+  if (overdue) summary.append(node("span", "calendar-overdue", `${overdue} overdue`));
+  toolbar.append(navigation, summary);
+  fragment.append(toolbar);
+
+  const note = node("p", "calendar-source-note",
+    "Shows real need-by dates, owner decisions, returning reminders, and the next reported run of scheduled work. Routine update timestamps are excluded.");
+  fragment.append(note);
+
+  const calendar = node("section", "month-calendar");
+  calendar.setAttribute("aria-label", monthLabel);
+  const weekdays = node("div", "calendar-weekdays");
+  ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].forEach((day) =>
+    weekdays.append(node("span", "", day)));
+  calendar.append(weekdays);
+  const grid = node("div", "calendar-grid");
+  grid.setAttribute("role", "grid");
+  const byDate = new Map();
+  monthEvents.forEach((event) => {
+    if (!byDate.has(event.localDate)) byDate.set(event.localDate, []);
+    byDate.get(event.localDate).push(event);
+  });
+  calendarMonthCells(year, monthIndex, todayKey).forEach((day) => {
+    const cell = node("article", `calendar-day${day.inMonth ? "" : " is-outside"}${day.isToday ? " is-today" : ""}`);
+    cell.setAttribute("role", "gridcell");
+    cell.setAttribute("aria-label", formatCalendarDate(day.key, {
+      weekday: "long", month: "long", day: "numeric", year: "numeric",
+    }));
+    const number = node("time", "calendar-day-number", String(day.day));
+    number.dateTime = day.key;
+    cell.append(number);
+    const dayEvents = byDate.get(day.key) || [];
+    dayEvents.slice(0, 4).forEach((event) => cell.append(renderCalendarEvent(event)));
+    if (dayEvents.length > 4) cell.append(node(
+      "span", "calendar-more", `+${dayEvents.length - 4} more below`));
+    grid.append(cell);
+  });
+  calendar.append(grid);
+  fragment.append(calendar);
+
+  const agenda = node("div", "calendar-agenda");
+  monthEvents.forEach((event) => {
+    const row = node("article", "calendar-agenda-row");
+    const date = node("time", "calendar-agenda-date", formatCalendarDate(event.localDate, {
+      month: "short", day: "numeric",
+    }));
+    date.dateTime = event.localDate;
+    row.append(date, renderCalendarEvent(event, true));
+    agenda.append(row);
+  });
+  if (!monthEvents.length) agenda.append(emptyState(
+    "Nothing dated this month",
+    "Add a Need this by date when editing a task, or connect scheduled-work reporting."));
+  fragment.append(section("This month", monthEvents.length, agenda, "calendar-agenda-section"));
+  return fragment;
+}
+
 function renderOperations() {
   const model = state.data?.operations || {};
   const fragment = document.createDocumentFragment();
@@ -1257,28 +1836,41 @@ function renderOperations() {
   summary.append(
     node("span", "operations-state-dot", "●"),
     node("strong", "", operationStateLabel(model.state)),
-    node("span", "", model.summary || "Commands and scheduled work have not been connected yet."),
+    node("span", "", model.summary || "Commands and recurring jobs have not been connected yet."),
   );
   if (model.observedAt) summary.append(node("time", "", `Updated ${relativeTime(model.observedAt)}`));
   fragment.append(summary);
 
-  const schedules = node("div", "operations-list");
-  (model.schedules || []).forEach((schedule) => {
-    const lastRun = schedule.lastRun;
-    const runState = schedule.enabled === false ? "disabled" : safeText(lastRun?.status, 24) || "unknown";
-    const row = node("article", `operation-row schedule-row state-${runState}`);
-    const heading = node("header", "operation-heading");
-    heading.append(node("strong", "", schedule.label || schedule.id), node("span", "operation-status", operationRunLabel(runState)));
-    row.append(heading, node("p", "", schedule.description || "No product description was supplied."));
-    const facts = node("dl", "operation-facts");
-    facts.append(node("dt", "", "Runs"), node("dd", "", schedule.cadence || "Cadence unknown"));
-    facts.append(node("dt", "", "Next"), node("dd", "", schedule.enabled === false ? "Disabled" : schedule.nextRunAt ? exactTime(schedule.nextRunAt) : "Not reported"));
-    facts.append(node("dt", "", "Latest"), node("dd", "", lastRun?.summary || "No run has been recorded yet."));
-    row.append(facts);
-    schedules.append(row);
+  const schedules = node("div", "operations-runner-groups");
+  groupOperationsByRunner(model.schedules).forEach((group) => {
+    const runner = node("section", `operation-runner-group type-${group.type.replace("_", "-")}`);
+    const runnerHeading = node("header", "operation-runner-heading");
+    runnerHeading.append(
+      node("strong", "", group.name),
+      node("span", "", `${group.schedules.length} recurring job${group.schedules.length === 1 ? "" : "s"}`),
+    );
+    runner.append(runnerHeading);
+    const list = node("div", "operations-list");
+    group.schedules.forEach((schedule) => {
+      const lastRun = schedule.lastRun;
+      const health = operationHealth(schedule);
+      const row = node("article", `operation-row schedule-row health-${health}`);
+      const heading = node("header", "operation-heading");
+      heading.append(node("strong", "", schedule.label || schedule.id), node("span", "operation-status", operationHealthLabel(health)));
+      row.append(heading, node("p", "", schedule.description || "No product description was supplied."));
+      const facts = node("dl", "operation-facts");
+      facts.append(node("dt", "", "Runs through"), node("dd", "", operationRunnerLabel(schedule)));
+      facts.append(node("dt", "", "Schedule"), node("dd", "", schedule.cadence || "Cadence unknown"));
+      facts.append(node("dt", "", "Next"), node("dd", "", schedule.enabled === false ? "Paused" : schedule.nextRunAt ? exactTime(schedule.nextRunAt) : "Not reported"));
+      facts.append(node("dt", "", "Latest"), node("dd", "", lastRun?.summary || "No run has been recorded yet."));
+      row.append(facts);
+      list.append(row);
+    });
+    runner.append(list);
+    schedules.append(runner);
   });
-  if (!schedules.childElementCount) schedules.append(emptyState("No schedules are connected", "Connect an operations report to see when recurring work runs and whether it succeeded."));
-  fragment.append(section("Scheduled tasks", model.counts?.schedules || 0, schedules));
+  if (!schedules.childElementCount) schedules.append(emptyState("No recurring jobs are connected", "Connect an operations report to see who runs recurring work and whether it is healthy."));
+  fragment.append(section("Recurring jobs", model.counts?.schedules || 0, schedules));
 
   const commands = node("div", "operations-list");
   (model.commands || []).forEach((command) => {
@@ -1486,6 +2078,9 @@ function viewMetadata() {
   if (state.view === "priorities") return state.data?.ownerControl?.available === true
     ? ["Priorities", `${state.data.ownerControl.counts?.active || 0} active · durable owner order for agents`]
     : ["Priorities", "Owner priorities are unavailable"];
+  if (state.view === "calendar") return [
+    "Calendar", state.data?.calendar?.summary || "Dated owner work and scheduled runs",
+  ];
   if (state.view === "operations") return ["Operations", state.data?.operations?.summary || "Command and schedule reporting"];
   if (state.view === "changes") return ["Changes", `${state.orientation?.changes?.unseenTotal || 0} unseen · ${observed || "coverage time unavailable"}`];
   if (state.view === "all-work") return ["All Work", `${state.orientation?.totals?.items || 0} items · one primary home each`];
@@ -1501,7 +2096,7 @@ function renderCenter() {
   const [title, subtitle] = viewMetadata();
   $("#view-title").textContent = title;
   $("#view-subtitle").textContent = subtitle;
-  $("#filter-toggle").hidden = state.view === "priorities" || state.view === "operations";
+  $("#filter-toggle").hidden = ["priorities", "calendar", "operations"].includes(state.view);
   if ($("#filter-toggle").hidden) {
     $("#filter-panel").hidden = true;
     $("#filter-toggle").setAttribute("aria-expanded", "false");
@@ -1509,6 +2104,7 @@ function renderCenter() {
   let content;
   if (state.view === "today") content = renderToday();
   else if (state.view === "priorities") content = renderPriorities();
+  else if (state.view === "calendar") content = renderCalendar();
   else if (state.view === "operations") content = renderOperations();
   else if (state.view === "changes") content = renderChanges();
   else if (state.view === "all-work") content = renderAllWork();
@@ -1681,16 +2277,113 @@ function renderItemInspector(target, item) {
   header.append(glyph, heading);
   wrapper.append(header);
   if (item.entityKind === "queue-task") {
-    const owner = node("div", "owner-direction-summary");
-    owner.append(node("p", "", item.ownerIntent || "No product outcome has been added yet."));
-    if (item.ownerNote) owner.append(node("small", "", item.ownerNote));
+    const brief = item.productBrief && typeof item.productBrief === "object"
+      ? item.productBrief : {};
+    const translationNeeded = new Set(Array.isArray(brief.translationNeeded)
+      ? brief.translationNeeded : []);
+    const owner = node("div", "owner-direction-summary product-brief-summary");
+    owner.append(node("p", "", item.ownerIntent || brief.outcome ||
+      (translationNeeded.has("outcome")
+        ? "The supplied outcome is implementation-shaped and needs translation before owner review."
+        : "No owner-readable product change was supplied. Do not infer one from the technical title.")));
     const editable = (state.data?.ownerControl?.items || []).find((entry) => entry.itemId === item.id);
-    if (editable) owner.append(button("control-button", "Edit owner direction…", () => openOwnerTaskEditor(editable.id)));
-    wrapper.append(inspectorSection("Owner Direction", owner));
+    if (editable) owner.append(button("control-button", "Edit owner wording…", () => openOwnerTaskEditor(editable.id)));
+    wrapper.append(inspectorSection("What changes", owner));
+
+    wrapper.append(inspectorSection(
+      "Why it matters",
+      item.ownerImportance || brief.problem || (translationNeeded.has("problem")
+        ? "The supplied reason is implementation-shaped and needs translation before owner review."
+        : "No product reason was supplied. Importance cannot be determined from rank or workflow status alone."),
+    ));
+
+    const done = node("div", "product-brief-done");
+    const criteria = Array.isArray(brief.doneWhen) ? brief.doneWhen.filter(Boolean).slice(0, 8) : [];
+    if (item.ownerDone) {
+      done.append(node("p", "", item.ownerDone));
+    } else if (criteria.length) {
+      const list = node("ul", "product-brief-list");
+      criteria.forEach((criterion) => list.append(node("li", "", criterion)));
+      done.append(list);
+    } else {
+      done.append(node("p", "inspector-muted", translationNeeded.has("doneWhen")
+        ? "The supplied completion checks are implementation-shaped and need translation before owner review."
+        : "No owner-readable definition of done was supplied."));
+    }
+    wrapper.append(inspectorSection("What done looks like", done));
+    wrapper.append(inspectorSection(
+      "Risks or constraints",
+      brief.risks || (translationNeeded.has("risks")
+        ? "The supplied risk statement is implementation-shaped and needs translation before owner review."
+        : "No specific product risk or constraint was supplied."),
+    ));
+    if (item.ownerNote) wrapper.append(inspectorSection("Owner note", item.ownerNote));
+    if (item.ownerDueDate) wrapper.append(inspectorSection(
+      "Need by",
+      formatCalendarDate(item.ownerDueDate, {
+        weekday: "long", year: "numeric", month: "long", day: "numeric",
+      }),
+    ));
+
+    const outcomes = node("div", "owner-product-outcomes");
+    const parts = Array.isArray(item.ownerParts) ? item.ownerParts : [];
+    if (parts.length) {
+      const completedCount = parts.filter((part) => part.done === true).length;
+      outcomes.append(node(
+        "p", "owner-outcomes-summary",
+        `${completedCount} of ${parts.length} product outcomes complete.`,
+      ));
+      for (const part of parts) {
+        const row = node("article", `owner-outcome-row${part.done ? " is-complete" : ""}`);
+        const copy = node("div", "owner-outcome-copy");
+        copy.append(
+          node("strong", "", part.title || "Untitled outcome"),
+          node("p", "", part.outcome || "No product result was supplied."),
+        );
+        const stateLabel = node("span", "owner-outcome-state", part.done ? "Complete" : "Remaining");
+        row.append(stateLabel, copy);
+        if (!part.done && editable) row.append(button(
+          "control-button primary-control", "Mark complete",
+          () => openOwnerProductCompletion(item, part),
+        ));
+        outcomes.append(row);
+      }
+      if (completedCount === parts.length && !item.ownerProductCompletedAt && editable) {
+        outcomes.append(button(
+          "control-button primary-control owner-complete-whole",
+          "Mark whole task complete", () => openOwnerProductCompletion(item),
+        ));
+      }
+    } else if (item.ownerProductCompletedAt) {
+      outcomes.append(node(
+        "p", "owner-completion-recorded",
+        "You marked this product outcome complete. The observed agent status remains visible below.",
+      ));
+    } else if (editable) {
+      outcomes.append(
+        node("p", "inspector-muted", "This task has one product outcome. Split it in Edit when different parts can finish independently."),
+        button(
+          "control-button primary-control", "Mark product outcome complete",
+          () => openOwnerProductCompletion(item),
+        ),
+      );
+    }
+    wrapper.append(inspectorSection("Product outcomes", outcomes));
+
+    const workflow = node("div", "workflow-state-summary");
+    workflow.append(
+      node("p", "", `Current status: ${item.statusLabel || "Unknown"}.`),
+      node("small", "", item.whyHere || "No deterministic observer note was supplied."),
+      node("small", "", item.homeSince
+        ? `${HOME_LABELS[item.primaryHome] || "In this state"} for ${durationSince(item.homeSince)}.`
+        : "The start of this workflow state is unknown."),
+    );
+    wrapper.append(inspectorSection("Current state", workflow));
+  } else {
+    wrapper.append(inspectorSection("Why It Is Here", item.whyHere || "No deterministic reason was supplied."));
+    wrapper.append(inspectorSection("Duration", item.homeSince ? `${HOME_LABELS[item.primaryHome] || "In this state"} for ${durationSince(item.homeSince)}` : "The start of this meaningful state is unknown."));
   }
   wrapper.append(inspectorSection("Priority & Type", itemMetadataEditor(item)));
-  wrapper.append(inspectorSection("Why It Is Here", item.whyHere || "No deterministic reason was supplied."));
-  wrapper.append(inspectorSection("Duration", item.homeSince ? `${HOME_LABELS[item.primaryHome] || "In this state"} for ${durationSince(item.homeSince)}` : "The start of this meaningful state is unknown."));
 
   const actionWrap = node("div", "next-action");
   const actionButton = buildNextAction(item);
@@ -1714,25 +2407,28 @@ function renderItemInspector(target, item) {
   localActions.append(capability);
   wrapper.append(inspectorSection("Local Controls", localActions));
 
+  const diagnostics = node("details", "dossier-diagnostics");
+  diagnostics.append(node("summary", "", "Agent evidence & diagnostics"));
+
   const evidenceList = node("div", "evidence-list");
   const evidence = evidenceMap();
   (item.evidenceIds || []).slice(0, 50).map((id) => evidence.get(id)).filter(Boolean)
     .sort((a, b) => String(b.observedAt || "").localeCompare(String(a.observedAt || "")))
     .forEach((record) => evidenceList.append(evidenceRow(record)));
   if (!evidenceList.childElementCount) evidenceList.append(node("p", "inspector-muted", "No bounded evidence records are attached to this item."));
-  wrapper.append(inspectorSection("Evidence", evidenceList));
+  diagnostics.append(inspectorSection("Evidence", evidenceList));
 
   const gaps = node("ul", "gap-list");
   (item.coverage?.namedAbsences || []).forEach((gap) => gaps.append(node("li", "", gap.detail || gap.label || gap.sourceId || gap)));
   if (!gaps.childElementCount) gaps.append(node("li", "", "Relevant sources observed; no named absence was supplied."));
-  wrapper.append(inspectorSection("Missing Observations", gaps));
+  diagnostics.append(inspectorSection("Observation gaps", gaps));
 
   const clocks = node("dl", "clock-list");
   clocks.append(
     node("dt", "", "Item changed"), node("dd", "", exactTime(item.clocks?.itemChangedAt)),
     node("dt", "", "Sources observed"), node("dd", "", exactTime(item.clocks?.relevantSourcesObservedAt)),
   );
-  wrapper.append(inspectorSection("Freshness", clocks));
+  diagnostics.append(inspectorSection("Freshness", clocks));
 
   const history = node("ol", "history-list");
   const changes = changeMap();
@@ -1744,22 +2440,27 @@ function renderItemInspector(target, item) {
       history.append(entry);
     });
   if (!history.childElementCount) history.append(node("li", "inspector-muted", "No meaningful item history was supplied."));
-  wrapper.append(inspectorSection("History", history));
+  diagnostics.append(inspectorSection("History", history));
 
   const links = node("div", "source-links");
   const allLinks = linkMap();
+  let unavailableLinks = 0;
   (item.linkIds || []).slice(0, 12).map((id) => allLinks.get(id)).filter(Boolean).forEach((link) => {
     const resolution = state.resolvedLinks.get(link.id);
     const target_ = safeLinkTarget(resolution);
     if (!target_) {
-      const unavailable = node("span", "source-link unavailable-link", `${link.label || "Source"} unavailable`);
-      links.append(unavailable);
+      unavailableLinks += 1;
       return;
     }
     links.append(button("source-link", `${link.label || "Open source"} ↗`, () => openSafeTarget(resolution)));
   });
+  if (unavailableLinks) links.append(node(
+    "span", "inspector-muted",
+    `${unavailableLinks} source reference${unavailableLinks === 1 ? " is" : "s are"} not available from this app.`,
+  ));
   if (!links.childElementCount) links.append(node("span", "inspector-muted", "No safe source link was supplied."));
-  wrapper.append(inspectorSection("Sources", links));
+  diagnostics.append(inspectorSection("Sources", links));
+  wrapper.append(diagnostics);
 
   const internals = node("details", "internals");
   internals.append(node("summary", "", "Runtime & provenance internals"));
@@ -2383,7 +3084,8 @@ function setupResizer(selector, side) {
 
 const COMMANDS = [
   ["view.today", "Today", "⌘1"], ["view.changes", "Changes", "⌘2"],
-  ["view.priorities", "Priorities", ""], ["view.operations", "Operations", ""],
+  ["view.priorities", "Priorities", ""], ["view.calendar", "Calendar", ""],
+  ["view.operations", "Operations", ""],
   ["view.all-work", "All Work", "⌘3"], ["view.shipped-log", "Shipped Log", "⌘4"],
   ["view.watched", "Watched", "⌘5"], ["view.filter", "Filter Current View", "⌘F"],
   ["view.reload", "Refresh Sources", "⌘R"], ["pane.toggle-sidebar", "Show or Hide Sidebar", "⌃⌘S"],
@@ -2470,6 +3172,7 @@ function dispatchCommand(id) {
   const routes = {
     "view.today": () => setView("today"),
     "view.priorities": () => setView("priorities"),
+    "view.calendar": () => setView("calendar"),
     "view.operations": () => setView("operations"),
     "view.changes": () => setView("changes"),
     "view.all-work": () => setView("all-work"),
@@ -2566,6 +3269,11 @@ function handleKeyboard(event) {
     if ($("#owner-complete-dialog").open) {
       event.preventDefault();
       $("#owner-complete-dialog").close();
+      return;
+    }
+    if ($("#owner-product-complete-dialog").open) {
+      event.preventDefault();
+      $("#owner-product-complete-dialog").close();
       return;
     }
     if (state.quickLookOpen) {
@@ -2690,10 +3398,18 @@ function boot() {
     if (event.submitter?.value === "cancel") return $("#owner-task-dialog").close();
     saveOwnerTask();
   });
+  $("#owner-task-add-part").addEventListener("click", () => {
+    if ($("#owner-task-parts").children.length < 12) appendOwnerPartEditor();
+  });
   $("#owner-complete-form").addEventListener("submit", (event) => {
     event.preventDefault();
     if (event.submitter?.value === "cancel") return $("#owner-complete-dialog").close();
     completeOwnerTask();
+  });
+  $("#owner-product-complete-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (event.submitter?.value === "cancel") return $("#owner-product-complete-dialog").close();
+    completeOwnerProductOutcome();
   });
   document.addEventListener("keydown", handleKeyboard);
   document.addEventListener("pointerdown", (event) => {
@@ -2742,10 +3458,24 @@ globalThis.HFLedgerUI = Object.freeze({
   PRIMARY_VIEWS: Object.freeze([...PRIMARY_VIEWS]),
   NAVIGATION_VIEWS: Object.freeze([...NAVIGATION_VIEWS]),
   moveInOrder,
+  ownerSectionLabel,
+  groupOwnerPriorities,
+  splitUrgentPriorities,
   operationStateLabel,
   operationRunLabel,
+  operationHealth,
+  operationHealthLabel,
+  operationRunnerLabel,
+  groupOperationsByRunner,
+  calendarDateKey,
+  calendarEventDateKey,
+  calendarMonthCells,
+  calendarKindLabel,
   PRIORITY_LABELS,
   WORK_TYPE_LABELS,
+  PRIORITY_SECTION_SUGGESTIONS,
+  URGENT_PRIORITY_COUNT,
+  OTHER_PRODUCT_WORK_SECTION,
 });
 
 if (!TESTING && typeof document !== "undefined") boot();

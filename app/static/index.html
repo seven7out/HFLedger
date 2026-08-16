@@ -58,6 +58,9 @@
             <button class="source-row" type="button" data-view="priorities">
               <span class="source-icon" aria-hidden="true">↕</span><span>Priorities</span>
             </button>
+            <button class="source-row" type="button" data-view="calendar">
+              <span class="source-icon" aria-hidden="true">▦</span><span>Calendar</span>
+            </button>
             <button class="source-row" type="button" data-view="operations">
               <span class="source-icon" aria-hidden="true">◷</span><span>Operations</span>
             </button>
@@ -226,19 +229,61 @@
         <div><p class="dialog-label">Owner direction</p><h2>Edit product task</h2></div>
         <button class="dialog-close" value="cancel" aria-label="Close">×</button>
       </header>
-      <p>Shape the product outcome and priority. Agents still own implementation status and evidence.</p>
+      <p>Give the work a short owner-facing headline, place it in a section, and describe the outcome. Agents still own implementation status and evidence.</p>
       <input id="owner-task-id" type="hidden">
       <label class="dialog-field">
-        <span>Product title</span>
-        <input id="owner-task-title" type="text" maxlength="160" required
+        <span>Owner headline</span>
+        <input id="owner-task-title" type="text" maxlength="80" required
+               placeholder="Name the thing and what should change"
                aria-describedby="owner-task-source-title">
       </label>
       <small id="owner-task-source-title" class="dialog-field-note"></small>
       <label class="dialog-field">
-        <span>What should change for people?</span>
+        <span>Section</span>
+        <input id="owner-task-section" type="text" maxlength="48" list="owner-task-section-suggestions"
+               placeholder="For example, UX &amp; interface"
+               aria-describedby="owner-task-section-note">
+      </label>
+      <small id="owner-task-section-note" class="dialog-field-note"></small>
+      <datalist id="owner-task-section-suggestions">
+        <option value="UX &amp; interface"></option>
+        <option value="Directory data"></option>
+        <option value="New features"></option>
+        <option value="Reliability &amp; automation"></option>
+        <option value="Safety &amp; privacy"></option>
+        <option value="Content &amp; outreach"></option>
+        <option value="Internal tools"></option>
+        <option value="Release &amp; operations"></option>
+        <option value="Research &amp; planning"></option>
+        <option value="Other product work"></option>
+      </datalist>
+      <label class="dialog-field">
+        <span>Need this by</span>
+        <input id="owner-task-due-date" type="date"
+               aria-describedby="owner-task-due-date-note">
+      </label>
+      <small id="owner-task-due-date-note" class="dialog-field-note">Optional. Dated work appears automatically in Calendar.</small>
+      <label class="dialog-field">
+        <span>Outcome for people</span>
         <textarea id="owner-task-intent" maxlength="1200" rows="4"
                   placeholder="Describe the intended product outcome in plain language."></textarea>
       </label>
+      <label class="dialog-field">
+        <span>Why this matters</span>
+        <textarea id="owner-task-importance" maxlength="1200" rows="3"
+                  placeholder="Explain the product reason and who benefits."></textarea>
+      </label>
+      <label class="dialog-field">
+        <span>Done when</span>
+        <textarea id="owner-task-done" maxlength="1200" rows="3"
+                  placeholder="Describe the visible result that means this work is finished."></textarea>
+      </label>
+      <fieldset class="owner-parts-editor">
+        <legend>Separate product outcomes</legend>
+        <p>Use this when one source task contains several independently finishable outcomes. Each outcome gets its own completion button.</p>
+        <div id="owner-task-parts" class="owner-part-editor-list"></div>
+        <button id="owner-task-add-part" class="control-button" type="button">Add outcome</button>
+      </fieldset>
       <label class="dialog-field">
         <span>Owner note</span>
         <textarea id="owner-task-note" maxlength="1000" rows="3"
@@ -270,6 +315,23 @@
       <div class="dialog-actions">
         <button class="control-button" value="cancel">Cancel</button>
         <button id="owner-complete-save" class="control-button primary-control" value="default">Mark complete</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="owner-product-complete-dialog" class="ui-dialog owner-complete-dialog">
+    <form id="owner-product-complete-form" method="dialog">
+      <header>
+        <div><p class="dialog-label">Product completion</p><h2>Mark this outcome complete?</h2></div>
+        <button class="dialog-close" value="cancel" aria-label="Close">×</button>
+      </header>
+      <p id="owner-product-complete-title" class="owner-complete-title"></p>
+      <p id="owner-product-complete-explanation">This records your product judgment. The observed agent status and evidence remain unchanged.</p>
+      <input id="owner-product-complete-task-id" type="hidden">
+      <input id="owner-product-complete-part-id" type="hidden">
+      <div class="dialog-actions">
+        <button class="control-button" value="cancel">Cancel</button>
+        <button id="owner-product-complete-save" class="control-button primary-control" value="default">Mark complete</button>
       </div>
     </form>
   </dialog>

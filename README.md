@@ -8,10 +8,17 @@ run-grouped changes, source health, and evidence dossiers remain available
 under that owner-facing summary.
 
 The owner can also shape active work without editing code or pretending to
-control implementation status. Priorities provides a durable drag-and-drop
-order plus product titles, intended outcomes, notes, and active/parked choices.
-Operations shows available commands, scheduled tasks, and their latest success
-or failure in plain language. An owner-only manual task has a separate **Mark
+control implementation status. Priorities provides a sectioned product overview,
+a top-five **Urgent** section derived from the durable order, a separate
+drag-and-drop ordering mode, concise owner headlines, intended outcomes, notes,
+need-by dates, and active/parked choices. Existing work starts in deterministic, editable
+product sections so a large queue is useful before manual cleanup.
+Calendar brings those dates together with owner-decision deadlines, deferred
+items returning for attention, and the next scheduled operations run.
+Operations groups recurring jobs by the agent or local runner responsible for
+them. Each job shows its model when known, plain-language purpose, cadence,
+next run, and current Healthy, Problematic, Running, Unknown, or Paused state.
+An owner-only manual task has a separate **Mark
 complete** action because the owner, not an agent, knows whether that action was
 performed.
 
@@ -25,6 +32,15 @@ admission and completion gates, a phone-sized Decision Deck, app-private local
 triage state, and optional read-only collectors.
 
 HFLedger is agent-agnostic. Any runtime that can read files and run a command can use the protocol. The reference implementation is Python standard library, local-first, and MIT licensed.
+
+For large inherited queues, the owner can replace implementation-shaped task
+wording with a concise headline, product outcome, reason it matters, and a
+plain-language definition of done. Agent evidence and audit diagnostics remain
+available as secondary detail without becoming the task explanation.
+When one inherited task bundles several results, the owner can split it into
+two to twelve product outcomes and mark each result complete independently.
+Completion is an owner judgment overlay; it never rewrites observed execution
+status or agent evidence.
 
 ## The contract
 
@@ -71,7 +87,8 @@ DEMO_HOME="$(mktemp -d)"
 
 Open [http://127.0.0.1:7171/](http://127.0.0.1:7171/). The fictional bakery
 Today view starts with production health, one waiting card of each kind, and
-the idea-to-production flow. Then open
+the idea-to-production flow. Calendar includes a dated product task and the
+next fictional scheduled runs. Then open
 [http://127.0.0.1:7171/deck](http://127.0.0.1:7171/deck) to review the five
 product-owner cards. Any outcome is written only to the disposable directory
 printed by `ledger-demo`.
@@ -164,10 +181,14 @@ The standard-library HTTP service provides:
   only when the required sources were actually observed;
 - Changes, All Work, Shipped Log, Watched, Projects, and an evidence inspector
   with explicit provenance and separate item-change/source-observation clocks;
-- Priorities with durable drag, accessible move controls, owner product edits,
-  and active/parked planning state that agents can read through the CLI;
-- Operations with a product-facing command catalog, schedule cadence, next run,
-  latest outcome, and explicit failed/stale/unconfigured states;
+- Priorities with a calm sectioned overview, a separate exact-order drag mode,
+  owner headlines, outcomes, need-by dates, and active/parked planning state that agents can
+  read through the CLI;
+- Calendar with a familiar month grid and agenda for task need-by dates,
+  decision deadlines, deferred-item returns, and next scheduled runs;
+- Operations with recurring jobs grouped across agents and local automation,
+  including runner, model when known, cadence, next run, product purpose, and
+  explicit health, stale, and unconfigured states;
 - a responsive board for queue, inbox, owner tasks, admitted asks, and outcomes;
 - a mobile decision deck with option selection, recommendation acceptance, snooze, need-more-info, completion, skip, and digest-bound undo where safe;
 - bounded deterministic Command-K search over projected metadata plus

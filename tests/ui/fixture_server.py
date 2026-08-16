@@ -39,6 +39,12 @@ def item(suffix, title, home, provenance, why, changed, project="Ovenlight", **e
         "whyHere": why,
         "homeSince": changed,
         "priority": extra.pop("priority", "P1" if home in {"needs-you", "disputed"} else "P2"),
+        "productBrief": extra.pop("productBrief", {
+            "problem": "The current fictional workflow makes this product outcome harder to deliver.",
+            "outcome": "People get a clearer and more dependable fictional product experience.",
+            "doneWhen": ["The intended product outcome is visible in the fictional workspace."],
+            "risks": "Keep the change reversible and preserve existing fictional records.",
+        }),
         "deadline": None,
         "provenance": provenance,
         "attentionKey": f"attention-{suffix:024x}" if home in {"needs-you", "disputed", "shipped-unverified"} else None,
@@ -160,6 +166,82 @@ LINKS = [
     {"id": "link-000000000000000000000002", "kind": "board-item", "label": "Open Decision Deck",
      "target": "/deck?context=mixed", "sourceId": "board:fictional", "authoritative": True, "copyable": True},
 ]
+
+
+def owner_control_fixture():
+    records = [
+        (ITEMS[4], "Make the mobile experience feel native", "UX & interface",
+         "People can move through the mobile experience without confusing browser-like behavior."),
+        (ITEMS[5], "Protect the test data boundary", "Safety & privacy",
+         "Fictional test records stay clearly separated from real customer information."),
+        (ITEMS[0], "Choose when to release", "New features",
+         "The team has one clear release window that customers can rely on."),
+        (ITEMS[3], "Notice when storage work stops", "Reliability & automation",
+         "Owners can see when a background process has quietly stopped making progress."),
+        (ITEMS[1], "Resolve the shipment disagreement", "Release & operations",
+         "The shipment record reflects one verified outcome."),
+        (ITEMS[2], "Corroborate the reported package", "Other product work", None),
+    ]
+    items = []
+    for rank, (work, title, section, intent) in enumerate(records, 1):
+        items.append({
+            "id": work["sourceItemRef"], "itemId": work["id"],
+            "sourceTitle": work["title"], "title": title,
+            "project": work["project"], "observedStatus": work["statusLabel"],
+            "sourceHome": work["primaryHome"], "intent": intent, "note": None,
+            "importance": None, "done": None,
+            "dueDate": None, "dueDateSource": None,
+            "parts": [], "partCounts": {"total": 0, "done": 0, "remaining": 0},
+            "ownerCompletedAt": None,
+            "section": section, "sectionSource": "automatic",
+            "disposition": "active", "rank": rank,
+            "overriddenFields": [field for field, value in (
+                ("title", title if title != work["title"] else None),
+                ("intent", intent)) if value],
+        })
+    items[0]["parts"] = [{
+        "id": "part-3000000000000001",
+        "title": "Simplify the first screen",
+        "outcome": "People immediately see the most useful next choice.",
+        "done": True,
+        "completedAt": OBSERVED,
+    }, {
+        "id": "part-3000000000000002",
+        "title": "Clarify the return path",
+        "outcome": "People can return without losing their place.",
+        "done": False,
+        "completedAt": None,
+    }]
+    items[0]["partCounts"] = {"total": 2, "done": 1, "remaining": 1}
+    items[0]["dueDate"] = "2026-07-22"
+    items[0]["dueDateSource"] = "owner"
+    parked = ITEMS[7]
+    items.append({
+        "id": parked["sourceItemRef"], "itemId": parked["id"],
+        "sourceTitle": parked["title"], "title": "Explore quieter analytics",
+        "project": parked["project"], "observedStatus": parked["statusLabel"],
+        "sourceHome": parked["primaryHome"], "intent": "Owners can understand broad trends without a noisy dashboard.",
+        "note": None, "dueDate": None, "dueDateSource": None,
+        "parts": [], "partCounts": {"total": 0, "done": 0, "remaining": 0},
+        "ownerCompletedAt": None,
+        "section": "Research & planning", "sectionSource": "automatic",
+        "disposition": "parked", "rank": None,
+        "overriddenFields": ["title", "intent"],
+    })
+    active_order = [record["id"] for record in items if record["disposition"] == "active"]
+    return {
+        "version": 5, "available": True, "revision": 7, "updatedAt": OBSERVED,
+        "sectionSuggestions": [
+            "UX & interface", "Directory data", "New features",
+            "Reliability & automation", "Safety & privacy", "Content & outreach",
+            "Internal tools", "Release & operations", "Research & planning",
+            "Other product work",
+        ],
+        "activeOrder": active_order, "completedOwnerTaskIds": [],
+        "completedQueueTaskIds": [],
+        "ownerTaskCompletions": [], "items": items,
+        "counts": {"active": len(active_order), "parked": 1, "completed": 0},
+    }
 
 
 def base_orientation():
@@ -329,6 +411,79 @@ class Handler(SimpleHTTPRequestHandler):
                 "ui": {"title": "HFLedger", "subtitle": "Fictional Prompt 9 test fixture", "accent": "#6956e8",
                        "readOnly": True, "localState": {"mode": "session", "available": True, "schemaVersion": 1, "reason": None}},
                 "orientation": {"version": 1}, "orientationV2": projected(context),
+                "ownerControl": owner_control_fixture(),
+                "calendar": {
+                    "version": 1, "today": "2026-07-18",
+                    "summary": "3 dated items",
+                    "counts": {
+                        "task_due": 1, "decision_due": 1,
+                        "scheduled_run": 1, "returns": 0, "total": 3,
+                    },
+                    "events": [{
+                        "id": "calendar-000000000000000000000001",
+                        "kind": "scheduled_run", "title": "Morning workspace refresh",
+                        "detail": "Makes new fictional work visible before planning.",
+                        "date": "2026-07-19", "startsAt": "2026-07-19T08:00:00Z",
+                        "allDay": False, "itemId": None, "destination": "operations",
+                        "status": "succeeded", "project": "",
+                    }, {
+                        "id": "calendar-000000000000000000000002",
+                        "kind": "decision_due", "title": "Choose the fictional release window",
+                        "detail": "Choose the release window the team should follow.",
+                        "date": "2026-07-20", "startsAt": None,
+                        "allDay": True, "itemId": ITEMS[0]["id"], "destination": None,
+                        "status": None, "project": "Ovenlight",
+                    }, {
+                        "id": "calendar-000000000000000000000003",
+                        "kind": "task_due", "title": "Make the mobile experience feel native",
+                        "detail": "People can move through the fictional mobile experience clearly.",
+                        "date": "2026-07-22", "startsAt": None,
+                        "allDay": True, "itemId": ITEMS[4]["id"], "destination": None,
+                        "status": None, "project": "Example Mobile",
+                    }],
+                },
+                "operations": {
+                    "version": 2, "connected": True, "state": "degraded",
+                    "summary": "1 recurring job needs attention.",
+                    "observedAt": OBSERVED, "commands": [],
+                    "schedules": [{
+                        "id": "morning-menu-brief",
+                        "label": "Prepare the morning menu brief",
+                        "description": "Summarizes the fictional bakery's menu choices before planning.",
+                        "cadence": "Every day at 7:00 AM",
+                        "runner": {"type": "agent", "name": "Claude Code", "model": "Configured default"},
+                        "enabled": True, "commandId": None,
+                        "nextRunAt": "2026-07-19T14:00:00+00:00",
+                        "health": "healthy",
+                        "lastRun": {"status": "succeeded", "startedAt": None, "completedAt": None,
+                                    "summary": "The menu brief was ready before planning."},
+                    }, {
+                        "id": "weekly-order-review",
+                        "label": "Review weekly order patterns",
+                        "description": "Highlights which fictional bakery orders need a product decision.",
+                        "cadence": "Every Monday at 8:30 AM",
+                        "runner": {"type": "agent", "name": "Codex", "model": "GPT-5"},
+                        "enabled": True, "commandId": None,
+                        "nextRunAt": "2026-07-20T15:30:00+00:00",
+                        "health": "problematic",
+                        "lastRun": {"status": "failed", "startedAt": None, "completedAt": None,
+                                    "summary": "The order review stopped before the summary was ready."},
+                    }, {
+                        "id": "counter-summary",
+                        "label": "Prepare the counter summary",
+                        "description": "Makes completed fictional orders visible to the morning team.",
+                        "cadence": "Every evening at 6:00 PM",
+                        "runner": {"type": "local_automation", "name": "Local automation", "model": "Python"},
+                        "enabled": True, "commandId": None,
+                        "nextRunAt": "2026-07-19T01:00:00+00:00",
+                        "health": "healthy",
+                        "lastRun": {"status": "succeeded", "startedAt": None, "completedAt": None,
+                                    "summary": "The counter summary was ready for the morning team."},
+                    }],
+                    "counts": {"commands": 0, "schedules": 3, "failing": 1,
+                               "runners": 3, "healthy": 2, "problematic": 1,
+                               "running": 0, "unknown": 0, "paused": 0},
+                },
             })
         if parsed.path == "/api/cards":
             context = self._context()
@@ -422,11 +577,19 @@ class Handler(SimpleHTTPRequestHandler):
         if target == NATIVE_STATIC / "index.html":
             body = body.replace(b'href="styles.css"', b'href="/settings-styles.css"')
             body = body.replace(b'<script src="main.js" defer></script>', b'')
-        appearance = parse_qs(parsed.query).get("appearance")
-        if target.suffix == ".html" and appearance == ["light"]:
-            body = body.replace(b'<html lang="en">', b'<html lang="en" data-appearance="light">')
-        elif target.suffix == ".html" and appearance == ["dark"]:
-            body = body.replace(b'<html lang="en">', b'<html lang="en" data-appearance="dark">')
+        query = parse_qs(parsed.query)
+        appearance = query.get("appearance", [""])[0]
+        text_size = query.get("textSize", [""])[0]
+        if target.suffix == ".html":
+            attributes = []
+            if appearance in ("light", "dark"):
+                attributes.append('data-appearance="%s"' % appearance)
+            if text_size in ("compact", "comfortable", "large", "extraLarge",
+                             "veryLarge", "maximum"):
+                attributes.append('data-text-size="%s"' % text_size)
+            if attributes:
+                replacement = ('<html lang="en" %s>' % " ".join(attributes)).encode("utf-8")
+                body = body.replace(b'<html lang="en">', replacement)
         content_type = {
             ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
             ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".webmanifest": "application/manifest+json",

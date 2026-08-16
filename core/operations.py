@@ -10,13 +10,15 @@ import unicodedata
 from . import admission
 
 
-VERSION = 1
+VERSION = 2
+SUPPORTED_VERSIONS = frozenset((1, VERSION))
 REPORT_RELATIVE_PATH = os.path.join("reports", "operations-latest.json")
 MAX_REPORT_BYTES = 256 * 1024
 MAX_COMMANDS = 64
 MAX_SCHEDULES = 128
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,127}$")
 RUN_STATUSES = frozenset(("succeeded", "failed", "running", "missed", "unknown"))
+RUNNER_TYPES = frozenset(("agent", "local_automation", "unknown"))
 SECRET_PATTERNS = (
     re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----", re.IGNORECASE),
     re.compile(r"(?:^|\s)(?:sk|rk)-[A-Za-z0-9_-]{12,}"),
@@ -86,8 +88,9 @@ def validate_report(value):
     _closed(value, "operations report", {
         "version", "observedAt", "staleAfterSeconds", "commands", "schedules",
     })
-    if value.get("version") != VERSION:
-        raise OperationsError("operations report version must be 1")
+    report_version = value.get("version")
+    if report_version not in SUPPORTED_VERSIONS:
+        raise OperationsError("operations report version must be 1 or 2")
     _timestamp(value.get("observedAt"), "observedAt")
     stale_after = value.get("staleAfterSeconds")
     if (not isinstance(stale_after, int) or isinstance(stale_after, bool) or
@@ -113,10 +116,13 @@ def validate_report(value):
     schedule_ids = set()
     for index, schedule in enumerate(schedules, 1):
         label = "schedule %d" % index
-        _closed(schedule, label, {
+        schedule_fields = {
             "id", "label", "description", "cadence", "enabled", "commandId",
             "nextRunAt", "lastRun",
-        })
+        }
+        if report_version >= 2:
+            schedule_fields.add("runner")
+        _closed(schedule, label, schedule_fields)
         schedule_id = _id(schedule.get("id"), "%s id" % label)
         if schedule_id in schedule_ids:
             raise OperationsError("schedule ids must be unique")
@@ -124,6 +130,14 @@ def validate_report(value):
         _one_line(schedule.get("label"), "%s label" % label, 120, True)
         _one_line(schedule.get("description"), "%s description" % label, 300, True)
         _one_line(schedule.get("cadence"), "%s cadence" % label, 160, True)
+        if report_version >= 2:
+            runner = schedule.get("runner")
+            _closed(runner, "%s runner" % label, {"type", "name", "model"})
+            if runner.get("type") not in RUNNER_TYPES:
+                raise OperationsError("%s runner type is invalid" % label)
+            _one_line(runner.get("name"), "%s runner name" % label, 80)
+            if runner.get("model") is not None:
+                _one_line(runner.get("model"), "%s runner model" % label, 120)
         if not isinstance(schedule.get("enabled"), bool):
             raise OperationsError("%s enabled must be boolean" % label)
         command_id = schedule.get("commandId")
@@ -202,40 +216,50 @@ def build_view(home, now=None):
             "observedAt": None,
             "commands": [],
             "schedules": [],
-            "counts": {"commands": 0, "schedules": 0, "failing": 0},
+            "counts": _empty_counts(),
         }
     if report is None:
         return {
             "version": VERSION,
             "connected": False,
             "state": "unconfigured",
-            "summary": "Commands and scheduled work have not been connected yet.",
+            "summary": "Commands and recurring jobs have not been connected yet.",
             "observedAt": None,
             "commands": [],
             "schedules": [],
-            "counts": {"commands": 0, "schedules": 0, "failing": 0},
+            "counts": _empty_counts(),
         }
     observed = _timestamp(report["observedAt"], "observedAt")
     stale = now - observed > datetime.timedelta(seconds=report["staleAfterSeconds"])
     schedules = json.loads(json.dumps(report["schedules"], ensure_ascii=False))
+    for schedule in schedules:
+        if "runner" not in schedule:
+            schedule["runner"] = {
+                "type": "unknown",
+                "name": "Runner not reported",
+                "model": None,
+            }
+        schedule["health"] = _schedule_health(schedule, stale)
     failing = sum(
-        isinstance(schedule.get("lastRun"), dict) and
-        schedule["lastRun"].get("status") in ("failed", "missed")
-        for schedule in schedules if schedule.get("enabled") is True
+        schedule["health"] == "problematic" for schedule in schedules
     )
     if stale:
         state = "stale"
         summary = "Operations monitoring has stopped updating."
     elif failing:
         state = "degraded"
-        summary = "%d scheduled task%s %s attention." % (
+        summary = "%d recurring job%s %s attention." % (
             failing,
             "" if failing == 1 else "s",
             "needs" if failing == 1 else "need",
         )
     else:
         state = "healthy"
-        summary = "Scheduled work is reporting normally."
+        summary = "Recurring jobs are reporting normally."
+    health_counts = {
+        status: sum(schedule["health"] == status for schedule in schedules)
+        for status in ("healthy", "problematic", "running", "unknown", "paused")
+    }
     return {
         "version": VERSION,
         "connected": True,
@@ -248,5 +272,38 @@ def build_view(home, now=None):
             "commands": len(report["commands"]),
             "schedules": len(schedules),
             "failing": failing,
+            "runners": len({schedule["runner"]["name"] for schedule in schedules}),
+            **health_counts,
         },
     }
+
+
+def _empty_counts():
+    return {
+        "commands": 0,
+        "schedules": 0,
+        "failing": 0,
+        "runners": 0,
+        "healthy": 0,
+        "problematic": 0,
+        "running": 0,
+        "unknown": 0,
+        "paused": 0,
+    }
+
+
+def _schedule_health(schedule, stale):
+    if schedule.get("enabled") is False:
+        return "paused"
+    if stale:
+        return "unknown"
+    last_run = schedule.get("lastRun")
+    if not isinstance(last_run, dict):
+        return "unknown"
+    return {
+        "succeeded": "healthy",
+        "failed": "problematic",
+        "missed": "problematic",
+        "running": "running",
+        "unknown": "unknown",
+    }.get(last_run.get("status"), "unknown")

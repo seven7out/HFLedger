@@ -16,9 +16,9 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from core import (admission, item_metadata, ledger, local_state, operations,
-                  orientation, owner_control, production_health, reconcile,
-                  schema, search_links)  # noqa: E402
+from core import (admission, calendar_view, item_metadata, ledger, local_state,
+                  operations, orientation, owner_control, production_health,
+                  reconcile, schema, search_links)  # noqa: E402
 from core.link_safety import resolve_projected_link  # noqa: E402
 from core.store import BoardStore, BoardValidationError, load_config, resolve_home  # noqa: E402
 
@@ -434,9 +434,21 @@ def build_board_view(runtime, context_id=None):
             "id": raw["id"],
             "itemId": projected["id"],
             "title": raw.get("title") or raw["id"],
+            "sourceIntent": (
+                (projected.get("productBrief", {}).get("outcome") or
+                 projected.get("productBrief", {}).get("problem"))
+                if isinstance(projected.get("productBrief"), dict) else None
+            ),
+            "sourceImportance": (
+                projected.get("productBrief", {}).get("problem")
+                if isinstance(projected.get("productBrief"), dict) else None
+            ),
             "project": projected.get("project"),
             "observedStatus": projected.get("statusLabel"),
             "sourceHome": projected.get("primaryHome"),
+            "sourceDueDate": (
+                projected["deadline"][:10]
+                if isinstance(projected.get("deadline"), str) else None),
         })
     try:
         owner_control_view = owner_control.build_view(
@@ -449,9 +461,10 @@ def build_board_view(runtime, context_id=None):
             "updatedAt": None,
             "activeOrder": [],
             "completedOwnerTaskIds": [],
+            "completedQueueTaskIds": [],
             "ownerTaskCompletions": [],
             "items": [],
-            "counts": {"active": 0, "parked": 0},
+            "counts": {"active": 0, "parked": 0, "completed": 0},
             "summary": "Owner priorities could not be read.",
         }
     owner_by_item_id = {
@@ -466,7 +479,16 @@ def build_board_view(runtime, context_id=None):
             "sourceTitle": item.get("title"),
             "title": directive["title"],
             "ownerIntent": directive["intent"],
+            "ownerImportance": directive["importance"],
+            "ownerDone": directive["done"],
             "ownerNote": directive["note"],
+            "ownerDueDate": directive["dueDate"],
+            "ownerDueDateSource": directive["dueDateSource"],
+            "ownerParts": directive["parts"],
+            "ownerPartCounts": directive["partCounts"],
+            "ownerProductCompletedAt": directive["ownerCompletedAt"],
+            "ownerSection": directive["section"],
+            "ownerSectionSource": directive["sectionSource"],
             "ownerDisposition": directive["disposition"],
             "ownerPriorityRank": directive["rank"],
         })
@@ -482,12 +504,33 @@ def build_board_view(runtime, context_id=None):
             owner_lines = [
                 "Owner disposition: %s" % directive["disposition"],
                 "Owner priority: %s" % (
-                    directive["rank"] if directive["rank"] is not None else "parked"),
+                    directive["rank"] if directive["rank"] is not None
+                    else directive["disposition"]),
             ]
             if directive["intent"]:
                 owner_lines.append("Owner intent: %s" % directive["intent"])
+            if directive["importance"]:
+                owner_lines.append(
+                    "Owner importance: %s" % directive["importance"])
+            if directive["done"]:
+                owner_lines.append("Owner done when: %s" % directive["done"])
             if directive["note"]:
                 owner_lines.append("Owner note: %s" % directive["note"])
+            if directive["dueDate"]:
+                owner_lines.append("Owner need-by date: %s" % directive["dueDate"])
+            for part in directive["parts"]:
+                owner_lines.append("Owner outcome [%s]: %s — %s" % (
+                    "complete" if part["done"] else "remaining",
+                    part["title"], part["outcome"]))
+            if directive["ownerCompletedAt"]:
+                owner_lines.append(
+                    "Owner product completion: reported complete at %s" %
+                    directive["ownerCompletedAt"])
+            if directive["section"] and directive["sectionSource"] == "owner":
+                owner_lines.append("Owner section: %s" % directive["section"])
+            elif directive["section"]:
+                owner_lines.append(
+                    "Starting section: %s (automatic)" % directive["section"])
             copy_context["text"] = "\n".join(
                 lines[:insert_at] + owner_lines + lines[insert_at:])[:4000]
     if owner_control_view.get("available") is True:
@@ -516,6 +559,14 @@ def build_board_view(runtime, context_id=None):
                     lines.append(replacement)
                 copy_context["text"] = "\n".join(lines)[:4000]
     decisions = board.get("decisions", {})
+    operations_view = operations.build_view(context.home, now=now_utc)
+    calendar = calendar_view.build_view(
+        owner_control_view.get("items", []),
+        orientation_v2.get("items", []),
+        decisions.get("items", []) if isinstance(decisions, dict) else [],
+        operations_view,
+        now=now_utc,
+    )
     response = runtime.shell(context.context_id)
     response.update({
         "project": board.get("meta", {}).get("project", context.config["project"]),
@@ -535,7 +586,8 @@ def build_board_view(runtime, context_id=None):
         "orientation": orientation.build(board, entries, context.config, now=now_utc),
         "orientationV2": orientation_v2,
         "ownerControl": owner_control_view,
-        "operations": operations.build_view(context.home, now=now_utc),
+        "operations": operations_view,
+        "calendar": calendar,
     })
     return response
 
@@ -1027,7 +1079,9 @@ def _owner_control_body(runtime, body):
     if (not isinstance(expected, int) or isinstance(expected, bool) or expected < 0):
         raise ApiError(400, "expectedRevision must be a non-negative integer")
     command = body.get("command")
-    if command not in ("set-task", "set-priority", "complete-owner-task"):
+    if command not in (
+            "set-task", "set-priority", "complete-owner-task",
+            "complete-queue-task", "complete-task-part"):
         raise ApiError(400, "command is invalid")
     if not isinstance(body.get("arguments"), dict):
         raise ApiError(400, "arguments must be an object")
@@ -1055,6 +1109,22 @@ def owner_control_command(runtime, body):
         changes = arguments.get("changes")
         if not isinstance(changes, dict) or not changes:
             raise ApiError(400, "changes must be a non-empty object")
+        if "parts" in changes:
+            current_parts = {
+                part["id"]: part for part in by_id[task_id].get("parts", [])
+                if isinstance(part, dict) and part.get("done") is True
+            }
+            requested = changes.get("parts")
+            requested_parts = {
+                part.get("id"): part for part in requested
+                if isinstance(part, dict)
+            } if isinstance(requested, list) else {}
+            for part_id, current_part in current_parts.items():
+                proposed = requested_parts.get(part_id)
+                if (proposed is None or proposed.get("title") != current_part["title"] or
+                        proposed.get("outcome") != current_part["outcome"]):
+                    raise ApiError(
+                        409, "completed product outcomes cannot be removed or rewritten")
         event = owner_control.append(
             context.home, expected, "task-set", task_id=task_id, changes=changes,
             now_fn=runtime.now_fn)
@@ -1071,7 +1141,7 @@ def owner_control_command(runtime, body):
         event = owner_control.append(
             context.home, expected, "priority-set", priority_order=task_ids,
             now_fn=runtime.now_fn)
-    else:
+    elif command == "complete-owner-task":
         if set(arguments) != {"taskId"}:
             raise ApiError(400, "complete-owner-task arguments must contain taskId")
         task_id = arguments.get("taskId")
@@ -1085,6 +1155,44 @@ def owner_control_command(runtime, body):
         event = owner_control.append(
             context.home, expected, "owner-task-complete", task_id=task_id,
             now_fn=runtime.now_fn)
+    elif command == "complete-queue-task":
+        if set(arguments) != {"taskId"}:
+            raise ApiError(400, "complete-queue-task arguments must contain taskId")
+        task_id = arguments.get("taskId")
+        item = by_id.get(task_id)
+        if item is None:
+            raise ApiError(404, "queue task is not available for owner completion")
+        if item.get("ownerCompletedAt"):
+            raise owner_control.OwnerControlError(
+                "this product task was already marked complete", 409,
+                "already-completed")
+        if item.get("parts") and item.get("partCounts", {}).get("remaining"):
+            raise ApiError(
+                409, "complete each remaining product outcome before completing the task")
+        event = owner_control.append(
+            context.home, expected, "queue-task-complete", task_id=task_id,
+            now_fn=runtime.now_fn)
+    else:
+        if set(arguments) != {"taskId", "partId"}:
+            raise ApiError(
+                400, "complete-task-part arguments must contain taskId and partId")
+        task_id = arguments.get("taskId")
+        item = by_id.get(task_id)
+        if item is None:
+            raise ApiError(404, "queue task is not available for owner completion")
+        part_id = arguments.get("partId")
+        part = next(
+            (value for value in item.get("parts", []) if value.get("id") == part_id),
+            None)
+        if part is None:
+            raise ApiError(404, "product outcome is not available for completion")
+        if part.get("done") is True:
+            raise owner_control.OwnerControlError(
+                "this product outcome was already marked complete", 409,
+                "already-completed")
+        event = owner_control.append(
+            context.home, expected, "task-part-complete", task_id=task_id,
+            changes={"partId": part_id}, now_fn=runtime.now_fn)
     refreshed = build_board_view(runtime, context_id)["ownerControl"]
     return {"event": event, "ownerControl": refreshed}
 

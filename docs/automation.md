@@ -92,14 +92,17 @@ Collector reports are observations. An agent must not treat a title, path, statu
 The owner-facing Operations view reads an optional private
 `reports/operations-latest.json` report. It is a closed observation contract,
 not a scheduler or command runner. Installations may map their explicitly known
-commands and scheduled tasks into that report with product labels, product
-descriptions, cadence, enabled state, next expected run, and the latest bounded
-outcome. Invocation text is secondary and secret-shaped text is rejected.
+commands and recurring jobs into that report with product labels, product
+descriptions, runner and model identity, cadence, enabled state, next expected
+run, and the latest bounded outcome. Invocation text is secondary and
+secret-shaped text is rejected.
 
 Use `ledger operations` to inspect the same projection agents receive. Missing,
 stale, invalid, failed, or missed reporting remains explicit. HFLedger never
 discovers arbitrary machine commands, scans scheduler configuration, installs a
 schedule, starts a process, or retries a failed task from this report.
+Installation adapters may combine explicitly configured jobs from multiple
+agent schedulers and local automation into one report.
 
 ## Installation adapters
 

@@ -138,7 +138,7 @@ class CliTests(unittest.TestCase):
         owner = self.run_cli(["owner-control"])
         self.assertEqual(owner.returncode, 0, owner.stderr)
         owner_view = json.loads(owner.stdout)
-        self.assertEqual(owner_view["version"], 1)
+        self.assertEqual(owner_view["version"], 5)
         self.assertEqual(owner_view["revision"], 0)
         operations = self.run_cli(["operations"])
         self.assertEqual(operations.returncode, 0, operations.stderr)

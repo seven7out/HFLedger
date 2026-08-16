@@ -54,13 +54,14 @@ The sidebar order is fixed:
 
 1. Today
 2. Priorities
-3. Operations
-4. Changes
-5. All Work
-6. Shipped Log
-7. Watched
-8. Projects
-9. coverage footer
+3. Calendar
+4. Operations
+5. Changes
+6. All Work
+7. Shipped Log
+8. Watched
+9. Projects
+10. coverage footer
 
 Today starts with the owner model in this exact order:
 
@@ -103,13 +104,44 @@ shipments.
 ## Priorities and owner task editing
 
 Priorities is the owner's durable product-direction surface. Active queue work
-appears in the order agents should consider it. The owner can drag a row, use
-the accessible Up and Down buttons, or edit:
+opens with **Urgent**, the first five items from the exact owner order, followed
+by explicit owner sections for scanning. Urgent is open by default; the topical
+groups start collapsed. Rank numbers still show the exact order agents should
+consider, while the separate **Exact order** mode provides drag and accessible
+Up and Down controls. Reordering automatically changes Urgent membership. The
+owner can edit:
 
-- the product-facing title;
+- a concise owner headline;
+- the product section;
 - the intended outcome for people;
-- one owner note; and
+- why the outcome matters;
+- the plain-language condition that means the work is done;
+- separate product outcomes when one source task bundles several results;
+- one owner note;
+- an optional **Need this by** date; and
 - whether the task is active or parked.
+
+HFLedger supplies editable automatic starting sections for older work using
+deterministic title rules. **Move…** opens the
+section field, where the owner can choose a suggested section or write a custom
+one. Owner choices always override automatic suggestions. The technical source
+title remains secondary provenance in Details and the edit sheet.
+
+Opening a queue task leads with its effective product brief: **What changes**,
+**Why it matters**, **What done looks like**, and **Risks or constraints**. An
+owner may clarify the source wording for the first three fields without changing
+the observed task. Missing product meaning is named directly; the interface
+never infers importance from rank, age, or an agent-reported status.
+Implementation-shaped legacy wording is omitted from the primary brief and
+labeled as needing translation.
+
+**Product outcomes** appears in the inspector. An unsplit task has **Mark
+product outcome complete**. A mixed task may contain two through twelve parts,
+each with its own **Mark complete** button. Completing a part leaves the other
+parts active. After every part is complete, the owner can mark the whole task
+complete; it leaves active ordering and remains visible under **Completed by
+owner**. These actions never alter the observed agent status shown in **Current
+state**.
 
 These edits append revisioned events to `owner-control.jsonl`. They never alter
 observed status, tests, releases, evidence, `board.json`, or `ledger.jsonl`.
@@ -123,13 +155,33 @@ action: **Mark complete**. A confirmation dialog explains that this records the
 owner's completed manual action, not agent implementation status. The item then
 leaves the active owner lane. Queue tasks never receive this control.
 
+## Calendar
+
+Calendar uses a Sunday-through-Saturday month grid with previous, next, and
+Today controls, followed by a chronological agenda. It is populated from real
+future-attention fields rather than generic activity timestamps:
+
+- active task need-by dates set by the owner or supplied by the source;
+- open owner-decision deadlines;
+- snoozed or deferred decisions returning for attention; and
+- the next run of each enabled schedule.
+
+Clicking task or decision events opens Details. Clicking a scheduled run opens
+Operations, where cadence and the latest outcome remain available. The task
+edit sheet is the only calendar write surface: changing **Need this by** appends
+an owner-control event and never changes the source task. Calendar does not
+write to an external calendar, execute scheduled work, or turn created/updated
+timestamps into commitments.
+
 ## Operations
 
-Operations answers what commands exist, what scheduled work is enabled, when it
-should run next, and whether its latest run succeeded or failed. Product purpose
-and consequence are primary; invocation text is hidden in a secondary
-disclosure. Failed, missed, stale, invalid, and unconfigured reporting cannot
-appear healthy.
+Operations answers which recurring jobs exist across agents and local
+automation, who runs each one, which model it uses when known, when it runs,
+what product purpose it serves, and whether it is Healthy, Problematic, Running,
+Unknown, or Paused. Jobs are grouped by runner and problematic jobs appear
+first within their group. Invocation text is hidden in a secondary disclosure.
+Failed, missed, stale, invalid, and unconfigured reporting cannot appear
+healthy.
 
 The source is an optional private `reports/operations-latest.json` observation.
 The view never runs a command, installs a schedule, retries work, or grants new
@@ -137,9 +189,12 @@ authority. `ledger operations` returns the same bounded projection for agents.
 
 ## Evidence, provenance, and two clocks
 
-The inspector explains why an item is present, one supported next action,
-bounded Copy Context, evidence, named missing observations, history, safe source
-links, and freshness. Every claim uses one exact provenance word:
+For queue tasks, evidence, named observation gaps, history, safe source links,
+and freshness are secondary and collapsed under **Agent evidence &
+diagnostics**. They explain the audit trail, not what the product work means or
+whether it deserves priority. The inspector still provides one supported next
+action and bounded Copy Context. Every evidence claim uses one exact provenance
+word:
 
 | Word | Meaning |
 | --- | --- |
@@ -252,7 +307,7 @@ Owner direction can still be written to its independent append-only lane.
 - **Browser-only:** supports session triage state but not native menus, durable
   state across process restarts, file watching, Dock badges, or native window
   restoration.
-- **Operations unconfigured:** says commands and scheduled work have not been
+- **Operations unconfigured:** says commands and recurring jobs have not been
   connected; it never substitutes an empty green success state.
 
 ## Keyboard and native menus
@@ -336,8 +391,9 @@ Owner product direction uses a separate closed route:
 POST /api/owner-control/command
 ```
 
-It accepts only revisioned `set-task` and `set-priority` commands and writes
-only `owner-control.jsonl`.
+It accepts only revisioned task direction, priority ordering, owner-only manual
+completion, product-part completion, and product-task completion commands. It
+writes only `owner-control.jsonl`.
 
 Commands are closed absolute set operations with an expected revision. The
 request cannot provide a filesystem path, workspace id, replacement document,

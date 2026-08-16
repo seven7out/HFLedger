@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- Expanded Operations into a cross-agent recurring-jobs registry. Jobs are
+  grouped by agent or local runner and show the model when known, product
+  purpose, cadence, next run, and a derived owner-facing health state. Existing
+  version-1 reports remain readable without claiming runner details they never
+  supplied.
+- Added an owner calendar with a familiar month grid and agenda. It populates
+  automatically from task need-by dates, owner-decision deadlines, deferred
+  returns, and enabled schedules' next runs while excluding routine activity
+  timestamps. Owners can set a task date from Priorities and open each calendar
+  event in the relevant Details or Operations view.
+- Added owner-facing product-outcome splits for mixed queue tasks. Each bounded
+  outcome has its own plain-language result and one-way **Mark complete**
+  control; an unsplit task can also be marked complete as an owner product
+  judgment. Observed agent status and evidence remain unchanged and visible.
+- Made queue-task details owner-readable by leading with the authoritative
+  product change, reason, definition of done, and risks. Priority rows now use
+  supplied product outcomes automatically, while evidence gaps, freshness,
+  history, sources, and provenance are grouped under a collapsed secondary
+  diagnostic disclosure. Owner controls can supply a clearer outcome,
+  importance, and definition of done while older control journals remain
+  readable.
+- Made large priority queues scannable with a default **By section** overview,
+  concise owner headlines, one-line outcomes, custom product sections, and a
+  separate **Exact order** mode for drag-and-drop agent sequencing. Existing
+  work receives editable automatic starting sections; owner moves always win
+  and never change the exact priority order. The first five active items now
+  appear in an open **Urgent** group whose membership always follows Exact order.
 - Added an explicit **Mark complete** action for owner-only manual tasks. The
   one-way owner report uses the revisioned owner-control journal, immediately
   leaves the active owner lane, and never changes agent-reported work status.
