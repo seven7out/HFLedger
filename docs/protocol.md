@@ -437,7 +437,7 @@ Escrow is a successful durable outcome, not an error. A later reviewed workflow 
 
 ### 9.4 Owner product direction
 
-`owner-control.jsonl` is a supplemental version-3 journal, not a replacement
+`owner-control.jsonl` is a supplemental version-4 journal, not a replacement
 for the event ledger or materialized board. Each private, newline-terminated
 JSON event has a contiguous revision and SHA-256 predecessor link. `task-set`
 events set or clear a concise owner headline, product section, intended outcome,
@@ -447,10 +447,18 @@ a duplicate-free ordered list of active queue ids. `owner-task-complete` is a
 one-way event for an exact current owner-task id and carries no changes or
 priority payload.
 
-Readers accept existing version-1 and version-2 events with new version-3
-events in the same hash-chained journal. Version 2 added the bounded `section`
-task field. Version 3 adds `importance` and `done`; it does not rewrite old
-events or store inferred values in the journal.
+Version 4 `task-set` events may carry `parts`, a closed list of two through
+twelve `{id, title, outcome}` objects. `task-part-complete` records one exact
+part id, while `queue-task-complete` records completion of the whole product
+task. Both are one-way owner reports. They affect the owner-control projection
+and active priority order only; the observed queue status and evidence remain
+unchanged.
+
+Readers accept existing version-1, version-2, and version-3 events with new
+version-4 events in the same hash-chained journal. Version 2 added the bounded
+`section` task field. Version 3 added `importance` and `done`. Version 4 adds
+product parts and one-way product completion; it does not rewrite old events or
+store inferred values in the journal.
 
 The owner-control projection may supply a deterministic automatic starting
 section when no `section` event exists. It reports `sectionSource: automatic`,

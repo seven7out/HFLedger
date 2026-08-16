@@ -269,6 +269,12 @@
         <textarea id="owner-task-done" maxlength="1200" rows="3"
                   placeholder="Describe the visible result that means this work is finished."></textarea>
       </label>
+      <fieldset class="owner-parts-editor">
+        <legend>Separate product outcomes</legend>
+        <p>Use this when one source task contains several independently finishable outcomes. Each outcome gets its own completion button.</p>
+        <div id="owner-task-parts" class="owner-part-editor-list"></div>
+        <button id="owner-task-add-part" class="control-button" type="button">Add outcome</button>
+      </fieldset>
       <label class="dialog-field">
         <span>Owner note</span>
         <textarea id="owner-task-note" maxlength="1000" rows="3"
@@ -300,6 +306,23 @@
       <div class="dialog-actions">
         <button class="control-button" value="cancel">Cancel</button>
         <button id="owner-complete-save" class="control-button primary-control" value="default">Mark complete</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="owner-product-complete-dialog" class="ui-dialog owner-complete-dialog">
+    <form id="owner-product-complete-form" method="dialog">
+      <header>
+        <div><p class="dialog-label">Product completion</p><h2>Mark this outcome complete?</h2></div>
+        <button class="dialog-close" value="cancel" aria-label="Close">×</button>
+      </header>
+      <p id="owner-product-complete-title" class="owner-complete-title"></p>
+      <p id="owner-product-complete-explanation">This records your product judgment. The observed agent status and evidence remain unchanged.</p>
+      <input id="owner-product-complete-task-id" type="hidden">
+      <input id="owner-product-complete-part-id" type="hidden">
+      <div class="dialog-actions">
+        <button class="control-button" value="cancel">Cancel</button>
+        <button id="owner-product-complete-save" class="control-button primary-control" value="default">Mark complete</button>
       </div>
     </form>
   </dialog>

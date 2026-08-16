@@ -115,6 +115,7 @@ owner can edit:
 - the intended outcome for people;
 - why the outcome matters;
 - the plain-language condition that means the work is done;
+- separate product outcomes when one source task bundles several results;
 - one owner note; and
 - whether the task is active or parked.
 
@@ -131,6 +132,14 @@ the observed task. Missing product meaning is named directly; the interface
 never infers importance from rank, age, or an agent-reported status.
 Implementation-shaped legacy wording is omitted from the primary brief and
 labeled as needing translation.
+
+**Product outcomes** appears in the inspector. An unsplit task has **Mark
+product outcome complete**. A mixed task may contain two through twelve parts,
+each with its own **Mark complete** button. Completing a part leaves the other
+parts active. After every part is complete, the owner can mark the whole task
+complete; it leaves active ordering and remains visible under **Completed by
+owner**. These actions never alter the observed agent status shown in **Current
+state**.
 
 These edits append revisioned events to `owner-control.jsonl`. They never alter
 observed status, tests, releases, evidence, `board.json`, or `ledger.jsonl`.
@@ -360,8 +369,9 @@ Owner product direction uses a separate closed route:
 POST /api/owner-control/command
 ```
 
-It accepts only revisioned `set-task` and `set-priority` commands and writes
-only `owner-control.jsonl`.
+It accepts only revisioned task direction, priority ordering, owner-only manual
+completion, product-part completion, and product-task completion commands. It
+writes only `owner-control.jsonl`.
 
 Commands are closed absolute set operations with an expected revision. The
 request cannot provide a filesystem path, workspace id, replacement document,

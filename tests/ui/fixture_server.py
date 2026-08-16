@@ -189,12 +189,29 @@ def owner_control_fixture():
             "sourceTitle": work["title"], "title": title,
             "project": work["project"], "observedStatus": work["statusLabel"],
             "sourceHome": work["primaryHome"], "intent": intent, "note": None,
+            "importance": None, "done": None,
+            "parts": [], "partCounts": {"total": 0, "done": 0, "remaining": 0},
+            "ownerCompletedAt": None,
             "section": section, "sectionSource": "automatic",
             "disposition": "active", "rank": rank,
             "overriddenFields": [field for field, value in (
                 ("title", title if title != work["title"] else None),
                 ("intent", intent)) if value],
         })
+    items[0]["parts"] = [{
+        "id": "part-3000000000000001",
+        "title": "Simplify the first screen",
+        "outcome": "People immediately see the most useful next choice.",
+        "done": True,
+        "completedAt": OBSERVED,
+    }, {
+        "id": "part-3000000000000002",
+        "title": "Clarify the return path",
+        "outcome": "People can return without losing their place.",
+        "done": False,
+        "completedAt": None,
+    }]
+    items[0]["partCounts"] = {"total": 2, "done": 1, "remaining": 1}
     parked = ITEMS[7]
     items.append({
         "id": parked["sourceItemRef"], "itemId": parked["id"],
@@ -207,7 +224,7 @@ def owner_control_fixture():
     })
     active_order = [record["id"] for record in items if record["disposition"] == "active"]
     return {
-        "version": 2, "available": True, "revision": 7, "updatedAt": OBSERVED,
+        "version": 4, "available": True, "revision": 7, "updatedAt": OBSERVED,
         "sectionSuggestions": [
             "UX & interface", "Directory data", "New features",
             "Reliability & automation", "Safety & privacy", "Content & outreach",
@@ -216,7 +233,7 @@ def owner_control_fixture():
         ],
         "activeOrder": active_order, "completedOwnerTaskIds": [],
         "ownerTaskCompletions": [], "items": items,
-        "counts": {"active": len(active_order), "parked": 1},
+        "counts": {"active": len(active_order), "parked": 1, "completed": 0},
     }
 
 

@@ -100,6 +100,7 @@ const state = {
   draggedOwnerTaskId: null,
   priorityViewMode: "sections",
   parkedPriorityExpanded: false,
+  completedPriorityExpanded: false,
   collapsedPrioritySections: new Set(
     PRIORITY_SECTION_SUGGESTIONS.map((section) => section.toLocaleLowerCase())),
 };
@@ -1105,6 +1106,87 @@ function ownerTask(taskId) {
   return (state.data?.ownerControl?.items || []).find((item) => item.id === taskId) || null;
 }
 
+function newOwnerPartId() {
+  const bytes = new Uint8Array(8);
+  globalThis.crypto.getRandomValues(bytes);
+  return `part-${[...bytes].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function ownerPartDefinition(part) {
+  return {
+    id: safeText(part?.id, 32),
+    title: safeText(part?.title, 80),
+    outcome: safePlainText(part?.outcome, 600),
+  };
+}
+
+function appendOwnerPartEditor(part = {}) {
+  const definition = ownerPartDefinition(part);
+  const done = part?.done === true;
+  const row = node("div", `owner-part-editor-row${done ? " is-complete" : ""}`);
+  row.dataset.partId = definition.id || newOwnerPartId();
+  row.dataset.done = String(done);
+  const heading = node("div", "owner-part-editor-heading");
+  heading.append(node("strong", "", done ? "Completed outcome" : "Product outcome"));
+  const remove = button("control-button owner-part-remove", "Remove", () => {
+    row.remove();
+    $("#owner-task-add-part").disabled = $("#owner-task-parts").children.length >= 12;
+  });
+  remove.type = "button";
+  remove.disabled = done;
+  heading.append(remove);
+  const titleLabel = node("label", "dialog-field");
+  titleLabel.append(node("span", "", "Short headline"));
+  const title = document.createElement("input");
+  title.type = "text";
+  title.maxLength = 80;
+  title.required = true;
+  title.value = definition.title;
+  title.disabled = done;
+  title.placeholder = "Name one independently finishable result";
+  title.className = "owner-part-title";
+  titleLabel.append(title);
+  const outcomeLabel = node("label", "dialog-field");
+  outcomeLabel.append(node("span", "", "What changes for people"));
+  const outcome = document.createElement("textarea");
+  outcome.maxLength = 600;
+  outcome.rows = 2;
+  outcome.required = true;
+  outcome.value = definition.outcome;
+  outcome.disabled = done;
+  outcome.placeholder = "Describe the visible product result in plain language.";
+  outcome.className = "owner-part-outcome";
+  outcomeLabel.append(outcome);
+  row.append(heading, titleLabel, outcomeLabel);
+  $("#owner-task-parts").append(row);
+  $("#owner-task-add-part").disabled = $("#owner-task-parts").children.length >= 12;
+  if (!done && !definition.title) title.focus();
+}
+
+function renderOwnerPartEditor(parts) {
+  $("#owner-task-parts").replaceChildren();
+  (Array.isArray(parts) ? parts : []).forEach((part) => appendOwnerPartEditor(part));
+  $("#owner-task-add-part").disabled = $("#owner-task-parts").children.length >= 12;
+}
+
+function collectOwnerPartDefinitions() {
+  const rows = [...$("#owner-task-parts").children];
+  if (rows.length === 1) throw new Error("Add at least two outcomes, or remove the split.");
+  const parts = rows.map((row) => ({
+    id: safeText(row.dataset.partId, 32),
+    title: safeText(row.querySelector(".owner-part-title")?.value, 80),
+    outcome: safePlainText(row.querySelector(".owner-part-outcome")?.value, 600),
+  }));
+  if (parts.some((part) => !part.id || !part.title || !part.outcome)) {
+    throw new Error("Every product outcome needs a short headline and a plain-language result.");
+  }
+  const normalizedTitles = parts.map((part) => part.title.toLocaleLowerCase());
+  if (new Set(normalizedTitles).size !== normalizedTitles.length) {
+    throw new Error("Product outcome headlines must be unique within a task.");
+  }
+  return parts;
+}
+
 async function saveOwnerOrder(order, message = "Priority order saved for agents.") {
   try {
     await ownerCommand("set-priority", { taskIds: order });
@@ -1134,6 +1216,7 @@ function openOwnerTaskEditor(taskId, { focusSection = false } = {}) {
   $("#owner-task-intent").value = safePlainText(item.intent, 1200);
   $("#owner-task-importance").value = safePlainText(item.importance, 1200);
   $("#owner-task-done").value = safePlainText(item.done, 1200);
+  renderOwnerPartEditor(item.parts);
   $("#owner-task-note").value = safePlainText(item.note, 1000);
   $("#owner-task-disposition").value = item.disposition === "parked" ? "parked" : "active";
   const sourceTitle = safeText(item.sourceTitle, 160);
@@ -1150,11 +1233,18 @@ async function saveOwnerTask() {
   const taskId = safeText($("#owner-task-id").value, 256);
   const item = ownerTask(taskId);
   if (!item) return announce("That task is no longer available for owner editing.");
+  let parts;
+  try {
+    parts = collectOwnerPartDefinitions();
+  } catch (error) {
+    return announce(error.message);
+  }
   const desired = {
     title: safeText($("#owner-task-title").value, 160),
     intent: safeText($("#owner-task-intent").value, 1200),
     importance: safeText($("#owner-task-importance").value, 1200),
     done: safeText($("#owner-task-done").value, 1200),
+    parts,
     note: safeText($("#owner-task-note").value, 1000),
     section: safeText($("#owner-task-section").value, 48),
     disposition: $("#owner-task-disposition").value === "parked" ? "parked" : "active",
@@ -1171,6 +1261,10 @@ async function saveOwnerTask() {
     if (desired[field] !== safeText(item[field], limit)) {
       changed[field] = desired[field] || null;
     }
+  }
+  const currentParts = (item.parts || []).map(ownerPartDefinition);
+  if (JSON.stringify(desired.parts) !== JSON.stringify(currentParts)) {
+    changed.parts = desired.parts.length ? desired.parts : null;
   }
   if (desired.disposition !== item.disposition) changed.disposition = desired.disposition;
   if (!Object.keys(changed).length) {
@@ -1216,6 +1310,39 @@ async function completeOwnerTask() {
   }
 }
 
+function openOwnerProductCompletion(item, part = null) {
+  const taskId = safeText(item?.sourceItemRef, 256);
+  if (!taskId) return announce("This product task has no stable reference.");
+  $("#owner-product-complete-task-id").value = taskId;
+  $("#owner-product-complete-part-id").value = safeText(part?.id, 32);
+  $("#owner-product-complete-title").textContent = safeText(
+    part?.title || item?.title, 180) || "Product outcome";
+  $("#owner-product-complete-explanation").textContent = part
+    ? "This records that this product outcome is complete. Other outcomes and the observed agent status remain unchanged."
+    : "This records your product judgment that the whole outcome is complete. The observed agent status and evidence remain unchanged.";
+  $("#owner-product-complete-dialog").showModal();
+  $("#owner-product-complete-save").focus();
+}
+
+async function completeOwnerProductOutcome() {
+  const taskId = safeText($("#owner-product-complete-task-id").value, 256);
+  const partId = safeText($("#owner-product-complete-part-id").value, 32);
+  if (!taskId) return announce("This product task has no stable reference.");
+  $("#owner-product-complete-save").disabled = true;
+  try {
+    await ownerCommand(
+      partId ? "complete-task-part" : "complete-queue-task",
+      partId ? { taskId, partId } : { taskId },
+    );
+    $("#owner-product-complete-dialog").close();
+    announce(partId ? "Product outcome marked complete." : "Product task marked complete.");
+  } catch (error) {
+    announce(error.message);
+  } finally {
+    $("#owner-product-complete-save").disabled = false;
+  }
+}
+
 function renderPriorityRow(item, index, total, { ordering = true, sectionMove = true } = {}) {
   const row = node("article", `owner-priority-row${ordering ? " is-ordering" : " is-overview"}`);
   row.draggable = ordering;
@@ -1230,6 +1357,10 @@ function renderPriorityRow(item, index, total, { ordering = true, sectionMove = 
   copy.append(title);
   if (item.intent) copy.append(node("p", "", item.intent));
   else copy.append(node("span", "priority-missing-outcome", "Outcome needed"));
+  if (item.partCounts?.total) copy.append(node(
+    "span", "priority-part-count",
+    `${item.partCounts.done} of ${item.partCounts.total} outcomes complete`,
+  ));
   copy.append(node("small", "", [item.project, item.observedStatus].filter(Boolean).join(" · ")));
   const actions = node("div", "priority-actions");
   if (ordering) {
@@ -1361,6 +1492,22 @@ function renderParkedPrioritySection(parked, content) {
   return wrapper;
 }
 
+function renderCompletedPrioritySection(completed, content) {
+  const wrapper = node("section", "ledger-section owner-priority-section");
+  const toggle = button("section-heading priority-section-disclosure", "", () => {
+    state.completedPriorityExpanded = !state.completedPriorityExpanded;
+    renderCenter();
+  });
+  toggle.setAttribute("aria-expanded", String(state.completedPriorityExpanded));
+  toggle.append(
+    node("span", "priority-section-disclosure-label", `${state.completedPriorityExpanded ? "⌄" : "›"} Completed by owner`),
+    node("span", "section-count", completed.length),
+  );
+  wrapper.append(toggle);
+  if (state.completedPriorityExpanded) wrapper.append(content);
+  return wrapper;
+}
+
 function renderPriorities() {
   const model = state.data?.ownerControl;
   const fragment = document.createDocumentFragment();
@@ -1401,6 +1548,23 @@ function renderPriorities() {
   });
   if (!parked.length) parkedList.append(emptyState("Nothing is parked", "All owner-controlled work is active."));
   fragment.append(renderParkedPrioritySection(parked, parkedList));
+
+  const completed = (model.items || []).filter((item) => item.disposition === "completed");
+  const completedList = node("div", "owner-parked-list");
+  completed.forEach((item) => {
+    const row = node("article", "owner-parked-row");
+    const copy = node("div", "priority-copy");
+    copy.append(
+      node("strong", "", item.title || item.id),
+      node("p", "", "The owner reported that the product outcome is complete."),
+      node("small", "", [item.project, `Observed status: ${item.observedStatus || "Unknown"}`].filter(Boolean).join(" · ")),
+    );
+    row.append(copy);
+    completedList.append(row);
+  });
+  if (!completed.length) completedList.append(emptyState(
+    "No owner-completed work", "Completed product outcomes will remain available here."));
+  fragment.append(renderCompletedPrioritySection(completed, completedList));
   return fragment;
 }
 
@@ -1884,6 +2048,51 @@ function renderItemInspector(target, item) {
         : "No specific product risk or constraint was supplied."),
     ));
     if (item.ownerNote) wrapper.append(inspectorSection("Owner note", item.ownerNote));
+
+    const outcomes = node("div", "owner-product-outcomes");
+    const parts = Array.isArray(item.ownerParts) ? item.ownerParts : [];
+    if (parts.length) {
+      const completedCount = parts.filter((part) => part.done === true).length;
+      outcomes.append(node(
+        "p", "owner-outcomes-summary",
+        `${completedCount} of ${parts.length} product outcomes complete.`,
+      ));
+      for (const part of parts) {
+        const row = node("article", `owner-outcome-row${part.done ? " is-complete" : ""}`);
+        const copy = node("div", "owner-outcome-copy");
+        copy.append(
+          node("strong", "", part.title || "Untitled outcome"),
+          node("p", "", part.outcome || "No product result was supplied."),
+        );
+        const stateLabel = node("span", "owner-outcome-state", part.done ? "Complete" : "Remaining");
+        row.append(stateLabel, copy);
+        if (!part.done && editable) row.append(button(
+          "control-button primary-control", "Mark complete",
+          () => openOwnerProductCompletion(item, part),
+        ));
+        outcomes.append(row);
+      }
+      if (completedCount === parts.length && !item.ownerProductCompletedAt && editable) {
+        outcomes.append(button(
+          "control-button primary-control owner-complete-whole",
+          "Mark whole task complete", () => openOwnerProductCompletion(item),
+        ));
+      }
+    } else if (item.ownerProductCompletedAt) {
+      outcomes.append(node(
+        "p", "owner-completion-recorded",
+        "You marked this product outcome complete. The observed agent status remains visible below.",
+      ));
+    } else if (editable) {
+      outcomes.append(
+        node("p", "inspector-muted", "This task has one product outcome. Split it in Edit when different parts can finish independently."),
+        button(
+          "control-button primary-control", "Mark product outcome complete",
+          () => openOwnerProductCompletion(item),
+        ),
+      );
+    }
+    wrapper.append(inspectorSection("Product outcomes", outcomes));
 
     const workflow = node("div", "workflow-state-summary");
     workflow.append(
@@ -2784,6 +2993,11 @@ function handleKeyboard(event) {
       $("#owner-complete-dialog").close();
       return;
     }
+    if ($("#owner-product-complete-dialog").open) {
+      event.preventDefault();
+      $("#owner-product-complete-dialog").close();
+      return;
+    }
     if (state.quickLookOpen) {
       event.preventDefault();
       closeQuickLook();
@@ -2906,10 +3120,18 @@ function boot() {
     if (event.submitter?.value === "cancel") return $("#owner-task-dialog").close();
     saveOwnerTask();
   });
+  $("#owner-task-add-part").addEventListener("click", () => {
+    if ($("#owner-task-parts").children.length < 12) appendOwnerPartEditor();
+  });
   $("#owner-complete-form").addEventListener("submit", (event) => {
     event.preventDefault();
     if (event.submitter?.value === "cancel") return $("#owner-complete-dialog").close();
     completeOwnerTask();
+  });
+  $("#owner-product-complete-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (event.submitter?.value === "cancel") return $("#owner-product-complete-dialog").close();
+    completeOwnerProductOutcome();
   });
   document.addEventListener("keydown", handleKeyboard);
   document.addEventListener("pointerdown", (event) => {

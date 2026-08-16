@@ -12,21 +12,30 @@ import unicodedata
 from . import admission
 
 
-VERSION = 3
-SUPPORTED_VERSIONS = (1, 2, VERSION)
+VERSION = 4
+SUPPORTED_VERSIONS = (1, 2, 3, VERSION)
 FILE_NAME = "owner-control.jsonl"
 LOCK_NAME = "owner-control.lock"
 MAX_FILE_BYTES = 16 * 1024 * 1024
 MAX_EVENTS = 10_000
 MAX_PRIORITY_ITEMS = 500
+MAX_TASK_PARTS = 12
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/#~-]{0,255}$")
-ACTIONS = frozenset(("task-set", "priority-set", "owner-task-complete"))
+PART_ID_RE = re.compile(r"^part-[0-9a-f]{16}$")
+ACTIONS = frozenset((
+    "task-set", "priority-set", "owner-task-complete",
+    "queue-task-complete", "task-part-complete",
+))
 TASK_FIELDS_BY_VERSION = {
     1: frozenset(("title", "intent", "note", "disposition")),
     2: frozenset(("title", "intent", "note", "section", "disposition")),
     3: frozenset((
         "title", "intent", "importance", "done", "note", "section",
         "disposition",
+    )),
+    4: frozenset((
+        "title", "intent", "importance", "done", "note", "section",
+        "parts", "disposition",
     )),
 }
 EVENT_FIELDS = frozenset((
@@ -211,6 +220,33 @@ def _task_id(value):
     return value
 
 
+def _part_id(value):
+    if not isinstance(value, str) or PART_ID_RE.fullmatch(value) is None:
+        raise OwnerControlError("partId is invalid")
+    return value
+
+
+def _parts(value):
+    if value is None:
+        return None
+    if not isinstance(value, list) or not 2 <= len(value) <= MAX_TASK_PARTS:
+        raise OwnerControlError("parts must contain 2 through %d outcomes" % MAX_TASK_PARTS)
+    seen = set()
+    for index, part in enumerate(value):
+        if not isinstance(part, dict) or set(part) != {"id", "title", "outcome"}:
+            raise OwnerControlError(
+                "parts[%d] must contain id, title, and outcome" % index)
+        part_id = _part_id(part.get("id"))
+        if part_id in seen:
+            raise OwnerControlError("parts must not contain duplicate ids")
+        seen.add(part_id)
+        _plain_text(part.get("title"), "parts[%d].title" % index, 80, allow_null=False)
+        _plain_text(
+            part.get("outcome"), "parts[%d].outcome" % index, 600,
+            allow_null=False)
+    return value
+
+
 def _timestamp(value):
     if not isinstance(value, str) or len(value) > 64:
         raise OwnerControlError("recordedAt must be a bounded ISO-8601 timestamp")
@@ -234,8 +270,8 @@ def validate_event(event, expected_revision=None, expected_prior=None):
         raise OwnerControlError(
             "owner-control event has unsupported field(s): %s" % ", ".join(unknown))
     schema_version = event.get("schemaVersion")
-    if schema_version not in SUPPORTED_VERSIONS:
-        raise OwnerControlError("owner-control schemaVersion must be 1, 2, or 3")
+    if schema_version not in SUPPORTED_VERSIONS or isinstance(schema_version, bool):
+        raise OwnerControlError("owner-control schemaVersion must be 1, 2, 3, or 4")
     revision = event.get("revision")
     if (not isinstance(revision, int) or isinstance(revision, bool) or revision < 1 or
             revision > MAX_EVENTS):
@@ -254,6 +290,8 @@ def validate_event(event, expected_revision=None, expected_prior=None):
     action = event.get("action")
     if action not in ACTIONS:
         raise OwnerControlError("owner-control action is invalid")
+    if action in ("queue-task-complete", "task-part-complete") and schema_version < 4:
+        raise OwnerControlError("this owner-control action requires schemaVersion 4")
     if action == "task-set":
         _task_id(event.get("taskId"))
         changes = event.get("changes")
@@ -275,6 +313,8 @@ def validate_event(event, expected_revision=None, expected_prior=None):
             _plain_text(changes["note"], "note", 1000)
         if "section" in changes:
             _plain_text(changes["section"], "section", 48)
+        if "parts" in changes:
+            _parts(changes["parts"])
         if ("disposition" in changes and
                 changes["disposition"] not in (None, "active", "parked")):
             raise OwnerControlError("disposition must be active, parked, or null")
@@ -290,11 +330,21 @@ def validate_event(event, expected_revision=None, expected_prior=None):
             _task_id(item_id)
         if len(order) != len(set(order)):
             raise OwnerControlError("priorityOrder must not contain duplicates")
-    else:
+    elif action in ("owner-task-complete", "queue-task-complete"):
         _task_id(event.get("taskId"))
         if event.get("changes") is not None or event.get("priorityOrder") is not None:
             raise OwnerControlError(
-                "owner-task-complete changes and priorityOrder must be null")
+                "%s changes and priorityOrder must be null" % action)
+    else:
+        _task_id(event.get("taskId"))
+        changes = event.get("changes")
+        if not isinstance(changes, dict) or set(changes) != {"partId"}:
+            raise OwnerControlError(
+                "task-part-complete changes must contain only partId")
+        _part_id(changes.get("partId"))
+        if event.get("priorityOrder") is not None:
+            raise OwnerControlError(
+                "task-part-complete priorityOrder must be null")
     return event
 
 
@@ -418,12 +468,32 @@ def fold(events):
     overrides = {}
     priority_order = []
     owner_task_completions = {}
+    queue_task_completions = {}
+    completed_parts = {}
     updated_at = None
     for event in events:
         updated_at = event["recordedAt"]
         if event["action"] == "task-set":
             current = overrides.setdefault(event["taskId"], {})
             for field, value in event["changes"].items():
+                if (field == "parts" and value is None and
+                        completed_parts.get(event["taskId"])):
+                    value = current.get("parts")
+                if field == "parts" and value is not None:
+                    prior_parts = {
+                        part["id"]: part for part in current.get("parts", [])
+                        if isinstance(part, dict) and isinstance(part.get("id"), str)
+                    }
+                    completed = completed_parts.get(event["taskId"], {})
+                    value = [
+                        prior_parts.get(part["id"], part)
+                        if part["id"] in completed else part
+                        for part in value
+                    ]
+                    present = {part["id"] for part in value}
+                    value.extend(
+                        prior_parts[part_id] for part_id in completed
+                        if part_id in prior_parts and part_id not in present)
                 if value is None:
                     current.pop(field, None)
                 else:
@@ -432,14 +502,21 @@ def fold(events):
                 overrides.pop(event["taskId"], None)
         elif event["action"] == "priority-set":
             priority_order = list(event["priorityOrder"])
-        else:
+        elif event["action"] == "owner-task-complete":
             owner_task_completions[event["taskId"]] = event["recordedAt"]
+        elif event["action"] == "queue-task-complete":
+            queue_task_completions[event["taskId"]] = event["recordedAt"]
+        else:
+            completed_parts.setdefault(event["taskId"], {})[
+                event["changes"]["partId"]] = event["recordedAt"]
     return {
         "revision": len(events),
         "updatedAt": updated_at,
         "overrides": overrides,
         "priorityOrder": priority_order,
         "ownerTaskCompletions": owner_task_completions,
+        "queueTaskCompletions": queue_task_completions,
+        "completedParts": completed_parts,
     }
 
 
@@ -464,6 +541,11 @@ def build_view(home, candidates, events=None):
     for candidate in candidates:
         item = dict(candidate)
         override = state["overrides"].get(item["id"], {})
+        completed_at = state["queueTaskCompletions"].get(item["id"])
+        part_completions = state["completedParts"].get(item["id"], {})
+        parts = [dict(part, done=part["id"] in part_completions,
+                      completedAt=part_completions.get(part["id"]))
+                 for part in override.get("parts", [])]
         section_source = "owner" if "section" in override else "automatic"
         item.update({
             "sourceTitle": item["title"],
@@ -473,10 +555,17 @@ def build_view(home, candidates, events=None):
                 "importance", item.get("sourceImportance")),
             "done": override.get("done"),
             "note": override.get("note"),
+            "parts": parts,
+            "partCounts": {
+                "total": len(parts),
+                "done": sum(part["done"] for part in parts),
+                "remaining": sum(not part["done"] for part in parts),
+            },
             "section": override.get("section", suggest_section(item["title"])),
             "sectionSource": section_source,
-            "disposition": override.get(
+            "disposition": "completed" if completed_at else override.get(
                 "disposition", "parked" if item.get("sourceHome") == "parked" else "active"),
+            "ownerCompletedAt": completed_at,
             "overriddenFields": sorted(override),
         })
         effective.append(item)
@@ -498,6 +587,7 @@ def build_view(home, candidates, events=None):
         "sectionSuggestions": list(AUTO_SECTIONS),
         "activeOrder": ordered,
         "completedOwnerTaskIds": list(state["ownerTaskCompletions"]),
+        "completedQueueTaskIds": list(state["queueTaskCompletions"]),
         "ownerTaskCompletions": [
             {"taskId": task_id, "completedAt": completed_at}
             for task_id, completed_at in state["ownerTaskCompletions"].items()
@@ -506,5 +596,6 @@ def build_view(home, candidates, events=None):
         "counts": {
             "active": sum(item["disposition"] == "active" for item in effective),
             "parked": sum(item["disposition"] == "parked" for item in effective),
+            "completed": sum(item["disposition"] == "completed" for item in effective),
         },
     }

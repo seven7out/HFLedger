@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added owner-facing product-outcome splits for mixed queue tasks. Each bounded
+  outcome has its own plain-language result and one-way **Mark complete**
+  control; an unsplit task can also be marked complete as an owner product
+  judgment. Observed agent status and evidence remain unchanged and visible.
 - Made queue-task details owner-readable by leading with the authoritative
   product change, reason, definition of done, and risks. Priority rows now use
   supplied product outcomes automatically, while evidence gaps, freshness,

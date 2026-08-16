@@ -105,3 +105,9 @@ disclosure; their absence is an audit limitation, not the product explanation.
 If a legacy task supplies code-shaped text in a product-brief field, the
 projection omits that text and says translation is needed instead of making the
 owner interpret it.
+
+When one queue record combines several product results, the owner may split it
+into bounded plain-language outcomes. Each outcome has a one-way completion
+report, and an unsplit task has the same product-completion control. This is a
+priority-setting judgment, not an execution claim: observed agent status,
+tests, and release evidence stay unchanged and visible.

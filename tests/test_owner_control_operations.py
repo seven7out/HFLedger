@@ -102,7 +102,7 @@ class OwnerControlTests(unittest.TestCase):
         self.assertEqual(view["items"][1]["sectionSource"], "owner")
         self.assertEqual(view["items"][0]["section"], "Other product work")
         self.assertEqual(view["items"][0]["sectionSource"], "automatic")
-        self.assertEqual(view["version"], 3)
+        self.assertEqual(view["version"], 4)
         for name, content in before.items():
             self.assertEqual(Path(self.home, name).read_bytes(), content)
 
@@ -144,9 +144,9 @@ class OwnerControlTests(unittest.TestCase):
             self.home, 1, "task-set", task_id="task-menu",
             changes={"section": "Menu experience"},
             now_fn=lambda: "2026-08-14T10:01:00+00:00")
-        self.assertEqual(event["schemaVersion"], 3)
+        self.assertEqual(event["schemaVersion"], 4)
         self.assertEqual(
-            [record["schemaVersion"] for record in owner_control.read(self.home)], [1, 3])
+            [record["schemaVersion"] for record in owner_control.read(self.home)], [1, 4])
         view = owner_control.build_view(self.home, self.candidates())
         menu = next(item for item in view["items"] if item["id"] == "task-menu")
         self.assertEqual(menu["section"], "Menu experience")
@@ -162,6 +162,73 @@ class OwnerControlTests(unittest.TestCase):
 
         legacy["changes"] = {"title": "A" * 160}
         owner_control.validate_event(legacy, expected_revision=1)
+
+    def test_product_parts_and_queue_completion_are_durable_and_one_way(self):
+        parts = [{
+            "id": "part-0000000000000001",
+            "title": "Show pickup readiness",
+            "outcome": "Customers can see when an order is ready for pickup.",
+        }, {
+            "id": "part-0000000000000002",
+            "title": "Explain pickup delays",
+            "outcome": "Customers understand when an order needs more time.",
+        }, {
+            "id": "part-0000000000000003",
+            "title": "Confirm pickup location",
+            "outcome": "Customers know exactly where to collect an order.",
+        }]
+        owner_control.append(
+            self.home, 0, "task-set", task_id="task-menu",
+            changes={"parts": parts},
+            now_fn=lambda: "2026-08-14T11:00:00+00:00")
+        owner_control.append(
+            self.home, 1, "task-part-complete", task_id="task-menu",
+            changes={"partId": parts[0]["id"]},
+            now_fn=lambda: "2026-08-14T11:01:00+00:00")
+        view = owner_control.build_view(self.home, self.candidates())
+        menu = next(item for item in view["items"] if item["id"] == "task-menu")
+        self.assertEqual(menu["partCounts"], {"total": 3, "done": 1, "remaining": 2})
+        self.assertTrue(menu["parts"][0]["done"])
+        self.assertFalse(menu["parts"][1]["done"])
+
+        owner_control.append(
+            self.home, 2, "task-set", task_id="task-menu",
+            changes={"parts": parts[1:]},
+            now_fn=lambda: "2026-08-14T11:02:00+00:00")
+        preserved = owner_control.build_view(self.home, self.candidates())
+        menu = next(item for item in preserved["items"] if item["id"] == "task-menu")
+        self.assertEqual({part["id"] for part in menu["parts"]}, {
+            "part-0000000000000001", "part-0000000000000002",
+            "part-0000000000000003"})
+        self.assertTrue(next(
+            part for part in menu["parts"]
+            if part["id"] == "part-0000000000000001")["done"])
+
+        owner_control.append(
+            self.home, 3, "task-part-complete", task_id="task-menu",
+            changes={"partId": parts[1]["id"]},
+            now_fn=lambda: "2026-08-14T11:03:00+00:00")
+        owner_control.append(
+            self.home, 4, "task-part-complete", task_id="task-menu",
+            changes={"partId": parts[2]["id"]},
+            now_fn=lambda: "2026-08-14T11:04:00+00:00")
+        owner_control.append(
+            self.home, 5, "queue-task-complete", task_id="task-menu",
+            now_fn=lambda: "2026-08-14T11:05:00+00:00")
+        completed = owner_control.build_view(self.home, self.candidates())
+        menu = next(item for item in completed["items"] if item["id"] == "task-menu")
+        self.assertEqual(menu["disposition"], "completed")
+        self.assertEqual(menu["rank"], None)
+        self.assertEqual(completed["completedQueueTaskIds"], ["task-menu"])
+        self.assertEqual(completed["counts"], {
+            "active": 0, "parked": 1, "completed": 1})
+
+        invalid = dict(owner_control.read(self.home)[0])
+        invalid["changes"] = {"parts": [{
+            "id": "bad-part", "title": "Too small", "outcome": "Still invalid."
+        }]}
+        with self.assertRaises(owner_control.OwnerControlError):
+            owner_control.validate_event(invalid, expected_revision=1)
 
     def test_owner_manual_completion_is_one_way_and_does_not_rewrite_source(self):
         before = {
@@ -436,6 +503,66 @@ class OwnerControlServerTests(unittest.TestCase):
             "Starting section: Research & planning (automatic)",
             projected["copyContext"]["text"])
         self.assertNotIn("Owner section:", projected["copyContext"]["text"])
+
+    def test_queue_task_can_split_and_capture_product_completion_without_source_writes(self):
+        source_before = {
+            name: Path(self.home, name).read_bytes()
+            for name in ("board.json", "ledger.jsonl", "config.json")
+        }
+        parts = [{
+            "id": "part-1000000000000001",
+            "title": "Show the current menu",
+            "outcome": "Customers can see the current menu before visiting.",
+        }, {
+            "id": "part-1000000000000002",
+            "title": "Explain sold-out choices",
+            "outcome": "Customers can tell which menu choices are unavailable.",
+        }]
+        status, response = self.command(0, "set-task", {
+            "taskId": "task-menu", "changes": {"parts": parts},
+        })
+        self.assertEqual(status, 200, response)
+        status, response = self.command(1, "complete-task-part", {
+            "taskId": "task-menu", "partId": parts[0]["id"],
+        })
+        self.assertEqual(status, 200, response)
+        menu = next(
+            item for item in response["ownerControl"]["items"]
+            if item["id"] == "task-menu")
+        self.assertEqual(menu["partCounts"], {
+            "total": 2, "done": 1, "remaining": 1})
+
+        status, response = self.command(2, "complete-queue-task", {
+            "taskId": "task-menu",
+        })
+        self.assertEqual(status, 409, response)
+        status, response = self.command(2, "complete-task-part", {
+            "taskId": "task-menu", "partId": parts[1]["id"],
+        })
+        self.assertEqual(status, 200, response)
+        status, response = self.command(3, "complete-queue-task", {
+            "taskId": "task-menu",
+        })
+        self.assertEqual(status, 200, response)
+        menu = next(
+            item for item in response["ownerControl"]["items"]
+            if item["id"] == "task-menu")
+        self.assertEqual(menu["disposition"], "completed")
+        self.assertEqual(response["ownerControl"]["counts"], {
+            "active": 1, "parked": 0, "completed": 1})
+
+        status, board = self.request("GET", "/api/board?context=main")
+        self.assertEqual(status, 200)
+        projected = next(
+            item for item in board["orientationV2"]["items"]
+            if item.get("sourceItemRef") == "task-menu")
+        self.assertEqual(projected["statusLabel"], "Ready for Build")
+        self.assertIsNotNone(projected["ownerProductCompletedAt"])
+        self.assertIn(
+            "Owner outcome [complete]: Show the current menu",
+            projected["copyContext"]["text"])
+        for name, content in source_before.items():
+            self.assertEqual(Path(self.home, name).read_bytes(), content)
 
     def test_stale_unknown_and_incomplete_orders_are_rejected(self):
         status, _response = self.command(0, "set-task", {

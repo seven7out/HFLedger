@@ -33,6 +33,10 @@ For large inherited queues, the owner can replace implementation-shaped task
 wording with a concise headline, product outcome, reason it matters, and a
 plain-language definition of done. Agent evidence and audit diagnostics remain
 available as secondary detail without becoming the task explanation.
+When one inherited task bundles several results, the owner can split it into
+two to twelve product outcomes and mark each result complete independently.
+Completion is an owner judgment overlay; it never rewrites observed execution
+status or agent evidence.
 
 ## The contract
 

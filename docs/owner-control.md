@@ -14,6 +14,8 @@ For a task, the owner may set:
 - the product outcome agents should pursue;
 - why that outcome matters to people;
 - the plain-language condition that means the work is done;
+- two to twelve independently finishable product outcomes when the source task
+  bundles unrelated results;
 - one short owner note;
 - whether the task is active or parked; and
 - its position in the active priority list.
@@ -21,6 +23,13 @@ For a task, the owner may set:
 These are owner directives. Agent-reported status, tests, releases, source
 evidence, and technical history remain read-only. The app never presents those
 fields as owner-editable progress controls.
+
+An owner can report that an unsplit product outcome is complete, or split a
+mixed task and mark each outcome complete independently. The report is one-way
+and removes a fully completed task from the active priority order. It does not
+change the observed task status, claim that code passed, or manufacture release
+evidence. Completed work remains visible under **Completed by owner** with its
+observed status alongside it.
 
 An exact owner-only manual task is different: the owner is the person who knows
 whether that action happened. Its inspector therefore offers **Mark complete**.
@@ -61,7 +70,7 @@ keeps source facts and owner direction separate:
 | Lane | Owns | May change when the observed board is read-only? |
 | --- | --- | --- |
 | Observed workspace | execution status, evidence, runs, releases, source facts | No |
-| Owner control | owner headline, automatic or owner-chosen product section, intended outcome, importance, definition of done, owner note, active/parked choice, priority order, owner-only manual completion report | Yes |
+| Owner control | owner headline, automatic or owner-chosen product section, intended outcome, importance, definition of done, product-outcome split and completion reports, owner note, active/parked choice, priority order, owner-only manual completion report | Yes |
 
 Owner events are stored in `owner-control.jsonl`; they never rewrite `board.json`
 or `ledger.jsonl`. The projection overlays the latest valid directive while
@@ -108,7 +117,9 @@ instead of refusing to show the rest of the workspace.
 - **Priorities** provides a sectioned product overview, a separate exact-order
   drag mode, an automatic top-five Urgent group, parked work, and the task
   product-edit sheet. The sheet can replace unclear legacy wording with an
-  owner-readable headline, outcome, importance, and definition of done.
+  owner-readable headline, outcome, importance, definition of done, and bounded
+  independently completable outcomes. Completed product tasks remain in a
+  collapsed history section.
 - **Operations** lists commands, schedules, their next expected run, latest
   outcome, and a bounded error summary.
 - **All Work** and the inspector show the effective owner title and intent while
