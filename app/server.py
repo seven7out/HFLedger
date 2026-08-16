@@ -467,6 +467,7 @@ def build_board_view(runtime, context_id=None):
             "title": directive["title"],
             "ownerIntent": directive["intent"],
             "ownerNote": directive["note"],
+            "ownerSection": directive["section"],
             "ownerDisposition": directive["disposition"],
             "ownerPriorityRank": directive["rank"],
         })
@@ -488,6 +489,8 @@ def build_board_view(runtime, context_id=None):
                 owner_lines.append("Owner intent: %s" % directive["intent"])
             if directive["note"]:
                 owner_lines.append("Owner note: %s" % directive["note"])
+            if directive["section"]:
+                owner_lines.append("Owner section: %s" % directive["section"])
             copy_context["text"] = "\n".join(
                 lines[:insert_at] + owner_lines + lines[insert_at:])[:4000]
     if owner_control_view.get("available") is True:

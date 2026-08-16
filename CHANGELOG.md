@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Made large priority queues scannable with a default **By section** overview,
+  concise owner headlines, one-line outcomes, custom product sections, and a
+  separate **Exact order** mode for drag-and-drop agent sequencing. Unclassified
+  legacy work stays explicit under **Needs sorting** instead of being guessed.
 - Added an explicit **Mark complete** action for owner-only manual tasks. The
   one-way owner report uses the revisioned owner-control journal, immediately
   leaves the active owner lane, and never changes agent-reported work status.

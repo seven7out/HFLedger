@@ -103,13 +103,19 @@ shipments.
 ## Priorities and owner task editing
 
 Priorities is the owner's durable product-direction surface. Active queue work
-appears in the order agents should consider it. The owner can drag a row, use
-the accessible Up and Down buttons, or edit:
+opens grouped into explicit owner sections for scanning. Rank numbers still show
+the exact order agents should consider, while the separate **Exact order** mode
+provides drag and accessible Up and Down controls. The owner can edit:
 
-- the product-facing title;
+- a concise owner headline;
+- the product section;
 - the intended outcome for people;
 - one owner note; and
 - whether the task is active or parked.
+
+HFLedger never guesses a section from a technical title. Older or uncategorized
+work appears in a collapsed **Needs sorting** group, and the technical source
+title remains secondary provenance in Details and the edit sheet.
 
 These edits append revisioned events to `owner-control.jsonl`. They never alter
 observed status, tests, releases, evidence, `board.json`, or `ledger.jsonl`.

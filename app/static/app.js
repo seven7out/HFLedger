@@ -57,6 +57,10 @@ const WORK_TYPE_LABELS = Object.freeze({
   documentation: "Documentation",
   research: "Research",
 });
+const NEEDS_SORTING_SECTION = "Needs sorting";
+const PRIORITY_SECTION_SUGGESTIONS = Object.freeze([
+  "UX & interface", "Data quality", "New features", "Reliability", "Operations", "Research",
+]);
 const METADATA_EDITABLE_KINDS = new Set(["queue-task", "inbox-item"]);
 const PRIORITY_RANK = Object.freeze({ P0: 0, P1: 1, P2: 2 });
 const ITEM_ID_PATTERN = /^item-[0-9a-f]{24}$/;
@@ -91,6 +95,8 @@ const state = {
   toastUndo: null,
   pendingItemNavigation: null,
   draggedOwnerTaskId: null,
+  priorityViewMode: "sections",
+  collapsedPrioritySections: new Set([NEEDS_SORTING_SECTION.toLocaleLowerCase()]),
 };
 
 function safeText(value, maximum = 500) {
@@ -1055,6 +1061,32 @@ function moveInOrder(order, itemId, targetIndex) {
   return next;
 }
 
+function ownerSectionLabel(item) {
+  return safeText(item?.section, 48) || NEEDS_SORTING_SECTION;
+}
+
+function groupOwnerPriorities(items) {
+  const groups = [];
+  const byKey = new Map();
+  for (const item of items || []) {
+    const label = ownerSectionLabel(item);
+    const key = label.toLocaleLowerCase();
+    let group = byKey.get(key);
+    if (!group) {
+      group = { key, label, items: [] };
+      byKey.set(key, group);
+      groups.push(group);
+    }
+    group.items.push(item);
+  }
+  return groups.sort((left, right) => {
+    const needsSortingKey = NEEDS_SORTING_SECTION.toLocaleLowerCase();
+    if (left.key === needsSortingKey) return 1;
+    if (right.key === needsSortingKey) return -1;
+    return 0;
+  });
+}
+
 function ownerTask(taskId) {
   return (state.data?.ownerControl?.items || []).find((item) => item.id === taskId) || null;
 }
@@ -1081,12 +1113,14 @@ function openOwnerTaskEditor(taskId) {
   if (!item) return announce("That task is no longer available for owner editing.");
   $("#owner-task-id").value = item.id;
   $("#owner-task-title").value = safeText(item.title, 160);
+  $("#owner-task-section").value = safeText(item.section, 48);
   $("#owner-task-intent").value = safePlainText(item.intent, 1200);
   $("#owner-task-note").value = safePlainText(item.note, 1000);
   $("#owner-task-disposition").value = item.disposition === "parked" ? "parked" : "active";
   const sourceTitle = safeText(item.sourceTitle, 160);
   $("#owner-task-source-title").textContent = item.title !== sourceTitle
-    ? `Observed title: ${sourceTitle}` : "Leave this unchanged to keep the observed title.";
+    ? `Technical source title: ${sourceTitle}`
+    : "Aim for 4–10 plain words. The technical source title remains in Details.";
   $("#owner-task-dialog").showModal();
   $("#owner-task-title").focus();
   $("#owner-task-title").select();
@@ -1100,15 +1134,18 @@ async function saveOwnerTask() {
     title: safeText($("#owner-task-title").value, 160),
     intent: safeText($("#owner-task-intent").value, 1200),
     note: safeText($("#owner-task-note").value, 1000),
+    section: safeText($("#owner-task-section").value, 48),
     disposition: $("#owner-task-disposition").value === "parked" ? "parked" : "active",
   };
   if (!desired.title) return announce("Product title cannot be empty.");
   const changed = {};
   if (desired.title !== safeText(item.title, 160)) {
+    if (desired.title.length > 80) return announce("Owner headline must be 80 characters or fewer.");
     changed.title = desired.title === safeText(item.sourceTitle, 160) ? null : desired.title;
   }
-  for (const field of ["intent", "note"]) {
-    if (desired[field] !== safeText(item[field], field === "intent" ? 1200 : 1000)) {
+  for (const field of ["intent", "note", "section"]) {
+    const limit = field === "intent" ? 1200 : (field === "note" ? 1000 : 48);
+    if (desired[field] !== safeText(item[field], limit)) {
       changed[field] = desired[field] || null;
     }
   }
@@ -1156,33 +1193,43 @@ async function completeOwnerTask() {
   }
 }
 
-function renderPriorityRow(item, index, total) {
-  const row = node("article", "owner-priority-row");
-  row.draggable = true;
+function renderPriorityRow(item, index, total, { ordering = true } = {}) {
+  const row = node("article", `owner-priority-row${ordering ? " is-ordering" : " is-overview"}`);
+  row.draggable = ordering;
   row.dataset.taskId = safeText(item.id, 256);
   row.setAttribute("aria-label", `Priority ${index + 1}: ${safeText(item.title, 160)}`);
 
-  const handle = node("span", "priority-drag-handle", "⠿");
-  handle.setAttribute("aria-hidden", "true");
   const rank = node("strong", "priority-rank", String(index + 1));
   const copy = node("div", "priority-copy");
   const title = button("priority-title", item.title || item.id, () => {
     if (item.itemId) selectDescriptor({ kind: "item", id: item.itemId }, { focus: false });
   });
-  copy.append(title, node("p", "", item.intent || "No product outcome has been added yet."));
+  copy.append(title);
+  if (item.intent) copy.append(node("p", "", item.intent));
+  else copy.append(node("span", "priority-missing-outcome", "Outcome needed"));
   copy.append(node("small", "", [item.project, item.observedStatus].filter(Boolean).join(" · ")));
   const actions = node("div", "priority-actions");
-  const up = button("icon-control", "↑", () => moveOwnerTask(item.id, -1));
-  up.title = "Move up";
-  up.setAttribute("aria-label", `Move ${safeText(item.title, 120)} up`);
-  up.disabled = index === 0;
-  const down = button("icon-control", "↓", () => moveOwnerTask(item.id, 1));
-  down.title = "Move down";
-  down.setAttribute("aria-label", `Move ${safeText(item.title, 120)} down`);
-  down.disabled = index === total - 1;
-  actions.append(up, down, button("control-button", "Edit", () => openOwnerTaskEditor(item.id)));
-  row.append(handle, rank, copy, actions);
+  if (ordering) {
+    const up = button("icon-control", "↑", () => moveOwnerTask(item.id, -1));
+    up.title = "Move up";
+    up.setAttribute("aria-label", `Move ${safeText(item.title, 120)} up`);
+    up.disabled = index === 0;
+    const down = button("icon-control", "↓", () => moveOwnerTask(item.id, 1));
+    down.title = "Move down";
+    down.setAttribute("aria-label", `Move ${safeText(item.title, 120)} down`);
+    down.disabled = index === total - 1;
+    actions.append(up, down);
+  }
+  actions.append(button("control-button", "Edit", () => openOwnerTaskEditor(item.id)));
+  if (ordering) {
+    const handle = node("span", "priority-drag-handle", "⠿");
+    handle.setAttribute("aria-hidden", "true");
+    row.append(handle, rank, copy, actions);
+  } else {
+    row.append(rank, copy, actions);
+  }
 
+  if (!ordering) return row;
   row.addEventListener("dragstart", (event) => {
     state.draggedOwnerTaskId = item.id;
     row.classList.add("is-dragging");
@@ -1209,31 +1256,86 @@ function renderPriorityRow(item, index, total) {
   return row;
 }
 
+function priorityModeControl() {
+  const control = node("div", "priority-mode-control");
+  control.setAttribute("aria-label", "Priority view");
+  for (const [mode, label] of [["sections", "By section"], ["order", "Exact order"]]) {
+    const choice = button("priority-mode-button", label, () => {
+      state.priorityViewMode = mode;
+      renderCenter();
+    });
+    choice.setAttribute("aria-pressed", String(state.priorityViewMode === mode));
+    control.append(choice);
+  }
+  return control;
+}
+
+function renderPrioritySections(active) {
+  const wrapper = node("div", "owner-priority-groups");
+  const positions = new Map(active.map((item, index) => [item.id, index]));
+  for (const group of groupOwnerPriorities(active)) {
+    const section = node("section", "owner-priority-group");
+    const collapsed = state.collapsedPrioritySections.has(group.key);
+    const toggle = button("owner-priority-group-toggle", "", () => {
+      if (collapsed) state.collapsedPrioritySections.delete(group.key);
+      else state.collapsedPrioritySections.add(group.key);
+      renderCenter();
+    });
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    toggle.append(
+      node("span", "priority-group-chevron", collapsed ? "›" : "⌄"),
+      node("strong", "", group.label),
+      node("span", "priority-group-count", group.items.length),
+    );
+    section.append(toggle);
+    if (!collapsed) {
+      const list = node("div", "owner-priority-list");
+      for (const item of group.items) {
+        const index = positions.get(item.id) ?? 0;
+        list.append(renderPriorityRow(item, index, active.length, { ordering: false }));
+      }
+      section.append(list);
+    }
+    wrapper.append(section);
+  }
+  return wrapper;
+}
+
 function renderPriorities() {
   const model = state.data?.ownerControl;
   const fragment = document.createDocumentFragment();
   const explainer = node("div", "owner-control-explainer");
   explainer.append(
-    node("strong", "", "This is the order agents should follow."),
-    node("span", "", "Drag active work, use the arrow buttons, or edit a task's product direction. Execution status remains agent-reported."),
+    node("strong", "", state.priorityViewMode === "sections"
+      ? "Scan work by product section." : "Edit the exact order agents should follow."),
+    node("span", "", state.priorityViewMode === "sections"
+      ? "Priority numbers still show the exact agent order. Open Exact order to drag or move work."
+      : "Drag active work or use the arrow buttons. Execution status remains agent-reported."),
   );
-  fragment.append(explainer);
+  fragment.append(explainer, priorityModeControl());
   if (!model || model.available !== true) {
     fragment.append(emptyState("Priorities are unavailable", "The owner-control projection could not be loaded."));
     return fragment;
   }
   const active = (model.items || []).filter((item) => item.disposition === "active");
-  const activeList = node("div", "owner-priority-list");
-  active.forEach((item, index) => activeList.append(renderPriorityRow(item, index, active.length)));
+  const activeList = state.priorityViewMode === "sections"
+    ? renderPrioritySections(active) : node("div", "owner-priority-list");
+  if (state.priorityViewMode === "order") {
+    active.forEach((item, index) => activeList.append(renderPriorityRow(item, index, active.length)));
+  }
   if (!active.length) activeList.append(emptyState("No active product work", "Move a parked task to Active when agents should consider it."));
-  fragment.append(section("Active order", active.length, activeList, "owner-priority-section"));
+  fragment.append(section(
+    state.priorityViewMode === "sections" ? "Active work" : "Active order",
+    active.length, activeList, "owner-priority-section"));
 
   const parked = (model.items || []).filter((item) => item.disposition === "parked");
   const parkedList = node("div", "owner-parked-list");
   parked.forEach((item) => {
     const row = node("article", "owner-parked-row");
     const copy = node("div", "priority-copy");
-    copy.append(node("strong", "", item.title || item.id), node("p", "", item.intent || "No product outcome has been added yet."));
+    copy.append(node("strong", "", item.title || item.id));
+    if (item.intent) copy.append(node("p", "", item.intent));
+    else copy.append(node("span", "priority-missing-outcome", "Outcome needed"));
     row.append(copy, button("control-button", "Edit", () => openOwnerTaskEditor(item.id)));
     parkedList.append(row);
   });
@@ -2742,10 +2844,14 @@ globalThis.HFLedgerUI = Object.freeze({
   PRIMARY_VIEWS: Object.freeze([...PRIMARY_VIEWS]),
   NAVIGATION_VIEWS: Object.freeze([...NAVIGATION_VIEWS]),
   moveInOrder,
+  ownerSectionLabel,
+  groupOwnerPriorities,
   operationStateLabel,
   operationRunLabel,
   PRIORITY_LABELS,
   WORK_TYPE_LABELS,
+  PRIORITY_SECTION_SUGGESTIONS,
+  NEEDS_SORTING_SECTION,
 });
 
 if (!TESTING && typeof document !== "undefined") boot();

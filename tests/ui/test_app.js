@@ -62,6 +62,21 @@ test("owner priority movement is deterministic and preserves every task", () => 
   ]);
 });
 
+test("owner priority sections are explicit, stable, and never guessed", () => {
+  const unsorted = { id: "a", title: "Technical source title" };
+  const experience = { id: "b", title: "Simplify pickup", section: "UX & interface" };
+  const sameSection = { id: "c", title: "Clarify the menu", section: "ux & INTERFACE" };
+  const data = { id: "d", title: "Correct store hours", section: "Data quality" };
+  const groups = ui.groupOwnerPriorities([unsorted, experience, sameSection, data]);
+  assert.deepEqual(groups.map((group) => group.label), ["UX & interface", "Data quality", "Needs sorting"]);
+  assert.deepEqual(groups[0].items.map((item) => item.id), ["b", "c"]);
+  assert.deepEqual(groups[2].items.map((item) => item.id), ["a"]);
+  assert.equal(ui.ownerSectionLabel({ section: "" }), "Needs sorting");
+  assert.deepEqual(ui.PRIORITY_SECTION_SUGGESTIONS, [
+    "UX & interface", "Data quality", "New features", "Reliability", "Operations", "Research",
+  ]);
+});
+
 test("operations uses closed owner-facing health labels", () => {
   assert.equal(ui.operationStateLabel("healthy"), "Reporting normally");
   assert.equal(ui.operationStateLabel("degraded"), "Needs attention");

@@ -8,8 +8,9 @@ run-grouped changes, source health, and evidence dossiers remain available
 under that owner-facing summary.
 
 The owner can also shape active work without editing code or pretending to
-control implementation status. Priorities provides a durable drag-and-drop
-order plus product titles, intended outcomes, notes, and active/parked choices.
+control implementation status. Priorities provides a sectioned product overview,
+a separate durable drag-and-drop order, concise owner headlines, intended
+outcomes, notes, and active/parked choices.
 Operations shows available commands, scheduled tasks, and their latest success
 or failure in plain language. An owner-only manual task has a separate **Mark
 complete** action because the owner, not an agent, knows whether that action was
@@ -164,8 +165,9 @@ The standard-library HTTP service provides:
   only when the required sources were actually observed;
 - Changes, All Work, Shipped Log, Watched, Projects, and an evidence inspector
   with explicit provenance and separate item-change/source-observation clocks;
-- Priorities with durable drag, accessible move controls, owner product edits,
-  and active/parked planning state that agents can read through the CLI;
+- Priorities with a calm sectioned overview, a separate exact-order drag mode,
+  owner headlines and outcomes, and active/parked planning state that agents can
+  read through the CLI;
 - Operations with a product-facing command catalog, schedule cadence, next run,
   latest outcome, and explicit failed/stale/unconfigured states;
 - a responsive board for queue, inbox, owner tasks, admitted asks, and outcomes;

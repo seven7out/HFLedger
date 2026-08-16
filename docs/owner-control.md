@@ -9,7 +9,8 @@ direction and **Operations** for visibility into commands and scheduled work.
 
 For a task, the owner may set:
 
-- a product-facing title;
+- a concise owner-facing headline;
+- a product section for scanning related work;
 - the product outcome agents should pursue;
 - one short owner note;
 - whether the task is active or parked; and
@@ -31,6 +32,14 @@ instruction packs, so an agent choosing work sees the same order as the owner.
 Every edit is an append-only event with a revision; concurrent stale edits fail
 and reload rather than silently overwriting a newer choice.
 
+Priorities opens in **By section**, which groups related product work without
+changing sequence: the visible rank numbers remain the exact agent order. The
+owner switches to **Exact order** to drag or use accessible move controls. A
+section is explicit owner direction, never a title classifier. Work without one
+appears under **Needs sorting** until the owner names a useful section such as
+UX & interface, Data quality, New features, Reliability, Operations, or a custom
+product area.
+
 Projection adapters that replace an observed workspace must preserve
 `owner-control.jsonl` byte for byte. If the journal is invalid, Today remains
 readable but owner editing and agent selection fail closed until the journal is
@@ -44,7 +53,7 @@ keeps source facts and owner direction separate:
 | Lane | Owns | May change when the observed board is read-only? |
 | --- | --- | --- |
 | Observed workspace | execution status, evidence, runs, releases, source facts | No |
-| Owner control | product title, intended outcome, owner note, active/parked choice, priority order, owner-only manual completion report | Yes |
+| Owner control | owner headline, product section, intended outcome, owner note, active/parked choice, priority order, owner-only manual completion report | Yes |
 
 Owner events are stored in `owner-control.jsonl`; they never rewrite `board.json`
 or `ledger.jsonl`. The projection overlays the latest valid directive while
@@ -88,8 +97,8 @@ instead of refusing to show the rest of the workspace.
 ## Surface map
 
 - **Today** keeps production health, owner cards, and product flow first.
-- **Priorities** provides the draggable active list, parked work, and the task
-  product-edit sheet.
+- **Priorities** provides a sectioned product overview, a separate exact-order
+  drag mode, parked work, and the task product-edit sheet.
 - **Operations** lists commands, schedules, their next expected run, latest
   outcome, and a bounded error summary.
 - **All Work** and the inspector show the effective owner title and intent while

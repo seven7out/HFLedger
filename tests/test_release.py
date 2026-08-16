@@ -56,9 +56,13 @@ class DemoQuickstartTests(unittest.TestCase):
             self.assertEqual((test_site["state"], test_site["tone"]),
                              ("failing", "neutral"))
             board_view = server.build_board_view(runtime)
-            self.assertEqual(board_view["ownerControl"]["revision"], 1)
+            self.assertEqual(board_view["ownerControl"]["revision"], 2)
             self.assertEqual(board_view["ownerControl"]["counts"], {
                 "active": 3, "parked": 1})
+            timer = next(item for item in board_view["ownerControl"]["items"]
+                         if item["id"] == "task:ovenlight:proofing-timer")
+            self.assertEqual(timer["title"], "See every batch at a glance")
+            self.assertEqual(timer["section"], "Shop experience")
             self.assertEqual(board_view["operations"]["state"], "degraded")
             self.assertEqual(board_view["operations"]["counts"], {
                 "commands": 2, "schedules": 2, "failing": 1})

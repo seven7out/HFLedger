@@ -162,6 +162,50 @@ LINKS = [
 ]
 
 
+def owner_control_fixture():
+    records = [
+        (ITEMS[4], "Make the mobile experience feel native", "UX & interface",
+         "People can move through the mobile experience without confusing browser-like behavior."),
+        (ITEMS[5], "Protect the test data boundary", "Data quality",
+         "Fictional test records stay clearly separated from real customer information."),
+        (ITEMS[0], "Choose when to release", "New features",
+         "The team has one clear release window that customers can rely on."),
+        (ITEMS[3], "Notice when storage work stops", "Reliability",
+         "Owners can see when a background process has quietly stopped making progress."),
+        (ITEMS[1], "Resolve the shipment disagreement", "Operations",
+         "The shipment record reflects one verified outcome."),
+        (ITEMS[2], "Corroborate the reported package", None, None),
+    ]
+    items = []
+    for rank, (work, title, section, intent) in enumerate(records, 1):
+        items.append({
+            "id": work["sourceItemRef"], "itemId": work["id"],
+            "sourceTitle": work["title"], "title": title,
+            "project": work["project"], "observedStatus": work["statusLabel"],
+            "sourceHome": work["primaryHome"], "intent": intent, "note": None,
+            "section": section, "disposition": "active", "rank": rank,
+            "overriddenFields": [field for field, value in (
+                ("title", title if title != work["title"] else None),
+                ("intent", intent), ("section", section)) if value],
+        })
+    parked = ITEMS[7]
+    items.append({
+        "id": parked["sourceItemRef"], "itemId": parked["id"],
+        "sourceTitle": parked["title"], "title": "Explore quieter analytics",
+        "project": parked["project"], "observedStatus": parked["statusLabel"],
+        "sourceHome": parked["primaryHome"], "intent": "Owners can understand broad trends without a noisy dashboard.",
+        "note": None, "section": "Research", "disposition": "parked", "rank": None,
+        "overriddenFields": ["title", "intent", "section"],
+    })
+    active_order = [record["id"] for record in items if record["disposition"] == "active"]
+    return {
+        "version": 2, "available": True, "revision": 7, "updatedAt": OBSERVED,
+        "activeOrder": active_order, "completedOwnerTaskIds": [],
+        "ownerTaskCompletions": [], "items": items,
+        "counts": {"active": len(active_order), "parked": 1},
+    }
+
+
 def base_orientation():
     smart_lists = []
     for list_id, label in [
@@ -329,6 +373,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "ui": {"title": "HFLedger", "subtitle": "Fictional Prompt 9 test fixture", "accent": "#6956e8",
                        "readOnly": True, "localState": {"mode": "session", "available": True, "schemaVersion": 1, "reason": None}},
                 "orientation": {"version": 1}, "orientationV2": projected(context),
+                "ownerControl": owner_control_fixture(),
             })
         if parsed.path == "/api/cards":
             context = self._context()
@@ -422,11 +467,19 @@ class Handler(SimpleHTTPRequestHandler):
         if target == NATIVE_STATIC / "index.html":
             body = body.replace(b'href="styles.css"', b'href="/settings-styles.css"')
             body = body.replace(b'<script src="main.js" defer></script>', b'')
-        appearance = parse_qs(parsed.query).get("appearance")
-        if target.suffix == ".html" and appearance == ["light"]:
-            body = body.replace(b'<html lang="en">', b'<html lang="en" data-appearance="light">')
-        elif target.suffix == ".html" and appearance == ["dark"]:
-            body = body.replace(b'<html lang="en">', b'<html lang="en" data-appearance="dark">')
+        query = parse_qs(parsed.query)
+        appearance = query.get("appearance", [""])[0]
+        text_size = query.get("textSize", [""])[0]
+        if target.suffix == ".html":
+            attributes = []
+            if appearance in ("light", "dark"):
+                attributes.append('data-appearance="%s"' % appearance)
+            if text_size in ("compact", "comfortable", "large", "extraLarge",
+                             "veryLarge", "maximum"):
+                attributes.append('data-text-size="%s"' % text_size)
+            if attributes:
+                replacement = ('<html lang="en" %s>' % " ".join(attributes)).encode("utf-8")
+                body = body.replace(b'<html lang="en">', replacement)
         content_type = {
             ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
             ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".webmanifest": "application/manifest+json",

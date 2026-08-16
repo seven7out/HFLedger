@@ -12,7 +12,8 @@ import unicodedata
 from . import admission
 
 
-VERSION = 1
+VERSION = 2
+SUPPORTED_VERSIONS = (1, VERSION)
 FILE_NAME = "owner-control.jsonl"
 LOCK_NAME = "owner-control.lock"
 MAX_FILE_BYTES = 16 * 1024 * 1024
@@ -20,7 +21,10 @@ MAX_EVENTS = 10_000
 MAX_PRIORITY_ITEMS = 500
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/#~-]{0,255}$")
 ACTIONS = frozenset(("task-set", "priority-set", "owner-task-complete"))
-TASK_FIELDS = frozenset(("title", "intent", "note", "disposition"))
+TASK_FIELDS_BY_VERSION = {
+    1: frozenset(("title", "intent", "note", "disposition")),
+    2: frozenset(("title", "intent", "note", "section", "disposition")),
+}
 EVENT_FIELDS = frozenset((
     "schemaVersion", "revision", "recordedAt", "action", "taskId", "changes",
     "priorityOrder", "priorSha256",
@@ -127,8 +131,9 @@ def validate_event(event, expected_revision=None, expected_prior=None):
     if unknown:
         raise OwnerControlError(
             "owner-control event has unsupported field(s): %s" % ", ".join(unknown))
-    if event.get("schemaVersion") != VERSION:
-        raise OwnerControlError("owner-control schemaVersion must be 1")
+    schema_version = event.get("schemaVersion")
+    if schema_version not in SUPPORTED_VERSIONS:
+        raise OwnerControlError("owner-control schemaVersion must be 1 or 2")
     revision = event.get("revision")
     if (not isinstance(revision, int) or isinstance(revision, bool) or revision < 1 or
             revision > MAX_EVENTS):
@@ -152,16 +157,18 @@ def validate_event(event, expected_revision=None, expected_prior=None):
         changes = event.get("changes")
         if not isinstance(changes, dict) or not changes:
             raise OwnerControlError("task-set changes must be a non-empty object")
-        unsupported = sorted(set(changes) - TASK_FIELDS)
+        unsupported = sorted(set(changes) - TASK_FIELDS_BY_VERSION[schema_version])
         if unsupported:
             raise OwnerControlError(
                 "task-set changes have unsupported field(s): %s" % ", ".join(unsupported))
         if "title" in changes:
-            _plain_text(changes["title"], "title", 160)
+            _plain_text(changes["title"], "title", 160 if schema_version == 1 else 80)
         if "intent" in changes:
             _plain_text(changes["intent"], "intent", 1200)
         if "note" in changes:
             _plain_text(changes["note"], "note", 1000)
+        if "section" in changes:
+            _plain_text(changes["section"], "section", 48)
         if ("disposition" in changes and
                 changes["disposition"] not in (None, "active", "parked")):
             raise OwnerControlError("disposition must be active, parked, or null")
@@ -356,6 +363,7 @@ def build_view(home, candidates, events=None):
             "title": override.get("title", item["title"]),
             "intent": override.get("intent"),
             "note": override.get("note"),
+            "section": override.get("section"),
             "disposition": override.get(
                 "disposition", "parked" if item.get("sourceHome") == "parked" else "active"),
             "overriddenFields": sorted(override),

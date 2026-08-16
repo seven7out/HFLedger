@@ -431,14 +431,18 @@ Escrow is a successful durable outcome, not an error. A later reviewed workflow 
 
 ### 9.4 Owner product direction
 
-`owner-control.jsonl` is a supplemental version-1 journal, not a replacement
+`owner-control.jsonl` is a supplemental version-2 journal, not a replacement
 for the event ledger or materialized board. Each private, newline-terminated
 JSON event has a contiguous revision and SHA-256 predecessor link. `task-set`
-events set or clear a product title, intended outcome, owner note, or
+events set or clear a concise owner headline, product section, intended outcome, owner note, or
 active/parked disposition for an exact queue id. `priority-set` events contain
 a duplicate-free ordered list of active queue ids. `owner-task-complete` is a
 one-way event for an exact current owner-task id and carries no changes or
 priority payload.
+
+Readers accept existing version-1 events and new version-2 events in the same
+hash-chained journal. Version 2 adds only the bounded `section` task field; it
+does not rewrite old events or infer a section from technical source text.
 
 The projection overlays these directives while retaining source title and
 observed status. It never claims execution progress, changes safety metadata,

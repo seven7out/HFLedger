@@ -226,16 +226,30 @@
         <div><p class="dialog-label">Owner direction</p><h2>Edit product task</h2></div>
         <button class="dialog-close" value="cancel" aria-label="Close">×</button>
       </header>
-      <p>Shape the product outcome and priority. Agents still own implementation status and evidence.</p>
+      <p>Give the work a short owner-facing headline, place it in a section, and describe the outcome. Agents still own implementation status and evidence.</p>
       <input id="owner-task-id" type="hidden">
       <label class="dialog-field">
-        <span>Product title</span>
-        <input id="owner-task-title" type="text" maxlength="160" required
+        <span>Owner headline</span>
+        <input id="owner-task-title" type="text" maxlength="80" required
+               placeholder="Name the thing and what should change"
                aria-describedby="owner-task-source-title">
       </label>
       <small id="owner-task-source-title" class="dialog-field-note"></small>
       <label class="dialog-field">
-        <span>What should change for people?</span>
+        <span>Section</span>
+        <input id="owner-task-section" type="text" maxlength="48" list="owner-task-section-suggestions"
+               placeholder="For example, UX &amp; interface">
+      </label>
+      <datalist id="owner-task-section-suggestions">
+        <option value="UX &amp; interface"></option>
+        <option value="Data quality"></option>
+        <option value="New features"></option>
+        <option value="Reliability"></option>
+        <option value="Operations"></option>
+        <option value="Research"></option>
+      </datalist>
+      <label class="dialog-field">
+        <span>Outcome for people</span>
         <textarea id="owner-task-intent" maxlength="1200" rows="4"
                   placeholder="Describe the intended product outcome in plain language."></textarea>
       </label>

@@ -769,9 +769,51 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   line-height: 1.4;
 }
 .owner-control-explainer strong { color: var(--ink); font-size: 12px; }
+.priority-mode-control {
+  display: flex;
+  gap: 2px;
+  padding: 7px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--toolbar);
+}
+.priority-mode-button {
+  min-height: 27px;
+  padding: 4px 10px;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 650;
+}
+.priority-mode-button:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.priority-mode-button[aria-pressed="true"] {
+  color: var(--ink);
+  border-color: var(--strong-line);
+  background: var(--content);
+}
+.owner-priority-groups { display: grid; gap: 8px; padding: 10px 12px 14px; background: var(--window); }
+.owner-priority-group { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--content); }
+.owner-priority-group-toggle {
+  width: 100%;
+  min-height: 36px;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  color: var(--ink);
+  border: 0;
+  background: color-mix(in srgb, var(--ink) 2.5%, var(--content));
+  text-align: left;
+}
+.owner-priority-group-toggle:hover { background: color-mix(in srgb, var(--ink) 5%, var(--content)); }
+.priority-group-chevron { color: var(--subtle); font-size: 16px; line-height: 1; }
+.priority-group-count { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .owner-priority-list,
 .owner-parked-list,
 .operations-list { border-top: 1px solid var(--line); }
+.owner-priority-group > .owner-priority-list { border-top-color: var(--line); }
 .owner-priority-row {
   min-height: 76px;
   display: grid;
@@ -782,6 +824,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   border-bottom: 1px solid var(--line);
   background: var(--content);
 }
+.owner-priority-row.is-overview { grid-template-columns: 28px minmax(0, 1fr) auto; padding-left: 10px; }
 .owner-priority-row:last-child,
 .owner-parked-row:last-child,
 .operation-row:last-child { border-bottom: 0; }
@@ -797,8 +840,28 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .operation-row p { margin: 3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
 .priority-copy small,
 .owner-direction-summary small { display: block; margin-top: 4px; color: var(--subtle); font-size: 10px; }
-.priority-title { max-width: 100%; overflow: hidden; padding: 0; border: 0; background: transparent; font-weight: 650; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.priority-title {
+  max-width: 100%;
+  overflow: hidden;
+  display: -webkit-box;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-weight: 650;
+  line-height: 1.35;
+  text-align: left;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
 .priority-title:hover { color: var(--accent); }
+.priority-missing-outcome {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--subtle);
+  font-size: 10px;
+  font-style: italic;
+}
 .priority-actions { display: flex; align-items: center; gap: 5px; }
 .icon-control { width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--content); color: var(--muted); }
 .icon-control:hover:not(:disabled) { color: var(--ink); background: color-mix(in srgb, var(--ink) 5%, var(--content)); }

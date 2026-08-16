@@ -74,6 +74,7 @@ class OwnerControlTests(unittest.TestCase):
                 "title": "Help customers choose today's menu",
                 "intent": "Customers can quickly tell what is available today.",
                 "note": "Keep the first version calm and easy to scan.",
+                "section": "Menu experience",
             }, now_fn=lambda: "2026-08-14T11:00:00+00:00")
         owner_control.append(
             self.home, 1, "task-set", task_id="task-pickup",
@@ -89,8 +90,47 @@ class OwnerControlTests(unittest.TestCase):
         self.assertEqual(view["items"][0]["title"], "Simplify pickup")
         self.assertEqual(view["items"][1]["title"], "Help customers choose today's menu")
         self.assertEqual(view["items"][1]["sourceTitle"], "Plan the daily menu")
+        self.assertEqual(view["items"][1]["section"], "Menu experience")
+        self.assertEqual(view["version"], 2)
         for name, content in before.items():
             self.assertEqual(Path(self.home, name).read_bytes(), content)
+
+    def test_version_one_events_upgrade_in_place_before_sections_are_added(self):
+        legacy = {
+            "schemaVersion": 1,
+            "revision": 1,
+            "recordedAt": "2026-08-14T10:00:00+00:00",
+            "action": "task-set",
+            "taskId": "task-menu",
+            "changes": {"intent": "Customers can understand the daily menu."},
+            "priorityOrder": None,
+            "priorSha256": None,
+        }
+        path = Path(self.home, owner_control.FILE_NAME)
+        path.write_text(json.dumps(legacy, separators=(",", ":")) + "\n", encoding="utf-8")
+        path.chmod(0o600)
+        event = owner_control.append(
+            self.home, 1, "task-set", task_id="task-menu",
+            changes={"section": "Menu experience"},
+            now_fn=lambda: "2026-08-14T10:01:00+00:00")
+        self.assertEqual(event["schemaVersion"], 2)
+        self.assertEqual(
+            [record["schemaVersion"] for record in owner_control.read(self.home)], [1, 2])
+        view = owner_control.build_view(self.home, self.candidates())
+        menu = next(item for item in view["items"] if item["id"] == "task-menu")
+        self.assertEqual(menu["section"], "Menu experience")
+        self.assertEqual(menu["intent"], "Customers can understand the daily menu.")
+        legacy["changes"]["section"] = "Not valid in version one"
+        with self.assertRaises(owner_control.OwnerControlError):
+            owner_control.validate_event(legacy, expected_revision=1)
+
+        too_long = dict(event)
+        too_long["changes"] = {"title": "A" * 81}
+        with self.assertRaises(owner_control.OwnerControlError):
+            owner_control.validate_event(too_long, expected_revision=2)
+
+        legacy["changes"] = {"title": "A" * 160}
+        owner_control.validate_event(legacy, expected_revision=1)
 
     def test_owner_manual_completion_is_one_way_and_does_not_rewrite_source(self):
         before = {
@@ -305,6 +345,7 @@ class OwnerControlServerTests(unittest.TestCase):
                 "title": "Help customers choose today's menu",
                 "intent": "Customers can quickly tell what is available today.",
                 "note": "Keep the first version easy to scan.",
+                "section": "Menu experience",
             },
         })
         self.assertEqual(status, 200, response)
@@ -330,6 +371,8 @@ class OwnerControlServerTests(unittest.TestCase):
         self.assertIn(
             "Owner intent: Customers can quickly tell what is available today.",
             projected["copyContext"]["text"])
+        self.assertEqual(projected["ownerSection"], "Menu experience")
+        self.assertIn("Owner section: Menu experience", projected["copyContext"]["text"])
         self.assertIn("Owner priority: 2", projected["copyContext"]["text"])
 
     def test_stale_unknown_and_incomplete_orders_are_rejected(self):

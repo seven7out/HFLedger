@@ -86,3 +86,9 @@ The Decision Deck renders each typed card in the same product language. It
 retains recommendation acceptance, snooze, context requests, completion, and
 provenance. `priority_review` adds its bounded reorder-and-kill response without
 granting any deployment or production-write authority.
+
+The durable Priorities surface uses the same priority-setting zone after a
+review: short owner headlines and one-line outcomes are grouped under explicit
+product sections for scanning. Exact rank remains separate and authoritative
+for agent selection. HFLedger never guesses sections from technical titles;
+unclassified work stays visible as **Needs sorting**.
