@@ -73,6 +73,8 @@ class OwnerControlTests(unittest.TestCase):
             changes={
                 "title": "Help customers choose today's menu",
                 "intent": "Customers can quickly tell what is available today.",
+                "importance": "Clear menus prevent disappointing pickup visits.",
+                "done": "Customers see today's available items before ordering.",
                 "note": "Keep the first version calm and easy to scan.",
                 "section": "Menu experience",
             }, now_fn=lambda: "2026-08-14T11:00:00+00:00")
@@ -90,11 +92,17 @@ class OwnerControlTests(unittest.TestCase):
         self.assertEqual(view["items"][0]["title"], "Simplify pickup")
         self.assertEqual(view["items"][1]["title"], "Help customers choose today's menu")
         self.assertEqual(view["items"][1]["sourceTitle"], "Plan the daily menu")
+        self.assertEqual(
+            view["items"][1]["importance"],
+            "Clear menus prevent disappointing pickup visits.")
+        self.assertEqual(
+            view["items"][1]["done"],
+            "Customers see today's available items before ordering.")
         self.assertEqual(view["items"][1]["section"], "Menu experience")
         self.assertEqual(view["items"][1]["sectionSource"], "owner")
         self.assertEqual(view["items"][0]["section"], "Other product work")
         self.assertEqual(view["items"][0]["sectionSource"], "automatic")
-        self.assertEqual(view["version"], 2)
+        self.assertEqual(view["version"], 3)
         for name, content in before.items():
             self.assertEqual(Path(self.home, name).read_bytes(), content)
 
@@ -136,9 +144,9 @@ class OwnerControlTests(unittest.TestCase):
             self.home, 1, "task-set", task_id="task-menu",
             changes={"section": "Menu experience"},
             now_fn=lambda: "2026-08-14T10:01:00+00:00")
-        self.assertEqual(event["schemaVersion"], 2)
+        self.assertEqual(event["schemaVersion"], 3)
         self.assertEqual(
-            [record["schemaVersion"] for record in owner_control.read(self.home)], [1, 2])
+            [record["schemaVersion"] for record in owner_control.read(self.home)], [1, 3])
         view = owner_control.build_view(self.home, self.candidates())
         menu = next(item for item in view["items"] if item["id"] == "task-menu")
         self.assertEqual(menu["section"], "Menu experience")
@@ -307,6 +315,7 @@ class OwnerControlServerTests(unittest.TestCase):
             board["queue"].extend([{
                 "id": "task-menu",
                 "title": "Plan the daily menu",
+                "desiredOutcome": "Customers can see an accurate daily menu before visiting.",
                 "status": "Ready for Build",
                 "updated": "2026-08-14T10:00:00+00:00",
             }, {
@@ -367,6 +376,8 @@ class OwnerControlServerTests(unittest.TestCase):
             "changes": {
                 "title": "Help customers choose today's menu",
                 "intent": "Customers can quickly tell what is available today.",
+                "importance": "Clear menus prevent disappointing pickup visits.",
+                "done": "Customers see today's available items before ordering.",
                 "note": "Keep the first version easy to scan.",
                 "section": "Menu experience",
             },
@@ -394,6 +405,18 @@ class OwnerControlServerTests(unittest.TestCase):
         self.assertIn(
             "Owner intent: Customers can quickly tell what is available today.",
             projected["copyContext"]["text"])
+        self.assertIn(
+            "Owner importance: Clear menus prevent disappointing pickup visits.",
+            projected["copyContext"]["text"])
+        self.assertIn(
+            "Owner done when: Customers see today's available items before ordering.",
+            projected["copyContext"]["text"])
+        self.assertEqual(
+            projected["ownerImportance"],
+            "Clear menus prevent disappointing pickup visits.")
+        self.assertEqual(
+            projected["ownerDone"],
+            "Customers see today's available items before ordering.")
         self.assertEqual(projected["ownerSection"], "Menu experience")
         self.assertIn("Owner section: Menu experience", projected["copyContext"]["text"])
         self.assertIn("Owner priority: 2", projected["copyContext"]["text"])
@@ -406,6 +429,9 @@ class OwnerControlServerTests(unittest.TestCase):
             if item.get("sourceItemRef") == "task-menu")
         self.assertEqual(projected["ownerSection"], "Research & planning")
         self.assertEqual(projected["ownerSectionSource"], "automatic")
+        self.assertEqual(
+            projected["ownerIntent"],
+            "Customers can see an accurate daily menu before visiting.")
         self.assertIn(
             "Starting section: Research & planning (automatic)",
             projected["copyContext"]["text"])

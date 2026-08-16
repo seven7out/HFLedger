@@ -44,6 +44,7 @@ class TodayUIContractTests(unittest.TestCase):
         style = CSS.read_text(encoding="utf-8")
         for required in (
                 'id="owner-task-dialog"', "Owner headline", "Outcome for people",
+                "Why this matters", "Done when",
                 'id="owner-task-section"', "By section", "Exact order",
                 "groupOwnerPriorities", "splitUrgentPriorities", "Other product work",
                 'label: "Urgent"', "Top five in exact order",
@@ -59,6 +60,19 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertIn("Execution status remains agent-reported", script)
         self.assertIn("Urgent is always the first five in Exact order", script)
         self.assertNotIn("Run command", script)
+
+    def test_task_details_lead_with_product_meaning_and_collapse_diagnostics(self):
+        script = JS.read_text(encoding="utf-8")
+        style = CSS.read_text(encoding="utf-8")
+        for required in (
+                '"What changes"', '"Why it matters"', '"What done looks like"',
+                '"Risks or constraints"', '"Current state"',
+                'node("details", "dossier-diagnostics")',
+                '"Agent evidence & diagnostics"', '"Observation gaps"'):
+            self.assertIn(required, script)
+        self.assertIn(".dossier-diagnostics", style)
+        self.assertNotIn("No product outcome has been added yet.", script)
+        self.assertNotIn("Open source unavailable", script)
 
     def test_client_has_no_authoritative_write_or_browser_storage_path(self):
         script = JS.read_text(encoding="utf-8")

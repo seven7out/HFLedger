@@ -95,3 +95,13 @@ group; changing Exact order changes that membership without creating another
 priority field. HFLedger supplies deterministic automatic starting sections for
 the remaining work, labels them as suggestions, and lets the owner move any
 item. An owner-chosen section always overrides the automatic suggestion.
+
+Opening queue work leads with a bounded product brief derived from the
+authoritative task: **What changes**, **Why it matters**, **What done looks
+like**, and **Risks or constraints**. Rank and workflow status never substitute
+for missing product meaning. Agent evidence, observation gaps, freshness,
+history, source links, and provenance remain available in a collapsed secondary
+disclosure; their absence is an audit limitation, not the product explanation.
+If a legacy task supplies code-shaped text in a product-brief field, the
+projection omits that text and says translation is needed instead of making the
+owner interpret it.

@@ -12,6 +12,8 @@ For a task, the owner may set:
 - a concise owner-facing headline;
 - a product section for scanning related work;
 - the product outcome agents should pursue;
+- why that outcome matters to people;
+- the plain-language condition that means the work is done;
 - one short owner note;
 - whether the task is active or parked; and
 - its position in the active priority list.
@@ -59,7 +61,7 @@ keeps source facts and owner direction separate:
 | Lane | Owns | May change when the observed board is read-only? |
 | --- | --- | --- |
 | Observed workspace | execution status, evidence, runs, releases, source facts | No |
-| Owner control | owner headline, automatic or owner-chosen product section, intended outcome, owner note, active/parked choice, priority order, owner-only manual completion report | Yes |
+| Owner control | owner headline, automatic or owner-chosen product section, intended outcome, importance, definition of done, owner note, active/parked choice, priority order, owner-only manual completion report | Yes |
 
 Owner events are stored in `owner-control.jsonl`; they never rewrite `board.json`
 or `ledger.jsonl`. The projection overlays the latest valid directive while
@@ -105,7 +107,8 @@ instead of refusing to show the rest of the workspace.
 - **Today** keeps production health, owner cards, and product flow first.
 - **Priorities** provides a sectioned product overview, a separate exact-order
   drag mode, an automatic top-five Urgent group, parked work, and the task
-  product-edit sheet.
+  product-edit sheet. The sheet can replace unclear legacy wording with an
+  owner-readable headline, outcome, importance, and definition of done.
 - **Operations** lists commands, schedules, their next expected run, latest
   outcome, and a bounded error summary.
 - **All Work** and the inspector show the effective owner title and intent while

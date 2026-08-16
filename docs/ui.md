@@ -113,6 +113,8 @@ owner can edit:
 - a concise owner headline;
 - the product section;
 - the intended outcome for people;
+- why the outcome matters;
+- the plain-language condition that means the work is done;
 - one owner note; and
 - whether the task is active or parked.
 
@@ -121,6 +123,14 @@ deterministic title rules. **Move…** opens the
 section field, where the owner can choose a suggested section or write a custom
 one. Owner choices always override automatic suggestions. The technical source
 title remains secondary provenance in Details and the edit sheet.
+
+Opening a queue task leads with its effective product brief: **What changes**,
+**Why it matters**, **What done looks like**, and **Risks or constraints**. An
+owner may clarify the source wording for the first three fields without changing
+the observed task. Missing product meaning is named directly; the interface
+never infers importance from rank, age, or an agent-reported status.
+Implementation-shaped legacy wording is omitted from the primary brief and
+labeled as needing translation.
 
 These edits append revisioned events to `owner-control.jsonl`. They never alter
 observed status, tests, releases, evidence, `board.json`, or `ledger.jsonl`.
@@ -148,9 +158,12 @@ authority. `ledger operations` returns the same bounded projection for agents.
 
 ## Evidence, provenance, and two clocks
 
-The inspector explains why an item is present, one supported next action,
-bounded Copy Context, evidence, named missing observations, history, safe source
-links, and freshness. Every claim uses one exact provenance word:
+For queue tasks, evidence, named observation gaps, history, safe source links,
+and freshness are secondary and collapsed under **Agent evidence &
+diagnostics**. They explain the audit trail, not what the product work means or
+whether it deserves priority. The inspector still provides one supported next
+action and bounded Copy Context. Every evidence claim uses one exact provenance
+word:
 
 | Word | Meaning |
 | --- | --- |

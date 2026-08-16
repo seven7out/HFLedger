@@ -434,6 +434,15 @@ def build_board_view(runtime, context_id=None):
             "id": raw["id"],
             "itemId": projected["id"],
             "title": raw.get("title") or raw["id"],
+            "sourceIntent": (
+                (projected.get("productBrief", {}).get("outcome") or
+                 projected.get("productBrief", {}).get("problem"))
+                if isinstance(projected.get("productBrief"), dict) else None
+            ),
+            "sourceImportance": (
+                projected.get("productBrief", {}).get("problem")
+                if isinstance(projected.get("productBrief"), dict) else None
+            ),
             "project": projected.get("project"),
             "observedStatus": projected.get("statusLabel"),
             "sourceHome": projected.get("primaryHome"),
@@ -466,6 +475,8 @@ def build_board_view(runtime, context_id=None):
             "sourceTitle": item.get("title"),
             "title": directive["title"],
             "ownerIntent": directive["intent"],
+            "ownerImportance": directive["importance"],
+            "ownerDone": directive["done"],
             "ownerNote": directive["note"],
             "ownerSection": directive["section"],
             "ownerSectionSource": directive["sectionSource"],
@@ -488,6 +499,11 @@ def build_board_view(runtime, context_id=None):
             ]
             if directive["intent"]:
                 owner_lines.append("Owner intent: %s" % directive["intent"])
+            if directive["importance"]:
+                owner_lines.append(
+                    "Owner importance: %s" % directive["importance"])
+            if directive["done"]:
+                owner_lines.append("Owner done when: %s" % directive["done"])
             if directive["note"]:
                 owner_lines.append("Owner note: %s" % directive["note"])
             if directive["section"] and directive["sectionSource"] == "owner":

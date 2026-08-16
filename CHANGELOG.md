@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Made queue-task details owner-readable by leading with the authoritative
+  product change, reason, definition of done, and risks. Priority rows now use
+  supplied product outcomes automatically, while evidence gaps, freshness,
+  history, sources, and provenance are grouped under a collapsed secondary
+  diagnostic disclosure. Owner controls can supply a clearer outcome,
+  importance, and definition of done while older control journals remain
+  readable.
 - Made large priority queues scannable with a default **By section** overview,
   concise owner headlines, one-line outcomes, custom product sections, and a
   separate **Exact order** mode for drag-and-drop agent sequencing. Existing

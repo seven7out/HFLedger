@@ -29,6 +29,11 @@ triage state, and optional read-only collectors.
 
 HFLedger is agent-agnostic. Any runtime that can read files and run a command can use the protocol. The reference implementation is Python standard library, local-first, and MIT licensed.
 
+For large inherited queues, the owner can replace implementation-shaped task
+wording with a concise headline, product outcome, reason it matters, and a
+plain-language definition of done. Agent evidence and audit diagnostics remain
+available as secondary detail without becoming the task explanation.
+
 ## The contract
 
 - An agent cannot file a vague escalation. Admission requires a reasoned

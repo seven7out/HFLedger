@@ -1132,6 +1132,8 @@ function openOwnerTaskEditor(taskId, { focusSection = false } = {}) {
     ? "Suggested automatically from the current title. Choose any section to override it."
     : "This section was chosen by the owner.";
   $("#owner-task-intent").value = safePlainText(item.intent, 1200);
+  $("#owner-task-importance").value = safePlainText(item.importance, 1200);
+  $("#owner-task-done").value = safePlainText(item.done, 1200);
   $("#owner-task-note").value = safePlainText(item.note, 1000);
   $("#owner-task-disposition").value = item.disposition === "parked" ? "parked" : "active";
   const sourceTitle = safeText(item.sourceTitle, 160);
@@ -1151,6 +1153,8 @@ async function saveOwnerTask() {
   const desired = {
     title: safeText($("#owner-task-title").value, 160),
     intent: safeText($("#owner-task-intent").value, 1200),
+    importance: safeText($("#owner-task-importance").value, 1200),
+    done: safeText($("#owner-task-done").value, 1200),
     note: safeText($("#owner-task-note").value, 1000),
     section: safeText($("#owner-task-section").value, 48),
     disposition: $("#owner-task-disposition").value === "parked" ? "parked" : "active",
@@ -1161,8 +1165,9 @@ async function saveOwnerTask() {
     if (desired.title.length > 80) return announce("Owner headline must be 80 characters or fewer.");
     changed.title = desired.title === safeText(item.sourceTitle, 160) ? null : desired.title;
   }
-  for (const field of ["intent", "note", "section"]) {
-    const limit = field === "intent" ? 1200 : (field === "note" ? 1000 : 48);
+  for (const field of ["intent", "importance", "done", "note", "section"]) {
+    const limit = ["intent", "importance", "done"].includes(field)
+      ? 1200 : (field === "note" ? 1000 : 48);
     if (desired[field] !== safeText(item[field], limit)) {
       changed[field] = desired[field] || null;
     }
@@ -1838,16 +1843,62 @@ function renderItemInspector(target, item) {
   header.append(glyph, heading);
   wrapper.append(header);
   if (item.entityKind === "queue-task") {
-    const owner = node("div", "owner-direction-summary");
-    owner.append(node("p", "", item.ownerIntent || "No product outcome has been added yet."));
-    if (item.ownerNote) owner.append(node("small", "", item.ownerNote));
+    const brief = item.productBrief && typeof item.productBrief === "object"
+      ? item.productBrief : {};
+    const translationNeeded = new Set(Array.isArray(brief.translationNeeded)
+      ? brief.translationNeeded : []);
+    const owner = node("div", "owner-direction-summary product-brief-summary");
+    owner.append(node("p", "", item.ownerIntent || brief.outcome ||
+      (translationNeeded.has("outcome")
+        ? "The supplied outcome is implementation-shaped and needs translation before owner review."
+        : "No owner-readable product change was supplied. Do not infer one from the technical title.")));
     const editable = (state.data?.ownerControl?.items || []).find((entry) => entry.itemId === item.id);
-    if (editable) owner.append(button("control-button", "Edit owner direction…", () => openOwnerTaskEditor(editable.id)));
-    wrapper.append(inspectorSection("Owner Direction", owner));
+    if (editable) owner.append(button("control-button", "Edit owner wording…", () => openOwnerTaskEditor(editable.id)));
+    wrapper.append(inspectorSection("What changes", owner));
+
+    wrapper.append(inspectorSection(
+      "Why it matters",
+      item.ownerImportance || brief.problem || (translationNeeded.has("problem")
+        ? "The supplied reason is implementation-shaped and needs translation before owner review."
+        : "No product reason was supplied. Importance cannot be determined from rank or workflow status alone."),
+    ));
+
+    const done = node("div", "product-brief-done");
+    const criteria = Array.isArray(brief.doneWhen) ? brief.doneWhen.filter(Boolean).slice(0, 8) : [];
+    if (item.ownerDone) {
+      done.append(node("p", "", item.ownerDone));
+    } else if (criteria.length) {
+      const list = node("ul", "product-brief-list");
+      criteria.forEach((criterion) => list.append(node("li", "", criterion)));
+      done.append(list);
+    } else {
+      done.append(node("p", "inspector-muted", translationNeeded.has("doneWhen")
+        ? "The supplied completion checks are implementation-shaped and need translation before owner review."
+        : "No owner-readable definition of done was supplied."));
+    }
+    wrapper.append(inspectorSection("What done looks like", done));
+    wrapper.append(inspectorSection(
+      "Risks or constraints",
+      brief.risks || (translationNeeded.has("risks")
+        ? "The supplied risk statement is implementation-shaped and needs translation before owner review."
+        : "No specific product risk or constraint was supplied."),
+    ));
+    if (item.ownerNote) wrapper.append(inspectorSection("Owner note", item.ownerNote));
+
+    const workflow = node("div", "workflow-state-summary");
+    workflow.append(
+      node("p", "", `Current status: ${item.statusLabel || "Unknown"}.`),
+      node("small", "", item.whyHere || "No deterministic observer note was supplied."),
+      node("small", "", item.homeSince
+        ? `${HOME_LABELS[item.primaryHome] || "In this state"} for ${durationSince(item.homeSince)}.`
+        : "The start of this workflow state is unknown."),
+    );
+    wrapper.append(inspectorSection("Current state", workflow));
+  } else {
+    wrapper.append(inspectorSection("Why It Is Here", item.whyHere || "No deterministic reason was supplied."));
+    wrapper.append(inspectorSection("Duration", item.homeSince ? `${HOME_LABELS[item.primaryHome] || "In this state"} for ${durationSince(item.homeSince)}` : "The start of this meaningful state is unknown."));
   }
   wrapper.append(inspectorSection("Priority & Type", itemMetadataEditor(item)));
-  wrapper.append(inspectorSection("Why It Is Here", item.whyHere || "No deterministic reason was supplied."));
-  wrapper.append(inspectorSection("Duration", item.homeSince ? `${HOME_LABELS[item.primaryHome] || "In this state"} for ${durationSince(item.homeSince)}` : "The start of this meaningful state is unknown."));
 
   const actionWrap = node("div", "next-action");
   const actionButton = buildNextAction(item);
@@ -1871,25 +1922,28 @@ function renderItemInspector(target, item) {
   localActions.append(capability);
   wrapper.append(inspectorSection("Local Controls", localActions));
 
+  const diagnostics = node("details", "dossier-diagnostics");
+  diagnostics.append(node("summary", "", "Agent evidence & diagnostics"));
+
   const evidenceList = node("div", "evidence-list");
   const evidence = evidenceMap();
   (item.evidenceIds || []).slice(0, 50).map((id) => evidence.get(id)).filter(Boolean)
     .sort((a, b) => String(b.observedAt || "").localeCompare(String(a.observedAt || "")))
     .forEach((record) => evidenceList.append(evidenceRow(record)));
   if (!evidenceList.childElementCount) evidenceList.append(node("p", "inspector-muted", "No bounded evidence records are attached to this item."));
-  wrapper.append(inspectorSection("Evidence", evidenceList));
+  diagnostics.append(inspectorSection("Evidence", evidenceList));
 
   const gaps = node("ul", "gap-list");
   (item.coverage?.namedAbsences || []).forEach((gap) => gaps.append(node("li", "", gap.detail || gap.label || gap.sourceId || gap)));
   if (!gaps.childElementCount) gaps.append(node("li", "", "Relevant sources observed; no named absence was supplied."));
-  wrapper.append(inspectorSection("Missing Observations", gaps));
+  diagnostics.append(inspectorSection("Observation gaps", gaps));
 
   const clocks = node("dl", "clock-list");
   clocks.append(
     node("dt", "", "Item changed"), node("dd", "", exactTime(item.clocks?.itemChangedAt)),
     node("dt", "", "Sources observed"), node("dd", "", exactTime(item.clocks?.relevantSourcesObservedAt)),
   );
-  wrapper.append(inspectorSection("Freshness", clocks));
+  diagnostics.append(inspectorSection("Freshness", clocks));
 
   const history = node("ol", "history-list");
   const changes = changeMap();
@@ -1901,22 +1955,27 @@ function renderItemInspector(target, item) {
       history.append(entry);
     });
   if (!history.childElementCount) history.append(node("li", "inspector-muted", "No meaningful item history was supplied."));
-  wrapper.append(inspectorSection("History", history));
+  diagnostics.append(inspectorSection("History", history));
 
   const links = node("div", "source-links");
   const allLinks = linkMap();
+  let unavailableLinks = 0;
   (item.linkIds || []).slice(0, 12).map((id) => allLinks.get(id)).filter(Boolean).forEach((link) => {
     const resolution = state.resolvedLinks.get(link.id);
     const target_ = safeLinkTarget(resolution);
     if (!target_) {
-      const unavailable = node("span", "source-link unavailable-link", `${link.label || "Source"} unavailable`);
-      links.append(unavailable);
+      unavailableLinks += 1;
       return;
     }
     links.append(button("source-link", `${link.label || "Open source"} ↗`, () => openSafeTarget(resolution)));
   });
+  if (unavailableLinks) links.append(node(
+    "span", "inspector-muted",
+    `${unavailableLinks} source reference${unavailableLinks === 1 ? " is" : "s are"} not available from this app.`,
+  ));
   if (!links.childElementCount) links.append(node("span", "inspector-muted", "No safe source link was supplied."));
-  wrapper.append(inspectorSection("Sources", links));
+  diagnostics.append(inspectorSection("Sources", links));
+  wrapper.append(diagnostics);
 
   const internals = node("details", "internals");
   internals.append(node("summary", "", "Runtime & provenance internals"));

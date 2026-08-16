@@ -147,6 +147,12 @@ A queue item requires `id`, `title`, and `status`. Status must be built-in or co
 
 Common optional fields include `context`, `userProblem`, `desiredOutcome`, `scope`, `outOfScope`, `acceptanceCriteria`, `risksTrustConcerns`, `recommendedNextAgent`, `links`, `protected`, `gate`, `ownerOnly`, `ownerAssignment`, `dedupeKey`, and completion tombstone metadata. Phase 3 adds `autonomousSafe` (boolean), plus non-empty text fields `repository`, `statusKey`, and `protectedClass`. Their presence describes eligibility only; runtime instructions treat missing safety metadata as gated and never infer production authority.
 
+The owner orientation projects `userProblem`, `desiredOutcome`, bounded
+`acceptanceCriteria`, and `risksTrustConcerns` as a product brief. This is a
+read-only projection of authoritative task meaning, not another status or
+authorization plane. Missing fields remain missing and are never inferred from
+technical titles, priority order, or workflow state.
+
 Unknown item fields produce warnings rather than errors. This forward-compatible rule applies to queue, inbox, owner-task, and escrow items. It never permits an unknown top-level section.
 
 ### 4.3 Inbox and owner tasks
@@ -431,18 +437,20 @@ Escrow is a successful durable outcome, not an error. A later reviewed workflow 
 
 ### 9.4 Owner product direction
 
-`owner-control.jsonl` is a supplemental version-2 journal, not a replacement
+`owner-control.jsonl` is a supplemental version-3 journal, not a replacement
 for the event ledger or materialized board. Each private, newline-terminated
 JSON event has a contiguous revision and SHA-256 predecessor link. `task-set`
-events set or clear a concise owner headline, product section, intended outcome, owner note, or
-active/parked disposition for an exact queue id. `priority-set` events contain
+events set or clear a concise owner headline, product section, intended outcome,
+plain-language importance, definition of done, owner note, or active/parked
+disposition for an exact queue id. `priority-set` events contain
 a duplicate-free ordered list of active queue ids. `owner-task-complete` is a
 one-way event for an exact current owner-task id and carries no changes or
 priority payload.
 
-Readers accept existing version-1 events and new version-2 events in the same
-hash-chained journal. Version 2 adds only the bounded `section` task field; it
-does not rewrite old events or store an inferred section in the journal.
+Readers accept existing version-1 and version-2 events with new version-3
+events in the same hash-chained journal. Version 2 added the bounded `section`
+task field. Version 3 adds `importance` and `done`; it does not rewrite old
+events or store inferred values in the journal.
 
 The owner-control projection may supply a deterministic automatic starting
 section when no `section` event exists. It reports `sectionSource: automatic`,

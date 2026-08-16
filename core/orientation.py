@@ -7,7 +7,7 @@ import json
 import re
 import unicodedata
 
-from . import disputes, evidence, item_metadata, ledger
+from . import admission, disputes, evidence, item_metadata, ledger
 from .link_safety import resolve_projected_link
 
 
@@ -137,6 +137,29 @@ def _v2_text(value, limit=500, fallback=""):
     if len(cleaned) <= limit:
         return cleaned
     return cleaned[:max(0, limit - 1)].rstrip() + "…"
+
+
+def _v2_product_text(value, label, limit=1200):
+    cleaned = _v2_text(value, limit)
+    if not cleaned:
+        return None, False
+    if admission.plain_product_language_errors(
+            cleaned, label, footnote_links_available=False):
+        return None, True
+    return cleaned, False
+
+
+def _v2_product_text_list(value, label, item_limit=500, count_limit=8):
+    result = []
+    translation_needed = False
+    for index, raw in enumerate(
+            value[:count_limit] if isinstance(value, list) else []):
+        cleaned, rejected = _v2_product_text(
+            raw, "%s[%d]" % (label, index), item_limit)
+        translation_needed = translation_needed or rejected
+        if cleaned:
+            result.append(cleaned)
+    return result, translation_needed
 
 
 def _v2_timestamp(value):
@@ -911,6 +934,30 @@ class _V2Builder:
             else _v2_text(
                 self.board.get("meta", {}).get("project"), 180, "HFLedger workspace")
         )
+        product_brief = None
+        if entity_kind == "queue-task":
+            problem, problem_translation = _v2_product_text(
+                raw.get("userProblem"), "userProblem")
+            outcome, outcome_translation = _v2_product_text(
+                raw.get("desiredOutcome"), "desiredOutcome")
+            done_when, done_translation = _v2_product_text_list(
+                raw.get("acceptanceCriteria"), "acceptanceCriteria")
+            risks, risks_translation = _v2_product_text(
+                raw.get("risksTrustConcerns"), "risksTrustConcerns")
+            product_brief = {
+                "problem": problem,
+                "outcome": outcome,
+                "doneWhen": done_when,
+                "risks": risks,
+                "translationNeeded": [
+                    name for name, needed in (
+                        ("problem", problem_translation),
+                        ("outcome", outcome_translation),
+                        ("doneWhen", done_translation),
+                        ("risks", risks_translation),
+                    ) if needed
+                ],
+            }
         item = {
             "id": item_id,
             "sourceId": source_id,
@@ -949,6 +996,7 @@ class _V2Builder:
             "_hasUntrusted": bool(raw.get("hasUntrustedContext")),
             "_confirmationRequired": bool(raw.get("confirmationRequired")),
             "_reasonCode": None,
+            "_productBrief": product_brief,
         }
         for requirement in raw.get("requiredSources", []) if isinstance(raw.get("requiredSources"), list) else []:
             if not isinstance(requirement, dict):
@@ -2790,6 +2838,17 @@ class _V2Builder:
             "HFLedger context (non-authoritative)",
             "Item: %s" % item["title"],
             "Stable reference: %s" % item["sourceItemRef"],
+        ]
+        brief = item.get("_productBrief") or {}
+        if brief.get("outcome"):
+            lines.append("What changes: %s" % brief["outcome"])
+        if brief.get("problem"):
+            lines.append("Why it matters: %s" % brief["problem"])
+        for criterion in brief.get("doneWhen", [])[:5]:
+            lines.append("Done when: %s" % criterion)
+        if brief.get("risks"):
+            lines.append("Risk or constraint: %s" % brief["risks"])
+        lines.extend([
             "Why here: %s" % item["_whyHere"],
             "Status: %s; home: %s; provenance: %s" % (
                 item["statusLabel"], item["_primaryHome"], item["_provenance"]),
@@ -2797,7 +2856,7 @@ class _V2Builder:
             "Sources observed through: %s" % (
                 item["_coverage"].get("asOf") or "unobserved"),
             "Next action: %s — %s" % (next_action["label"], next_action["reason"]),
-        ]
+        ])
         for record in evidence_records[:8]:
             lines.append("Evidence [%s]: %s (%s)" % (
                 record["provenance"], record["claim"], record["sourceRef"]))
@@ -2852,6 +2911,7 @@ class _V2Builder:
             "homeSince": _v2_iso(item["_homeSince"]),
             "priority": item["priority"],
             "workType": item["workType"],
+            "productBrief": item["_productBrief"],
             "deadline": item["deadline"],
             "provenance": item["_provenance"],
             "attentionKey": item["_attentionKey"],

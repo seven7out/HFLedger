@@ -39,6 +39,12 @@ def item(suffix, title, home, provenance, why, changed, project="Ovenlight", **e
         "whyHere": why,
         "homeSince": changed,
         "priority": extra.pop("priority", "P1" if home in {"needs-you", "disputed"} else "P2"),
+        "productBrief": extra.pop("productBrief", {
+            "problem": "The current fictional workflow makes this product outcome harder to deliver.",
+            "outcome": "People get a clearer and more dependable fictional product experience.",
+            "doneWhen": ["The intended product outcome is visible in the fictional workspace."],
+            "risks": "Keep the change reversible and preserve existing fictional records.",
+        }),
         "deadline": None,
         "provenance": provenance,
         "attentionKey": f"attention-{suffix:024x}" if home in {"needs-you", "disputed", "shipped-unverified"} else None,

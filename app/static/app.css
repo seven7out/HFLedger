@@ -897,6 +897,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 .owner-direction-summary { display: grid; gap: 6px; }
 .owner-direction-summary .control-button { justify-self: start; margin-top: 3px; }
+.product-brief-summary p { font-size: 13px; line-height: 1.5; }
+.product-brief-list { margin: 0; padding-left: 18px; color: var(--ink); font-size: 12px; line-height: 1.5; }
+.product-brief-list li + li { margin-top: 5px; }
+.product-brief-done > p { margin: 0; color: var(--ink); font-size: 12px; line-height: 1.5; }
+.workflow-state-summary { display: grid; gap: 4px; }
+.workflow-state-summary p { margin: 0; color: var(--ink); font-size: 12px; line-height: 1.45; }
+.workflow-state-summary small { color: var(--muted); font-size: 11px; line-height: 1.45; }
 
 .operations-summary {
   min-height: 48px;
@@ -1051,6 +1058,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .source-link { color: var(--accent); }
 .unavailable-link { display: inline-flex; align-items: center; opacity: .65; }
 .inspector-muted { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.dossier-diagnostics { border-bottom: 1px solid var(--line); }
+.dossier-diagnostics > summary {
+  padding: 12px 15px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.dossier-diagnostics[open] > summary { border-bottom: 1px solid var(--line); }
+.dossier-diagnostics .dossier-section:last-child { border-bottom: 0; }
 .internals { margin: 13px 15px; border-top: 1px solid var(--line); }
 .internals summary { padding: 10px 0; color: var(--muted); font-size: 11px; cursor: pointer; }
 .internals .clock-list { padding: 3px 0 10px; }

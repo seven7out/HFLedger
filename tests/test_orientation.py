@@ -640,6 +640,61 @@ class OrientationV2Tests(unittest.TestCase):
         self.assertNotIn('"confidence"', encoded)
         self.assertNotIn("probably verified", encoded.lower())
 
+    def test_queue_task_projects_a_bounded_owner_readable_product_brief(self):
+        self.board["queue"] = [{
+            "id": "task:menu-import",
+            "title": "Implement catalog import plumbing",
+            "status": "Ready for Build",
+            "userProblem": "The bakery team must update menu items one at a time.",
+            "desiredOutcome": "The team can add or export a seasonal menu in one step.",
+            "acceptanceCriteria": [
+                "Only seasonal menu items appear in the export.",
+                "Existing daily menus keep working.",
+            ],
+            "risksTrustConcerns": "A failed import must leave the current menu unchanged.",
+            "updated": "2026-07-20T10:00:00+00:00",
+        }]
+        result = self.build()
+        item = result["items"][0]
+        self.assertEqual(item["productBrief"], {
+            "problem": "The bakery team must update menu items one at a time.",
+            "outcome": "The team can add or export a seasonal menu in one step.",
+            "doneWhen": [
+                "Only seasonal menu items appear in the export.",
+                "Existing daily menus keep working.",
+            ],
+            "risks": "A failed import must leave the current menu unchanged.",
+            "translationNeeded": [],
+        })
+        self.assertIn(
+            "What changes: The team can add or export a seasonal menu in one step.",
+            item["copyContext"]["text"],
+        )
+        self.assertIn(
+            "Why it matters: The bakery team must update menu items one at a time.",
+            item["copyContext"]["text"],
+        )
+
+    def test_product_brief_omits_code_shaped_primary_copy(self):
+        self.board["queue"] = [{
+            "id": "task:technical",
+            "title": "Technical source title",
+            "status": "Needs Spec",
+            "userProblem": "Customers cannot understand the weekly menu.",
+            "desiredOutcome": "Update app/menu.py on branch feature/menu.",
+            "acceptanceCriteria": ["Customers can find the weekly menu.", "Run check menu.yml."],
+            "risksTrustConcerns": "No customer-facing risk is expected.",
+        }]
+        item = self.build()["items"][0]
+        self.assertIsNone(item["productBrief"]["outcome"])
+        self.assertEqual(
+            item["productBrief"]["doneWhen"],
+            ["Customers can find the weekly menu."])
+        self.assertEqual(
+            item["productBrief"]["translationNeeded"],
+            ["outcome", "doneWhen"])
+        self.assertNotIn("app/menu.py", item["copyContext"]["text"])
+
     def test_deep_run_history_is_partial_without_invalidating_today(self):
         source = self.observed_source()
         item = self.adapter_item()
