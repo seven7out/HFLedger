@@ -58,6 +58,9 @@
             <button class="source-row" type="button" data-view="priorities">
               <span class="source-icon" aria-hidden="true">↕</span><span>Priorities</span>
             </button>
+            <button class="source-row" type="button" data-view="calendar">
+              <span class="source-icon" aria-hidden="true">▦</span><span>Calendar</span>
+            </button>
             <button class="source-row" type="button" data-view="operations">
               <span class="source-icon" aria-hidden="true">◷</span><span>Operations</span>
             </button>
@@ -254,6 +257,12 @@
         <option value="Research &amp; planning"></option>
         <option value="Other product work"></option>
       </datalist>
+      <label class="dialog-field">
+        <span>Need this by</span>
+        <input id="owner-task-due-date" type="date"
+               aria-describedby="owner-task-due-date-note">
+      </label>
+      <small id="owner-task-due-date-note" class="dialog-field-note">Optional. Dated work appears automatically in Calendar.</small>
       <label class="dialog-field">
         <span>Outcome for people</span>
         <textarea id="owner-task-intent" maxlength="1200" rows="4"

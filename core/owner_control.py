@@ -12,8 +12,8 @@ import unicodedata
 from . import admission
 
 
-VERSION = 4
-SUPPORTED_VERSIONS = (1, 2, 3, VERSION)
+VERSION = 5
+SUPPORTED_VERSIONS = (1, 2, 3, 4, VERSION)
 FILE_NAME = "owner-control.jsonl"
 LOCK_NAME = "owner-control.lock"
 MAX_FILE_BYTES = 16 * 1024 * 1024
@@ -36,6 +36,10 @@ TASK_FIELDS_BY_VERSION = {
     4: frozenset((
         "title", "intent", "importance", "done", "note", "section",
         "parts", "disposition",
+    )),
+    5: frozenset((
+        "title", "intent", "importance", "done", "note", "section",
+        "dueDate", "parts", "disposition",
     )),
 }
 EVENT_FIELDS = frozenset((
@@ -258,6 +262,19 @@ def _timestamp(value):
         raise OwnerControlError("recordedAt must include a timezone")
 
 
+def _date(value, label="dueDate"):
+    if value is None:
+        return None
+    if not isinstance(value, str) or re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None:
+        raise OwnerControlError("%s must be a real YYYY-MM-DD date or null" % label)
+    try:
+        datetime.date.fromisoformat(value)
+    except ValueError as exc:
+        raise OwnerControlError(
+            "%s must be a real YYYY-MM-DD date or null" % label) from exc
+    return value
+
+
 def validate_event(event, expected_revision=None, expected_prior=None):
     if not isinstance(event, dict):
         raise OwnerControlError("owner-control event must be an object")
@@ -271,7 +288,7 @@ def validate_event(event, expected_revision=None, expected_prior=None):
             "owner-control event has unsupported field(s): %s" % ", ".join(unknown))
     schema_version = event.get("schemaVersion")
     if schema_version not in SUPPORTED_VERSIONS or isinstance(schema_version, bool):
-        raise OwnerControlError("owner-control schemaVersion must be 1, 2, 3, or 4")
+        raise OwnerControlError("owner-control schemaVersion must be 1, 2, 3, 4, or 5")
     revision = event.get("revision")
     if (not isinstance(revision, int) or isinstance(revision, bool) or revision < 1 or
             revision > MAX_EVENTS):
@@ -313,6 +330,8 @@ def validate_event(event, expected_revision=None, expected_prior=None):
             _plain_text(changes["note"], "note", 1000)
         if "section" in changes:
             _plain_text(changes["section"], "section", 48)
+        if "dueDate" in changes:
+            _date(changes["dueDate"])
         if "parts" in changes:
             _parts(changes["parts"])
         if ("disposition" in changes and
@@ -494,7 +513,9 @@ def fold(events):
                     value.extend(
                         prior_parts[part_id] for part_id in completed
                         if part_id in prior_parts and part_id not in present)
-                if value is None:
+                if field == "dueDate" and value is None:
+                    current[field] = None
+                elif value is None:
                     current.pop(field, None)
                 else:
                     current[field] = value
@@ -555,6 +576,10 @@ def build_view(home, candidates, events=None):
                 "importance", item.get("sourceImportance")),
             "done": override.get("done"),
             "note": override.get("note"),
+            "dueDate": override.get("dueDate", item.get("sourceDueDate")),
+            "dueDateSource": (
+                "owner" if "dueDate" in override else
+                "source" if item.get("sourceDueDate") else None),
             "parts": parts,
             "partCounts": {
                 "total": len(parts),

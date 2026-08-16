@@ -652,7 +652,8 @@ process.stdout.write(JSON.stringify({
         ]
         native_menu_ids = set(re.findall(r'"([a-z][a-z0-9.-]+)"', router))
         self.assertEqual(native_menu_ids, {
-            "view.today", "view.priorities", "view.operations", "view.changes", "view.all-work", "view.shipped-log",
+            "view.today", "view.priorities", "view.calendar", "view.operations",
+            "view.changes", "view.all-work", "view.shipped-log",
             "view.watched", "view.filter", "view.commands", "view.reload",
             "pane.toggle-sidebar", "pane.toggle-inspector", "file.open-source",
             "item.open", "item.acknowledge", "item.snooze", "item.watch",

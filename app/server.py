@@ -16,9 +16,9 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from core import (admission, item_metadata, ledger, local_state, operations,
-                  orientation, owner_control, production_health, reconcile,
-                  schema, search_links)  # noqa: E402
+from core import (admission, calendar_view, item_metadata, ledger, local_state,
+                  operations, orientation, owner_control, production_health,
+                  reconcile, schema, search_links)  # noqa: E402
 from core.link_safety import resolve_projected_link  # noqa: E402
 from core.store import BoardStore, BoardValidationError, load_config, resolve_home  # noqa: E402
 
@@ -446,6 +446,9 @@ def build_board_view(runtime, context_id=None):
             "project": projected.get("project"),
             "observedStatus": projected.get("statusLabel"),
             "sourceHome": projected.get("primaryHome"),
+            "sourceDueDate": (
+                projected["deadline"][:10]
+                if isinstance(projected.get("deadline"), str) else None),
         })
     try:
         owner_control_view = owner_control.build_view(
@@ -479,6 +482,8 @@ def build_board_view(runtime, context_id=None):
             "ownerImportance": directive["importance"],
             "ownerDone": directive["done"],
             "ownerNote": directive["note"],
+            "ownerDueDate": directive["dueDate"],
+            "ownerDueDateSource": directive["dueDateSource"],
             "ownerParts": directive["parts"],
             "ownerPartCounts": directive["partCounts"],
             "ownerProductCompletedAt": directive["ownerCompletedAt"],
@@ -511,6 +516,8 @@ def build_board_view(runtime, context_id=None):
                 owner_lines.append("Owner done when: %s" % directive["done"])
             if directive["note"]:
                 owner_lines.append("Owner note: %s" % directive["note"])
+            if directive["dueDate"]:
+                owner_lines.append("Owner need-by date: %s" % directive["dueDate"])
             for part in directive["parts"]:
                 owner_lines.append("Owner outcome [%s]: %s — %s" % (
                     "complete" if part["done"] else "remaining",
@@ -552,6 +559,14 @@ def build_board_view(runtime, context_id=None):
                     lines.append(replacement)
                 copy_context["text"] = "\n".join(lines)[:4000]
     decisions = board.get("decisions", {})
+    operations_view = operations.build_view(context.home, now=now_utc)
+    calendar = calendar_view.build_view(
+        owner_control_view.get("items", []),
+        orientation_v2.get("items", []),
+        decisions.get("items", []) if isinstance(decisions, dict) else [],
+        operations_view,
+        now=now_utc,
+    )
     response = runtime.shell(context.context_id)
     response.update({
         "project": board.get("meta", {}).get("project", context.config["project"]),
@@ -571,7 +586,8 @@ def build_board_view(runtime, context_id=None):
         "orientation": orientation.build(board, entries, context.config, now=now_utc),
         "orientationV2": orientation_v2,
         "ownerControl": owner_control_view,
-        "operations": operations.build_view(context.home, now=now_utc),
+        "operations": operations_view,
+        "calendar": calendar,
     })
     return response
 

@@ -1,9 +1,10 @@
-# Owner control and operations
+# Owner control, calendar, and operations
 
 HFLedger gives a non-developer owner one durable place to shape what agents work
 on without asking the owner to manage branches, checks, or implementation state.
-The control plane has two surfaces: **Priorities** for owner-authored product
-direction and **Operations** for visibility into commands and scheduled work.
+The control plane has three surfaces: **Priorities** for owner-authored product
+direction, **Calendar** for dated work and scheduled runs, and **Operations**
+for visibility into commands and scheduled work.
 
 ## What the owner controls
 
@@ -17,6 +18,7 @@ For a task, the owner may set:
 - two to twelve independently finishable product outcomes when the source task
   bundles unrelated results;
 - one short owner note;
+- an optional plain need-by date;
 - whether the task is active or parked; and
 - its position in the active priority list.
 
@@ -70,7 +72,7 @@ keeps source facts and owner direction separate:
 | Lane | Owns | May change when the observed board is read-only? |
 | --- | --- | --- |
 | Observed workspace | execution status, evidence, runs, releases, source facts | No |
-| Owner control | owner headline, automatic or owner-chosen product section, intended outcome, importance, definition of done, product-outcome split and completion reports, owner note, active/parked choice, priority order, owner-only manual completion report | Yes |
+| Owner control | owner headline, automatic or owner-chosen product section, intended outcome, importance, definition of done, need-by date, product-outcome split and completion reports, owner note, active/parked choice, priority order, owner-only manual completion report | Yes |
 
 Owner events are stored in `owner-control.jsonl`; they never rewrite `board.json`
 or `ledger.jsonl`. The projection overlays the latest valid directive while
@@ -111,6 +113,22 @@ plus an optional latest run with one of `succeeded`, `failed`, `running`,
 the report as a unit; the app contains that failure as an Operations status
 instead of refusing to show the rest of the workspace.
 
+## Calendar
+
+Calendar is a read-only month projection plus an agenda. It includes active
+task need-by dates, open owner-decision deadlines, deferred items returning for
+attention, and the next run of each enabled schedule. It intentionally excludes
+created, updated, evidence, and history timestamps so ordinary activity does
+not flood the owner's calendar.
+
+An owner may add, change, or remove a task's **Need this by** date in the
+Priorities edit sheet. That instruction is stored only in
+`owner-control.jsonl`; an explicit removal can hide an inherited deadline
+without changing the observed source. Decision deadlines and schedule times
+remain read-only. Clicking dated work opens its Details; clicking a scheduled
+run opens Operations. Calendar does not execute work, create external calendar
+events, or expand an indefinite recurrence series.
+
 ## Surface map
 
 - **Today** keeps production health, owner cards, and product flow first.
@@ -120,6 +138,8 @@ instead of refusing to show the rest of the workspace.
   owner-readable headline, outcome, importance, definition of done, and bounded
   independently completable outcomes. Completed product tasks remain in a
   collapsed history section.
+- **Calendar** collects task dates, owner-response deadlines, returning items,
+  and next scheduled runs in a month grid and agenda without inventing dates.
 - **Operations** lists commands, schedules, their next expected run, latest
   outcome, and a bounded error summary.
 - **All Work** and the inspector show the effective owner title and intent while

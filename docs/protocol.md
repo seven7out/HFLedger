@@ -437,7 +437,7 @@ Escrow is a successful durable outcome, not an error. A later reviewed workflow 
 
 ### 9.4 Owner product direction
 
-`owner-control.jsonl` is a supplemental version-4 journal, not a replacement
+`owner-control.jsonl` is a supplemental version-5 journal, not a replacement
 for the event ledger or materialized board. Each private, newline-terminated
 JSON event has a contiguous revision and SHA-256 predecessor link. `task-set`
 events set or clear a concise owner headline, product section, intended outcome,
@@ -455,10 +455,12 @@ and active priority order only; the observed queue status and evidence remain
 unchanged.
 
 Readers accept existing version-1, version-2, and version-3 events with new
-version-4 events in the same hash-chained journal. Version 2 added the bounded
+version-4 and version-5 events in the same hash-chained journal. Version 2 added the bounded
 `section` task field. Version 3 added `importance` and `done`. Version 4 adds
-product parts and one-way product completion; it does not rewrite old events or
-store inferred values in the journal.
+product parts and one-way product completion. Version 5 adds the optional
+`dueDate` owner directive as a real `YYYY-MM-DD` date. An explicit null hides
+an inherited source deadline without rewriting it. Upgrades do not rewrite old
+events or store inferred values in the journal.
 
 The owner-control projection may supply a deterministic automatic starting
 section when no `section` event exists. It reports `sectionSource: automatic`,

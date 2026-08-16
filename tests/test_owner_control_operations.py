@@ -77,6 +77,7 @@ class OwnerControlTests(unittest.TestCase):
                 "done": "Customers see today's available items before ordering.",
                 "note": "Keep the first version calm and easy to scan.",
                 "section": "Menu experience",
+                "dueDate": "2026-08-20",
             }, now_fn=lambda: "2026-08-14T11:00:00+00:00")
         owner_control.append(
             self.home, 1, "task-set", task_id="task-pickup",
@@ -100,9 +101,11 @@ class OwnerControlTests(unittest.TestCase):
             "Customers see today's available items before ordering.")
         self.assertEqual(view["items"][1]["section"], "Menu experience")
         self.assertEqual(view["items"][1]["sectionSource"], "owner")
+        self.assertEqual(view["items"][1]["dueDate"], "2026-08-20")
+        self.assertEqual(view["items"][1]["dueDateSource"], "owner")
         self.assertEqual(view["items"][0]["section"], "Other product work")
         self.assertEqual(view["items"][0]["sectionSource"], "automatic")
-        self.assertEqual(view["version"], 4)
+        self.assertEqual(view["version"], 5)
         for name, content in before.items():
             self.assertEqual(Path(self.home, name).read_bytes(), content)
 
@@ -144,9 +147,9 @@ class OwnerControlTests(unittest.TestCase):
             self.home, 1, "task-set", task_id="task-menu",
             changes={"section": "Menu experience"},
             now_fn=lambda: "2026-08-14T10:01:00+00:00")
-        self.assertEqual(event["schemaVersion"], 4)
+        self.assertEqual(event["schemaVersion"], 5)
         self.assertEqual(
-            [record["schemaVersion"] for record in owner_control.read(self.home)], [1, 4])
+            [record["schemaVersion"] for record in owner_control.read(self.home)], [1, 5])
         view = owner_control.build_view(self.home, self.candidates())
         menu = next(item for item in view["items"] if item["id"] == "task-menu")
         self.assertEqual(menu["section"], "Menu experience")
@@ -162,6 +165,35 @@ class OwnerControlTests(unittest.TestCase):
 
         legacy["changes"] = {"title": "A" * 160}
         owner_control.validate_event(legacy, expected_revision=1)
+
+    def test_need_by_date_is_real_owner_input_and_can_hide_a_source_date(self):
+        candidates = self.candidates()
+        candidates[0]["sourceDueDate"] = "2026-08-19"
+        initial = owner_control.build_view(self.home, candidates, events=[])
+        menu = next(item for item in initial["items"] if item["id"] == "task-menu")
+        self.assertEqual((menu["dueDate"], menu["dueDateSource"]),
+                         ("2026-08-19", "source"))
+
+        owner_control.append(
+            self.home, 0, "task-set", task_id="task-menu",
+            changes={"dueDate": "2026-08-21"},
+            now_fn=lambda: "2026-08-14T11:00:00+00:00")
+        owner_control.append(
+            self.home, 1, "task-set", task_id="task-menu",
+            changes={"dueDate": None},
+            now_fn=lambda: "2026-08-14T11:01:00+00:00")
+        hidden = owner_control.build_view(self.home, candidates)
+        menu = next(item for item in hidden["items"] if item["id"] == "task-menu")
+        self.assertIsNone(menu["dueDate"])
+        self.assertEqual(menu["dueDateSource"], "owner")
+
+        before = Path(self.home, owner_control.FILE_NAME).read_bytes()
+        with self.assertRaises(owner_control.OwnerControlError):
+            owner_control.append(
+                self.home, 2, "task-set", task_id="task-menu",
+                changes={"dueDate": "2026-02-29"},
+                now_fn=lambda: "2026-08-14T11:02:00+00:00")
+        self.assertEqual(Path(self.home, owner_control.FILE_NAME).read_bytes(), before)
 
     def test_product_parts_and_queue_completion_are_durable_and_one_way(self):
         parts = [{
@@ -447,6 +479,7 @@ class OwnerControlServerTests(unittest.TestCase):
                 "done": "Customers see today's available items before ordering.",
                 "note": "Keep the first version easy to scan.",
                 "section": "Menu experience",
+                "dueDate": "2026-08-20",
             },
         })
         self.assertEqual(status, 200, response)
@@ -485,8 +518,15 @@ class OwnerControlServerTests(unittest.TestCase):
             projected["ownerDone"],
             "Customers see today's available items before ordering.")
         self.assertEqual(projected["ownerSection"], "Menu experience")
+        self.assertEqual(projected["ownerDueDate"], "2026-08-20")
         self.assertIn("Owner section: Menu experience", projected["copyContext"]["text"])
+        self.assertIn("Owner need-by date: 2026-08-20", projected["copyContext"]["text"])
         self.assertIn("Owner priority: 2", projected["copyContext"]["text"])
+        calendar_event = next(
+            event for event in board["calendar"]["events"]
+            if event.get("itemId") == projected["id"])
+        self.assertEqual((calendar_event["kind"], calendar_event["date"]),
+                         ("task_due", "2026-08-20"))
 
     def test_automatic_starting_section_is_projected_without_claiming_owner_choice(self):
         status, board = self.request("GET", "/api/board?context=main")

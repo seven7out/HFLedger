@@ -26,7 +26,7 @@ class TodayUIContractTests(unittest.TestCase):
     def test_sidebar_order_and_three_pane_shell(self):
         markup = HTML.read_text(encoding="utf-8")
         positions = [markup.index(f'data-view="{view}"') for view in (
-            "today", "priorities", "operations", "changes", "all-work",
+            "today", "priorities", "calendar", "operations", "changes", "all-work",
             "shipped-log", "watched", "projects"
         )]
         self.assertEqual(positions, sorted(positions))
@@ -64,6 +64,19 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertIn("Execution status remains agent-reported", script)
         self.assertIn("Urgent is always the first five in Exact order", script)
         self.assertNotIn("Run command", script)
+
+    def test_calendar_is_a_real_owner_view_with_editable_need_by_dates(self):
+        markup = HTML.read_text(encoding="utf-8")
+        script = JS.read_text(encoding="utf-8")
+        style = CSS.read_text(encoding="utf-8")
+        for required in (
+                'data-view="calendar"', 'id="owner-task-due-date"',
+                "Need this by", "renderCalendar", "calendarMonthCells",
+                "Routine update timestamps are excluded", ".month-calendar",
+                ".calendar-grid", ".calendar-agenda"):
+            self.assertIn(required, markup + script + style)
+        self.assertIn('setView("operations")', script)
+        self.assertNotIn("Google Calendar", markup + script + style)
 
     def test_task_details_lead_with_product_meaning_and_collapse_diagnostics(self):
         script = JS.read_text(encoding="utf-8")

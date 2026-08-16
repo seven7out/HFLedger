@@ -57,9 +57,25 @@ test("owner priority movement is deterministic and preserves every task", () => 
   assert.deepEqual(ui.moveInOrder(["a", "b", "c"], "c", 0), ["c", "a", "b"]);
   assert.deepEqual(ui.moveInOrder(["a", "b", "c"], "missing", 1), ["a", "b", "c"]);
   assert.deepEqual(ui.NAVIGATION_VIEWS, [
-    "today", "priorities", "operations", "changes", "all-work",
+    "today", "priorities", "calendar", "operations", "changes", "all-work",
     "shipped-log", "watched", "projects", "project",
   ]);
+});
+
+test("calendar uses real dates, a six-week month grid, and local scheduled days", () => {
+  assert.equal(ui.calendarDateKey("2026-08-20"), "2026-08-20");
+  assert.equal(ui.calendarDateKey("2026-02-29"), null);
+  assert.equal(ui.calendarDateKey("not-a-date"), null);
+  const cells = ui.calendarMonthCells(2026, 7, "2026-08-16");
+  assert.equal(cells.length, 42);
+  assert.equal(cells[0].key, "2026-07-26");
+  assert.equal(cells[41].key, "2026-09-05");
+  assert.equal(cells.find((cell) => cell.key === "2026-08-16").isToday, true);
+  assert.equal(ui.calendarEventDateKey({ allDay: true, date: "2026-08-20" }), "2026-08-20");
+  assert.equal(ui.calendarEventDateKey({
+    allDay: false, startsAt: "2026-08-20T12:00:00Z",
+  }), "2026-08-20");
+  assert.equal(ui.calendarKindLabel("scheduled_run"), "Scheduled work");
 });
 
 test("owner priority sections preserve automatic starts and owner moves", () => {

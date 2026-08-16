@@ -175,6 +175,13 @@ class MemoryLocalStateTests(unittest.TestCase):
             [record["itemId"] for record in self.backend.get("main")["context"]["watched"]],
             ["item-first"])
 
+    def test_calendar_is_a_persisted_navigation_view(self):
+        state = command(self.backend, "main", 0, "set-navigation", {
+            "selectedView": "calendar",
+        })
+        self.assertEqual(state["context"]["navigation"]["selectedView"], "calendar")
+        self.assertIsNone(state["context"]["navigation"]["selectedItemId"])
+
     def test_unknown_context_command_and_fields_are_rejected(self):
         with self.assertRaises(local_state.LocalStateError) as caught:
             self.backend.get("missing")

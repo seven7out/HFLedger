@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added an owner calendar with a familiar month grid and agenda. It populates
+  automatically from task need-by dates, owner-decision deadlines, deferred
+  returns, and enabled schedules' next runs while excluding routine activity
+  timestamps. Owners can set a task date from Priorities and open each calendar
+  event in the relevant Details or Operations view.
 - Added owner-facing product-outcome splits for mixed queue tasks. Each bounded
   outcome has its own plain-language result and one-way **Mark complete**
   control; an unsplit task can also be marked complete as an owner product

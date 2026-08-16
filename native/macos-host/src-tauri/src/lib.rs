@@ -137,6 +137,7 @@ struct NativeMenuState {
 enum NativeCommand {
     ViewToday,
     ViewPriorities,
+    ViewCalendar,
     ViewOperations,
     ViewChanges,
     ViewAllWork,
@@ -160,6 +161,7 @@ impl NativeCommand {
         match self {
             Self::ViewToday => "view.today",
             Self::ViewPriorities => "view.priorities",
+            Self::ViewCalendar => "view.calendar",
             Self::ViewOperations => "view.operations",
             Self::ViewChanges => "view.changes",
             Self::ViewAllWork => "view.all-work",
@@ -183,6 +185,7 @@ impl NativeCommand {
         match self {
             Self::ViewToday => native_event_script!("view.today"),
             Self::ViewPriorities => native_event_script!("view.priorities"),
+            Self::ViewCalendar => native_event_script!("view.calendar"),
             Self::ViewOperations => native_event_script!("view.operations"),
             Self::ViewChanges => native_event_script!("view.changes"),
             Self::ViewAllWork => native_event_script!("view.all-work"),
@@ -3201,6 +3204,7 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
 
     let today = custom_menu_item(app, "view.today", "Today", false, Some("CmdOrCtrl+1"))?;
     let priorities = custom_menu_item(app, "view.priorities", "Priorities", false, None)?;
+    let calendar = custom_menu_item(app, "view.calendar", "Calendar", false, None)?;
     let operations = custom_menu_item(app, "view.operations", "Operations", false, None)?;
     let changes = custom_menu_item(app, "view.changes", "Changes", false, Some("CmdOrCtrl+2"))?;
     let all_work = custom_menu_item(app, "view.all-work", "All Work", false, Some("CmdOrCtrl+3"))?;
@@ -3268,6 +3272,7 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
         &[
             &today,
             &priorities,
+            &calendar,
             &operations,
             &changes,
             &all_work,
@@ -3393,6 +3398,7 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
         edit_find,
         today.clone(),
         priorities.clone(),
+        calendar.clone(),
         operations.clone(),
         changes.clone(),
         all_work.clone(),
@@ -3715,6 +3721,7 @@ fn native_command_for_menu_id(id: &str) -> Option<NativeCommand> {
     match id {
         "view.today" => Some(NativeCommand::ViewToday),
         "view.priorities" => Some(NativeCommand::ViewPriorities),
+        "view.calendar" => Some(NativeCommand::ViewCalendar),
         "view.operations" => Some(NativeCommand::ViewOperations),
         "view.changes" => Some(NativeCommand::ViewChanges),
         "view.all-work" => Some(NativeCommand::ViewAllWork),
@@ -4526,6 +4533,7 @@ mod tests {
         let cases = [
             ("view.today", NativeCommand::ViewToday),
             ("view.priorities", NativeCommand::ViewPriorities),
+            ("view.calendar", NativeCommand::ViewCalendar),
             ("view.operations", NativeCommand::ViewOperations),
             ("view.changes", NativeCommand::ViewChanges),
             ("view.all-work", NativeCommand::ViewAllWork),

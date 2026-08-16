@@ -190,6 +190,7 @@ def owner_control_fixture():
             "project": work["project"], "observedStatus": work["statusLabel"],
             "sourceHome": work["primaryHome"], "intent": intent, "note": None,
             "importance": None, "done": None,
+            "dueDate": None, "dueDateSource": None,
             "parts": [], "partCounts": {"total": 0, "done": 0, "remaining": 0},
             "ownerCompletedAt": None,
             "section": section, "sectionSource": "automatic",
@@ -212,19 +213,24 @@ def owner_control_fixture():
         "completedAt": None,
     }]
     items[0]["partCounts"] = {"total": 2, "done": 1, "remaining": 1}
+    items[0]["dueDate"] = "2026-07-22"
+    items[0]["dueDateSource"] = "owner"
     parked = ITEMS[7]
     items.append({
         "id": parked["sourceItemRef"], "itemId": parked["id"],
         "sourceTitle": parked["title"], "title": "Explore quieter analytics",
         "project": parked["project"], "observedStatus": parked["statusLabel"],
         "sourceHome": parked["primaryHome"], "intent": "Owners can understand broad trends without a noisy dashboard.",
-        "note": None, "section": "Research & planning", "sectionSource": "automatic",
+        "note": None, "dueDate": None, "dueDateSource": None,
+        "parts": [], "partCounts": {"total": 0, "done": 0, "remaining": 0},
+        "ownerCompletedAt": None,
+        "section": "Research & planning", "sectionSource": "automatic",
         "disposition": "parked", "rank": None,
         "overriddenFields": ["title", "intent"],
     })
     active_order = [record["id"] for record in items if record["disposition"] == "active"]
     return {
-        "version": 4, "available": True, "revision": 7, "updatedAt": OBSERVED,
+        "version": 5, "available": True, "revision": 7, "updatedAt": OBSERVED,
         "sectionSuggestions": [
             "UX & interface", "Directory data", "New features",
             "Reliability & automation", "Safety & privacy", "Content & outreach",
@@ -232,6 +238,7 @@ def owner_control_fixture():
             "Other product work",
         ],
         "activeOrder": active_order, "completedOwnerTaskIds": [],
+        "completedQueueTaskIds": [],
         "ownerTaskCompletions": [], "items": items,
         "counts": {"active": len(active_order), "parked": 1, "completed": 0},
     }
@@ -405,6 +412,43 @@ class Handler(SimpleHTTPRequestHandler):
                        "readOnly": True, "localState": {"mode": "session", "available": True, "schemaVersion": 1, "reason": None}},
                 "orientation": {"version": 1}, "orientationV2": projected(context),
                 "ownerControl": owner_control_fixture(),
+                "calendar": {
+                    "version": 1, "today": "2026-07-18",
+                    "summary": "3 dated items",
+                    "counts": {
+                        "task_due": 1, "decision_due": 1,
+                        "scheduled_run": 1, "returns": 0, "total": 3,
+                    },
+                    "events": [{
+                        "id": "calendar-000000000000000000000001",
+                        "kind": "scheduled_run", "title": "Morning workspace refresh",
+                        "detail": "Makes new fictional work visible before planning.",
+                        "date": "2026-07-19", "startsAt": "2026-07-19T08:00:00Z",
+                        "allDay": False, "itemId": None, "destination": "operations",
+                        "status": "succeeded", "project": "",
+                    }, {
+                        "id": "calendar-000000000000000000000002",
+                        "kind": "decision_due", "title": "Choose the fictional release window",
+                        "detail": "Choose the release window the team should follow.",
+                        "date": "2026-07-20", "startsAt": None,
+                        "allDay": True, "itemId": ITEMS[0]["id"], "destination": None,
+                        "status": None, "project": "Ovenlight",
+                    }, {
+                        "id": "calendar-000000000000000000000003",
+                        "kind": "task_due", "title": "Make the mobile experience feel native",
+                        "detail": "People can move through the fictional mobile experience clearly.",
+                        "date": "2026-07-22", "startsAt": None,
+                        "allDay": True, "itemId": ITEMS[4]["id"], "destination": None,
+                        "status": None, "project": "Example Mobile",
+                    }],
+                },
+                "operations": {
+                    "version": 1, "connected": True, "state": "healthy",
+                    "summary": "Scheduled work is reporting normally.",
+                    "observedAt": OBSERVED, "commands": [],
+                    "schedules": [],
+                    "counts": {"commands": 0, "schedules": 0, "failing": 0},
+                },
             })
         if parsed.path == "/api/cards":
             context = self._context()

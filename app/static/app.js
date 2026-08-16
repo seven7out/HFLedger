@@ -2,7 +2,7 @@
 
 const TESTING = globalThis.__HFLEDGER_TESTING__ === true;
 const PRIMARY_VIEWS = ["today", "changes", "all-work", "shipped-log", "watched"];
-const NAVIGATION_VIEWS = ["today", "priorities", "operations", "changes", "all-work", "shipped-log", "watched", "projects", "project"];
+const NAVIGATION_VIEWS = ["today", "priorities", "calendar", "operations", "changes", "all-work", "shipped-log", "watched", "projects", "project"];
 const HOME_ORDER = [
   "needs-you", "disputed", "silent-while-observed", "shipped-unverified",
   "in-motion", "queued", "shipped-verified", "parked", "unobserved",
@@ -101,6 +101,7 @@ const state = {
   priorityViewMode: "sections",
   parkedPriorityExpanded: false,
   completedPriorityExpanded: false,
+  calendarMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   collapsedPrioritySections: new Set(
     PRIORITY_SECTION_SUGGESTIONS.map((section) => section.toLocaleLowerCase())),
 };
@@ -147,6 +148,68 @@ function exactTime(value) {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium", timeStyle: "short",
   }).format(parsed);
+}
+
+function calendarDateKey(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(safeText(value, 10));
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+  if (parsed.getFullYear() !== year || parsed.getMonth() !== month - 1 || parsed.getDate() !== day) return null;
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function localDateKey(value) {
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.valueOf())) return null;
+  return `${String(parsed.getFullYear()).padStart(4, "0")}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+}
+
+function calendarEventDateKey(event) {
+  if (event?.allDay === false && event?.startsAt) return localDateKey(event.startsAt);
+  return calendarDateKey(event?.date);
+}
+
+function formatCalendarDate(value, options = { month: "short", day: "numeric" }) {
+  const key = calendarDateKey(value);
+  if (!key) return "Date unknown";
+  const [year, month, day] = key.split("-").map(Number);
+  return new Intl.DateTimeFormat(undefined, options).format(new Date(year, month - 1, day));
+}
+
+function calendarMonthCells(year, monthIndex, todayKey = localDateKey(new Date())) {
+  if (!Number.isInteger(year) || !Number.isInteger(monthIndex)) return [];
+  const first = new Date(year, monthIndex, 1);
+  if (Number.isNaN(first.valueOf())) return [];
+  const start = new Date(year, monthIndex, 1 - first.getDay());
+  return Array.from({ length: 42 }, (_unused, index) => {
+    const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index);
+    const key = localDateKey(date);
+    return {
+      key,
+      day: date.getDate(),
+      inMonth: date.getMonth() === first.getMonth(),
+      isToday: key === todayKey,
+    };
+  });
+}
+
+function calendarKindLabel(kind) {
+  return ({
+    task_due: "Task due",
+    decision_due: "Owner decision",
+    scheduled_run: "Scheduled work",
+    returns: "Returns",
+  })[kind] || "Dated work";
+}
+
+function calendarTimeLabel(event) {
+  if (event?.allDay !== false || !event?.startsAt) return "All day";
+  const parsed = new Date(event.startsAt);
+  if (Number.isNaN(parsed.valueOf())) return "Time unknown";
+  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(parsed);
 }
 
 function relativeTime(value, estimated = false) {
@@ -1213,6 +1276,10 @@ function openOwnerTaskEditor(taskId, { focusSection = false } = {}) {
   $("#owner-task-section-note").textContent = item.sectionSource === "automatic"
     ? "Suggested automatically from the current title. Choose any section to override it."
     : "This section was chosen by the owner.";
+  $("#owner-task-due-date").value = calendarDateKey(item.dueDate) || "";
+  $("#owner-task-due-date-note").textContent = item.dueDateSource === "source"
+    ? "This date came from the source task. Change or clear it here to set the owner calendar."
+    : "Optional. Dated work appears automatically in Calendar.";
   $("#owner-task-intent").value = safePlainText(item.intent, 1200);
   $("#owner-task-importance").value = safePlainText(item.importance, 1200);
   $("#owner-task-done").value = safePlainText(item.done, 1200);
@@ -1247,6 +1314,7 @@ async function saveOwnerTask() {
     parts,
     note: safeText($("#owner-task-note").value, 1000),
     section: safeText($("#owner-task-section").value, 48),
+    dueDate: calendarDateKey($("#owner-task-due-date").value),
     disposition: $("#owner-task-disposition").value === "parked" ? "parked" : "active",
   };
   if (!desired.title) return announce("Product title cannot be empty.");
@@ -1262,6 +1330,7 @@ async function saveOwnerTask() {
       changed[field] = desired[field] || null;
     }
   }
+  if (desired.dueDate !== calendarDateKey(item.dueDate)) changed.dueDate = desired.dueDate;
   const currentParts = (item.parts || []).map(ownerPartDefinition);
   if (JSON.stringify(desired.parts) !== JSON.stringify(currentParts)) {
     changed.parts = desired.parts.length ? desired.parts : null;
@@ -1361,6 +1430,8 @@ function renderPriorityRow(item, index, total, { ordering = true, sectionMove = 
     "span", "priority-part-count",
     `${item.partCounts.done} of ${item.partCounts.total} outcomes complete`,
   ));
+  if (item.dueDate) copy.append(node(
+    "span", "priority-due-date", `Due ${formatCalendarDate(item.dueDate)}`));
   copy.append(node("small", "", [item.project, item.observedStatus].filter(Boolean).join(" · ")));
   const actions = node("div", "priority-actions");
   if (ordering) {
@@ -1574,6 +1645,146 @@ function operationStateLabel(value) {
 
 function operationRunLabel(value) {
   return ({ succeeded: "Succeeded", failed: "Failed", running: "Running", missed: "Missed", unknown: "Unknown", disabled: "Disabled" })[value] || "Unknown";
+}
+
+function openCalendarEvent(event) {
+  const itemId = safeText(event?.itemId, 160);
+  if (itemId && itemMap().has(itemId)) {
+    selectDescriptor({ kind: "item", id: itemId }, { focus: false });
+    announce(`Opened ${safeText(event.title, 120)} in Details.`);
+    return;
+  }
+  if (event?.destination === "operations") {
+    setView("operations");
+    return;
+  }
+  announce("This calendar item has no additional details.");
+}
+
+function setCalendarMonth(delta) {
+  const current = state.calendarMonth instanceof Date && !Number.isNaN(state.calendarMonth.valueOf())
+    ? state.calendarMonth : new Date();
+  state.calendarMonth = new Date(current.getFullYear(), current.getMonth() + delta, 1);
+  renderCenter();
+}
+
+function resetCalendarMonth() {
+  const today = new Date();
+  state.calendarMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  renderCenter();
+}
+
+function renderCalendarEvent(event, compact = false) {
+  const action = button(
+    `calendar-event kind-${safeText(event.kind, 24)} state-${safeText(event.status, 16) || "none"}${compact ? " is-agenda" : ""}`,
+    "", () => openCalendarEvent(event));
+  action.append(
+    node("span", "calendar-event-time", calendarTimeLabel(event)),
+    node("strong", "", event.title || "Dated work"),
+  );
+  if (compact) {
+    const meta = [calendarKindLabel(event.kind), event.project, event.detail]
+      .map((value) => safeText(value, 180)).filter(Boolean).join(" · ");
+    if (meta) action.append(node("small", "", meta));
+  }
+  action.setAttribute("aria-label", [
+    event.title, calendarKindLabel(event.kind), calendarTimeLabel(event), event.detail,
+  ].filter(Boolean).join(", "));
+  return action;
+}
+
+function renderCalendar() {
+  const model = state.data?.calendar || { events: [], counts: {} };
+  const events = (Array.isArray(model.events) ? model.events : [])
+    .map((event) => ({ ...event, localDate: calendarEventDateKey(event) }))
+    .filter((event) => event.localDate);
+  const fragment = document.createDocumentFragment();
+  const month = state.calendarMonth instanceof Date && !Number.isNaN(state.calendarMonth.valueOf())
+    ? state.calendarMonth : new Date();
+  const year = month.getFullYear();
+  const monthIndex = month.getMonth();
+  const monthLabel = new Intl.DateTimeFormat(undefined, {
+    month: "long", year: "numeric",
+  }).format(month);
+
+  const toolbar = node("section", "calendar-toolbar");
+  const navigation = node("div", "calendar-navigation");
+  const previous = button("icon-control", "‹", () => setCalendarMonth(-1));
+  previous.setAttribute("aria-label", "Previous month");
+  const next = button("icon-control", "›", () => setCalendarMonth(1));
+  next.setAttribute("aria-label", "Next month");
+  navigation.append(
+    button("control-button", "Today", resetCalendarMonth),
+    previous,
+    next,
+    node("h2", "calendar-month-title", monthLabel),
+  );
+  const monthPrefix = `${String(year).padStart(4, "0")}-${String(monthIndex + 1).padStart(2, "0")}-`;
+  const monthEvents = events.filter((event) => event.localDate.startsWith(monthPrefix));
+  const todayKey = localDateKey(new Date());
+  const overdue = events.filter((event) => event.localDate < todayKey &&
+    ["task_due", "decision_due", "returns"].includes(event.kind)).length;
+  const dueCount = monthEvents.filter((event) => ["task_due", "decision_due"].includes(event.kind)).length;
+  const scheduleCount = monthEvents.filter((event) => event.kind === "scheduled_run").length;
+  const summary = node("div", "calendar-summary");
+  summary.append(
+    node("strong", "", `${dueCount} due this month`),
+    node("span", "", `${scheduleCount} scheduled run${scheduleCount === 1 ? "" : "s"}`),
+  );
+  if (overdue) summary.append(node("span", "calendar-overdue", `${overdue} overdue`));
+  toolbar.append(navigation, summary);
+  fragment.append(toolbar);
+
+  const note = node("p", "calendar-source-note",
+    "Shows real need-by dates, owner decisions, returning reminders, and the next reported run of scheduled work. Routine update timestamps are excluded.");
+  fragment.append(note);
+
+  const calendar = node("section", "month-calendar");
+  calendar.setAttribute("aria-label", monthLabel);
+  const weekdays = node("div", "calendar-weekdays");
+  ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].forEach((day) =>
+    weekdays.append(node("span", "", day)));
+  calendar.append(weekdays);
+  const grid = node("div", "calendar-grid");
+  grid.setAttribute("role", "grid");
+  const byDate = new Map();
+  monthEvents.forEach((event) => {
+    if (!byDate.has(event.localDate)) byDate.set(event.localDate, []);
+    byDate.get(event.localDate).push(event);
+  });
+  calendarMonthCells(year, monthIndex, todayKey).forEach((day) => {
+    const cell = node("article", `calendar-day${day.inMonth ? "" : " is-outside"}${day.isToday ? " is-today" : ""}`);
+    cell.setAttribute("role", "gridcell");
+    cell.setAttribute("aria-label", formatCalendarDate(day.key, {
+      weekday: "long", month: "long", day: "numeric", year: "numeric",
+    }));
+    const number = node("time", "calendar-day-number", String(day.day));
+    number.dateTime = day.key;
+    cell.append(number);
+    const dayEvents = byDate.get(day.key) || [];
+    dayEvents.slice(0, 4).forEach((event) => cell.append(renderCalendarEvent(event)));
+    if (dayEvents.length > 4) cell.append(node(
+      "span", "calendar-more", `+${dayEvents.length - 4} more below`));
+    grid.append(cell);
+  });
+  calendar.append(grid);
+  fragment.append(calendar);
+
+  const agenda = node("div", "calendar-agenda");
+  monthEvents.forEach((event) => {
+    const row = node("article", "calendar-agenda-row");
+    const date = node("time", "calendar-agenda-date", formatCalendarDate(event.localDate, {
+      month: "short", day: "numeric",
+    }));
+    date.dateTime = event.localDate;
+    row.append(date, renderCalendarEvent(event, true));
+    agenda.append(row);
+  });
+  if (!monthEvents.length) agenda.append(emptyState(
+    "Nothing dated this month",
+    "Add a Need this by date when editing a task, or connect scheduled-work reporting."));
+  fragment.append(section("This month", monthEvents.length, agenda, "calendar-agenda-section"));
+  return fragment;
 }
 
 function renderOperations() {
@@ -1812,6 +2023,9 @@ function viewMetadata() {
   if (state.view === "priorities") return state.data?.ownerControl?.available === true
     ? ["Priorities", `${state.data.ownerControl.counts?.active || 0} active · durable owner order for agents`]
     : ["Priorities", "Owner priorities are unavailable"];
+  if (state.view === "calendar") return [
+    "Calendar", state.data?.calendar?.summary || "Dated owner work and scheduled runs",
+  ];
   if (state.view === "operations") return ["Operations", state.data?.operations?.summary || "Command and schedule reporting"];
   if (state.view === "changes") return ["Changes", `${state.orientation?.changes?.unseenTotal || 0} unseen · ${observed || "coverage time unavailable"}`];
   if (state.view === "all-work") return ["All Work", `${state.orientation?.totals?.items || 0} items · one primary home each`];
@@ -1827,7 +2041,7 @@ function renderCenter() {
   const [title, subtitle] = viewMetadata();
   $("#view-title").textContent = title;
   $("#view-subtitle").textContent = subtitle;
-  $("#filter-toggle").hidden = state.view === "priorities" || state.view === "operations";
+  $("#filter-toggle").hidden = ["priorities", "calendar", "operations"].includes(state.view);
   if ($("#filter-toggle").hidden) {
     $("#filter-panel").hidden = true;
     $("#filter-toggle").setAttribute("aria-expanded", "false");
@@ -1835,6 +2049,7 @@ function renderCenter() {
   let content;
   if (state.view === "today") content = renderToday();
   else if (state.view === "priorities") content = renderPriorities();
+  else if (state.view === "calendar") content = renderCalendar();
   else if (state.view === "operations") content = renderOperations();
   else if (state.view === "changes") content = renderChanges();
   else if (state.view === "all-work") content = renderAllWork();
@@ -2048,6 +2263,12 @@ function renderItemInspector(target, item) {
         : "No specific product risk or constraint was supplied."),
     ));
     if (item.ownerNote) wrapper.append(inspectorSection("Owner note", item.ownerNote));
+    if (item.ownerDueDate) wrapper.append(inspectorSection(
+      "Need by",
+      formatCalendarDate(item.ownerDueDate, {
+        weekday: "long", year: "numeric", month: "long", day: "numeric",
+      }),
+    ));
 
     const outcomes = node("div", "owner-product-outcomes");
     const parts = Array.isArray(item.ownerParts) ? item.ownerParts : [];
@@ -2808,7 +3029,8 @@ function setupResizer(selector, side) {
 
 const COMMANDS = [
   ["view.today", "Today", "⌘1"], ["view.changes", "Changes", "⌘2"],
-  ["view.priorities", "Priorities", ""], ["view.operations", "Operations", ""],
+  ["view.priorities", "Priorities", ""], ["view.calendar", "Calendar", ""],
+  ["view.operations", "Operations", ""],
   ["view.all-work", "All Work", "⌘3"], ["view.shipped-log", "Shipped Log", "⌘4"],
   ["view.watched", "Watched", "⌘5"], ["view.filter", "Filter Current View", "⌘F"],
   ["view.reload", "Refresh Sources", "⌘R"], ["pane.toggle-sidebar", "Show or Hide Sidebar", "⌃⌘S"],
@@ -2895,6 +3117,7 @@ function dispatchCommand(id) {
   const routes = {
     "view.today": () => setView("today"),
     "view.priorities": () => setView("priorities"),
+    "view.calendar": () => setView("calendar"),
     "view.operations": () => setView("operations"),
     "view.changes": () => setView("changes"),
     "view.all-work": () => setView("all-work"),
@@ -3185,6 +3408,10 @@ globalThis.HFLedgerUI = Object.freeze({
   splitUrgentPriorities,
   operationStateLabel,
   operationRunLabel,
+  calendarDateKey,
+  calendarEventDateKey,
+  calendarMonthCells,
+  calendarKindLabel,
   PRIORITY_LABELS,
   WORK_TYPE_LABELS,
   PRIORITY_SECTION_SUGGESTIONS,

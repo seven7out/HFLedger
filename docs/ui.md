@@ -54,13 +54,14 @@ The sidebar order is fixed:
 
 1. Today
 2. Priorities
-3. Operations
-4. Changes
-5. All Work
-6. Shipped Log
-7. Watched
-8. Projects
-9. coverage footer
+3. Calendar
+4. Operations
+5. Changes
+6. All Work
+7. Shipped Log
+8. Watched
+9. Projects
+10. coverage footer
 
 Today starts with the owner model in this exact order:
 
@@ -116,7 +117,8 @@ owner can edit:
 - why the outcome matters;
 - the plain-language condition that means the work is done;
 - separate product outcomes when one source task bundles several results;
-- one owner note; and
+- one owner note;
+- an optional **Need this by** date; and
 - whether the task is active or parked.
 
 HFLedger supplies editable automatic starting sections for older work using
@@ -152,6 +154,24 @@ An open owner-only manual task in **Needs You** has one additional primary
 action: **Mark complete**. A confirmation dialog explains that this records the
 owner's completed manual action, not agent implementation status. The item then
 leaves the active owner lane. Queue tasks never receive this control.
+
+## Calendar
+
+Calendar uses a Sunday-through-Saturday month grid with previous, next, and
+Today controls, followed by a chronological agenda. It is populated from real
+future-attention fields rather than generic activity timestamps:
+
+- active task need-by dates set by the owner or supplied by the source;
+- open owner-decision deadlines;
+- snoozed or deferred decisions returning for attention; and
+- the next run of each enabled schedule.
+
+Clicking task or decision events opens Details. Clicking a scheduled run opens
+Operations, where cadence and the latest outcome remain available. The task
+edit sheet is the only calendar write surface: changing **Need this by** appends
+an owner-control event and never changes the source task. Calendar does not
+write to an external calendar, execute scheduled work, or turn created/updated
+timestamps into commitments.
 
 ## Operations
 

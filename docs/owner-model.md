@@ -96,6 +96,13 @@ priority field. HFLedger supplies deterministic automatic starting sections for
 the remaining work, labels them as suggestions, and lets the owner move any
 item. An owner-chosen section always overrides the automatic suggestion.
 
+Calendar supports priority-setting and keeping agents unblocked. It combines
+only dates that imply future action: owner need-by dates, source deadlines,
+decision deadlines, deferred items returning for attention, and the next run of
+enabled scheduled work. Routine created, edited, and evidence timestamps do not
+become calendar events. Task dates are owner-editable from Priorities; decision
+and schedule dates remain read-only projections of their authoritative source.
+
 Opening queue work leads with a bounded product brief derived from the
 authoritative task: **What changes**, **Why it matters**, **What done looks
 like**, and **Risks or constraints**. Rank and workflow status never substitute

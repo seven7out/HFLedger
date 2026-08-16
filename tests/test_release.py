@@ -56,7 +56,7 @@ class DemoQuickstartTests(unittest.TestCase):
             self.assertEqual((test_site["state"], test_site["tone"]),
                              ("failing", "neutral"))
             board_view = server.build_board_view(runtime)
-            self.assertEqual(board_view["ownerControl"]["revision"], 4)
+            self.assertEqual(board_view["ownerControl"]["revision"], 5)
             self.assertEqual(board_view["ownerControl"]["counts"], {
                 "active": 3, "parked": 1, "completed": 0})
             timer = next(item for item in board_view["ownerControl"]["items"]
@@ -65,6 +65,17 @@ class DemoQuickstartTests(unittest.TestCase):
             self.assertEqual(timer["section"], "Shop experience")
             self.assertEqual(timer["partCounts"], {
                 "total": 2, "done": 1, "remaining": 1})
+            self.assertEqual(timer["dueDate"], "2026-08-20")
+            calendar = board_view["calendar"]
+            self.assertGreaterEqual(calendar["counts"]["total"], 3)
+            self.assertTrue(any(
+                event["kind"] == "task_due" and
+                event["title"] == "See every batch at a glance" and
+                event["date"] == "2026-08-20"
+                for event in calendar["events"]))
+            self.assertTrue(any(
+                event["kind"] == "scheduled_run"
+                for event in calendar["events"]))
             self.assertEqual(board_view["operations"]["state"], "degraded")
             self.assertEqual(board_view["operations"]["counts"], {
                 "commands": 2, "schedules": 2, "failing": 1})
