@@ -35,10 +35,13 @@ and reload rather than silently overwriting a newer choice.
 Priorities opens in **By section**, which groups related product work without
 changing sequence: the visible rank numbers remain the exact agent order. The
 owner switches to **Exact order** to drag or use accessible move controls. A
-section is explicit owner direction, never a title classifier. Work without one
-appears under **Needs sorting** until the owner names a useful section such as
-UX & interface, Data quality, New features, Reliability, Operations, or a custom
-product area.
+deterministic title-based organizer supplies editable starting sections for
+existing work. The interface labels these as automatic; **Move…** opens the
+section control, and an owner choice always replaces the suggestion. Starting
+sections include UX & interface, Directory data, New features, Reliability &
+automation, Safety & privacy, Content & outreach, Internal tools, Release &
+operations, Research & planning, and Other product work. Custom product areas
+remain valid.
 
 Projection adapters that replace an observed workspace must preserve
 `owner-control.jsonl` byte for byte. If the journal is invalid, Today remains
@@ -53,7 +56,7 @@ keeps source facts and owner direction separate:
 | Lane | Owns | May change when the observed board is read-only? |
 | --- | --- | --- |
 | Observed workspace | execution status, evidence, runs, releases, source facts | No |
-| Owner control | owner headline, product section, intended outcome, owner note, active/parked choice, priority order, owner-only manual completion report | Yes |
+| Owner control | owner headline, automatic or owner-chosen product section, intended outcome, owner note, active/parked choice, priority order, owner-only manual completion report | Yes |
 
 Owner events are stored in `owner-control.jsonl`; they never rewrite `board.json`
 or `ledger.jsonl`. The projection overlays the latest valid directive while

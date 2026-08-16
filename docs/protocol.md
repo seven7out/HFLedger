@@ -442,7 +442,12 @@ priority payload.
 
 Readers accept existing version-1 events and new version-2 events in the same
 hash-chained journal. Version 2 adds only the bounded `section` task field; it
-does not rewrite old events or infer a section from technical source text.
+does not rewrite old events or store an inferred section in the journal.
+
+The owner-control projection may supply a deterministic automatic starting
+section when no `section` event exists. It reports `sectionSource: automatic`,
+does not append or rewrite an event, and never changes active order. A stored
+owner section reports `sectionSource: owner` and takes precedence.
 
 The projection overlays these directives while retaining source title and
 observed status. It never claims execution progress, changes safety metadata,

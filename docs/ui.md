@@ -113,8 +113,10 @@ provides drag and accessible Up and Down controls. The owner can edit:
 - one owner note; and
 - whether the task is active or parked.
 
-HFLedger never guesses a section from a technical title. Older or uncategorized
-work appears in a collapsed **Needs sorting** group, and the technical source
+HFLedger supplies editable automatic starting sections for older work using
+deterministic title rules. Category groups start collapsed; **Move…** opens the
+section field, where the owner can choose a suggested section or write a custom
+one. Owner choices always override automatic suggestions. The technical source
 title remains secondary provenance in Details and the edit sheet.
 
 These edits append revisioned events to `owner-control.jsonl`. They never alter

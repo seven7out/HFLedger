@@ -57,9 +57,11 @@ const WORK_TYPE_LABELS = Object.freeze({
   documentation: "Documentation",
   research: "Research",
 });
-const NEEDS_SORTING_SECTION = "Needs sorting";
+const OTHER_PRODUCT_WORK_SECTION = "Other product work";
 const PRIORITY_SECTION_SUGGESTIONS = Object.freeze([
-  "UX & interface", "Data quality", "New features", "Reliability", "Operations", "Research",
+  "UX & interface", "Directory data", "New features", "Reliability & automation",
+  "Safety & privacy", "Content & outreach", "Internal tools",
+  "Release & operations", "Research & planning", OTHER_PRODUCT_WORK_SECTION,
 ]);
 const METADATA_EDITABLE_KINDS = new Set(["queue-task", "inbox-item"]);
 const PRIORITY_RANK = Object.freeze({ P0: 0, P1: 1, P2: 2 });
@@ -97,7 +99,8 @@ const state = {
   draggedOwnerTaskId: null,
   priorityViewMode: "sections",
   parkedPriorityExpanded: false,
-  collapsedPrioritySections: new Set([NEEDS_SORTING_SECTION.toLocaleLowerCase()]),
+  collapsedPrioritySections: new Set(
+    PRIORITY_SECTION_SUGGESTIONS.map((section) => section.toLocaleLowerCase())),
 };
 
 function safeText(value, maximum = 500) {
@@ -1063,7 +1066,7 @@ function moveInOrder(order, itemId, targetIndex) {
 }
 
 function ownerSectionLabel(item) {
-  return safeText(item?.section, 48) || NEEDS_SORTING_SECTION;
+  return safeText(item?.section, 48) || OTHER_PRODUCT_WORK_SECTION;
 }
 
 function groupOwnerPriorities(items) {
@@ -1081,9 +1084,9 @@ function groupOwnerPriorities(items) {
     group.items.push(item);
   }
   return groups.sort((left, right) => {
-    const needsSortingKey = NEEDS_SORTING_SECTION.toLocaleLowerCase();
-    if (left.key === needsSortingKey) return 1;
-    if (right.key === needsSortingKey) return -1;
+    const otherKey = OTHER_PRODUCT_WORK_SECTION.toLocaleLowerCase();
+    if (left.key === otherKey) return 1;
+    if (right.key === otherKey) return -1;
     return 0;
   });
 }
@@ -1109,12 +1112,15 @@ function moveOwnerTask(taskId, delta) {
   saveOwnerOrder(moveInOrder(order, taskId, target), `Moved to priority ${target + 1}.`);
 }
 
-function openOwnerTaskEditor(taskId) {
+function openOwnerTaskEditor(taskId, { focusSection = false } = {}) {
   const item = ownerTask(taskId);
   if (!item) return announce("That task is no longer available for owner editing.");
   $("#owner-task-id").value = item.id;
   $("#owner-task-title").value = safeText(item.title, 160);
   $("#owner-task-section").value = safeText(item.section, 48);
+  $("#owner-task-section-note").textContent = item.sectionSource === "automatic"
+    ? "Suggested automatically from the current title. Choose any section to override it."
+    : "This section was chosen by the owner.";
   $("#owner-task-intent").value = safePlainText(item.intent, 1200);
   $("#owner-task-note").value = safePlainText(item.note, 1000);
   $("#owner-task-disposition").value = item.disposition === "parked" ? "parked" : "active";
@@ -1123,8 +1129,9 @@ function openOwnerTaskEditor(taskId) {
     ? `Technical source title: ${sourceTitle}`
     : "Aim for 4–10 plain words. The technical source title remains in Details.";
   $("#owner-task-dialog").showModal();
-  $("#owner-task-title").focus();
-  $("#owner-task-title").select();
+  const focusTarget = focusSection ? $("#owner-task-section") : $("#owner-task-title");
+  focusTarget.focus();
+  focusTarget.select();
 }
 
 async function saveOwnerTask() {
@@ -1220,6 +1227,10 @@ function renderPriorityRow(item, index, total, { ordering = true } = {}) {
     down.setAttribute("aria-label", `Move ${safeText(item.title, 120)} down`);
     down.disabled = index === total - 1;
     actions.append(up, down);
+  }
+  if (!ordering) {
+    actions.append(button(
+      "control-button", "Move…", () => openOwnerTaskEditor(item.id, { focusSection: true })));
   }
   actions.append(button("control-button", "Edit", () => openOwnerTaskEditor(item.id)));
   if (ordering) {
@@ -1326,7 +1337,7 @@ function renderPriorities() {
     node("strong", "", state.priorityViewMode === "sections"
       ? "Scan work by product section." : "Edit the exact order agents should follow."),
     node("span", "", state.priorityViewMode === "sections"
-      ? "Priority numbers still show the exact agent order. Open Exact order to drag or move work."
+      ? "Starting sections are automatic. Move anything; priority numbers keep the exact agent order."
       : "Drag active work or use the arrow buttons. Execution status remains agent-reported."),
   );
   fragment.append(explainer, priorityModeControl());
@@ -2868,7 +2879,7 @@ globalThis.HFLedgerUI = Object.freeze({
   PRIORITY_LABELS,
   WORK_TYPE_LABELS,
   PRIORITY_SECTION_SUGGESTIONS,
-  NEEDS_SORTING_SECTION,
+  OTHER_PRODUCT_WORK_SECTION,
 });
 
 if (!TESTING && typeof document !== "undefined") boot();

@@ -21,7 +21,9 @@ ledger --home {{LEDGER_HOME_SHELL}} owner-control
 
 Honor `activeOrder`, skip items whose owner disposition is `parked`, and use
 the effective owner headline, `section`, `intent`, and `note` as product
-direction. The section helps orient related work but never changes `activeOrder`. These
+direction. A `sectionSource` of `automatic` is a starting organizer; `owner` is
+an explicit owner choice. Either section helps orient related work but never
+changes `activeOrder`. These
 fields do not claim that implementation started, passed tests, shipped, or is
 safe to execute. Source status and normal safety gates still control
 eligibility. If the projection is unavailable or conflicts with source facts,

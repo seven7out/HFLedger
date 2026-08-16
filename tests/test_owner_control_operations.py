@@ -91,9 +91,32 @@ class OwnerControlTests(unittest.TestCase):
         self.assertEqual(view["items"][1]["title"], "Help customers choose today's menu")
         self.assertEqual(view["items"][1]["sourceTitle"], "Plan the daily menu")
         self.assertEqual(view["items"][1]["section"], "Menu experience")
+        self.assertEqual(view["items"][1]["sectionSource"], "owner")
+        self.assertEqual(view["items"][0]["section"], "Other product work")
+        self.assertEqual(view["items"][0]["sectionSource"], "automatic")
         self.assertEqual(view["version"], 2)
         for name, content in before.items():
             self.assertEqual(Path(self.home, name).read_bytes(), content)
+
+    def test_automatic_starting_sections_are_generic_and_reversible(self):
+        examples = {
+            "Fix the mobile filter layout": "UX & interface",
+            "Correct duplicate bakery location records": "Directory data",
+            "Build recurring pickup reminders": "New features",
+            "The scheduled menu refresh failed": "Reliability & automation",
+            "Review customer consent and privacy": "Safety & privacy",
+            "Draft the neighborhood outreach email": "Content & outreach",
+            "Improve the agent command guide": "Internal tools",
+            "Verify the production release": "Release & operations",
+            "Investigate next season's menu": "Research & planning",
+            "Polish the daily menu": "Other product work",
+        }
+        self.assertEqual(
+            {title: owner_control.suggest_section(title) for title in examples}, examples)
+        view = owner_control.build_view(self.home, self.candidates(), events=[])
+        self.assertEqual(view["sectionSuggestions"], list(owner_control.AUTO_SECTIONS))
+        self.assertTrue(all(
+            item["sectionSource"] == "automatic" for item in view["items"]))
 
     def test_version_one_events_upgrade_in_place_before_sections_are_added(self):
         legacy = {
@@ -374,6 +397,19 @@ class OwnerControlServerTests(unittest.TestCase):
         self.assertEqual(projected["ownerSection"], "Menu experience")
         self.assertIn("Owner section: Menu experience", projected["copyContext"]["text"])
         self.assertIn("Owner priority: 2", projected["copyContext"]["text"])
+
+    def test_automatic_starting_section_is_projected_without_claiming_owner_choice(self):
+        status, board = self.request("GET", "/api/board?context=main")
+        self.assertEqual(status, 200)
+        projected = next(
+            item for item in board["orientationV2"]["items"]
+            if item.get("sourceItemRef") == "task-menu")
+        self.assertEqual(projected["ownerSection"], "Research & planning")
+        self.assertEqual(projected["ownerSectionSource"], "automatic")
+        self.assertIn(
+            "Starting section: Research & planning (automatic)",
+            projected["copyContext"]["text"])
+        self.assertNotIn("Owner section:", projected["copyContext"]["text"])
 
     def test_stale_unknown_and_incomplete_orders_are_rejected(self):
         status, _response = self.command(0, "set-task", {

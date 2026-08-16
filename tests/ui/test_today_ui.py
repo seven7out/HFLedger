@@ -45,7 +45,8 @@ class TodayUIContractTests(unittest.TestCase):
         for required in (
                 'id="owner-task-dialog"', "Owner headline", "Outcome for people",
                 'id="owner-task-section"', "By section", "Exact order",
-                "groupOwnerPriorities", "Needs sorting",
+                "groupOwnerPriorities", "Other product work", "Starting sections are automatic",
+                '"Move…"', "Suggested automatically from the current title",
                 "parkedPriorityExpanded", "priority-section-disclosure",
                 "Active — agents may pick this up", "owner-priority-row",
                 "dragstart", "moveOwnerTask", "set-priority", "set-task",
@@ -54,7 +55,7 @@ class TodayUIContractTests(unittest.TestCase):
                 "renderOperations", "Show command", "No run has been recorded yet."):
             self.assertIn(required, markup + script + style)
         self.assertIn("Execution status remains agent-reported", script)
-        self.assertIn("Priority numbers still show the exact agent order", script)
+        self.assertIn("priority numbers keep the exact agent order", script)
         self.assertNotIn("Run command", script)
 
     def test_client_has_no_authoritative_write_or_browser_storage_path(self):

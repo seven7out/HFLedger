@@ -166,15 +166,15 @@ def owner_control_fixture():
     records = [
         (ITEMS[4], "Make the mobile experience feel native", "UX & interface",
          "People can move through the mobile experience without confusing browser-like behavior."),
-        (ITEMS[5], "Protect the test data boundary", "Data quality",
+        (ITEMS[5], "Protect the test data boundary", "Safety & privacy",
          "Fictional test records stay clearly separated from real customer information."),
         (ITEMS[0], "Choose when to release", "New features",
          "The team has one clear release window that customers can rely on."),
-        (ITEMS[3], "Notice when storage work stops", "Reliability",
+        (ITEMS[3], "Notice when storage work stops", "Reliability & automation",
          "Owners can see when a background process has quietly stopped making progress."),
-        (ITEMS[1], "Resolve the shipment disagreement", "Operations",
+        (ITEMS[1], "Resolve the shipment disagreement", "Release & operations",
          "The shipment record reflects one verified outcome."),
-        (ITEMS[2], "Corroborate the reported package", None, None),
+        (ITEMS[2], "Corroborate the reported package", "Other product work", None),
     ]
     items = []
     for rank, (work, title, section, intent) in enumerate(records, 1):
@@ -183,10 +183,11 @@ def owner_control_fixture():
             "sourceTitle": work["title"], "title": title,
             "project": work["project"], "observedStatus": work["statusLabel"],
             "sourceHome": work["primaryHome"], "intent": intent, "note": None,
-            "section": section, "disposition": "active", "rank": rank,
+            "section": section, "sectionSource": "automatic",
+            "disposition": "active", "rank": rank,
             "overriddenFields": [field for field, value in (
                 ("title", title if title != work["title"] else None),
-                ("intent", intent), ("section", section)) if value],
+                ("intent", intent)) if value],
         })
     parked = ITEMS[7]
     items.append({
@@ -194,12 +195,19 @@ def owner_control_fixture():
         "sourceTitle": parked["title"], "title": "Explore quieter analytics",
         "project": parked["project"], "observedStatus": parked["statusLabel"],
         "sourceHome": parked["primaryHome"], "intent": "Owners can understand broad trends without a noisy dashboard.",
-        "note": None, "section": "Research", "disposition": "parked", "rank": None,
-        "overriddenFields": ["title", "intent", "section"],
+        "note": None, "section": "Research & planning", "sectionSource": "automatic",
+        "disposition": "parked", "rank": None,
+        "overriddenFields": ["title", "intent"],
     })
     active_order = [record["id"] for record in items if record["disposition"] == "active"]
     return {
         "version": 2, "available": True, "revision": 7, "updatedAt": OBSERVED,
+        "sectionSuggestions": [
+            "UX & interface", "Directory data", "New features",
+            "Reliability & automation", "Safety & privacy", "Content & outreach",
+            "Internal tools", "Release & operations", "Research & planning",
+            "Other product work",
+        ],
         "activeOrder": active_order, "completedOwnerTaskIds": [],
         "ownerTaskCompletions": [], "items": items,
         "counts": {"active": len(active_order), "parked": 1},

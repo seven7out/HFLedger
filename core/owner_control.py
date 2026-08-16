@@ -37,6 +37,85 @@ SECRET_PATTERNS = (
     re.compile(r"(?:^|\s)AKIA[0-9A-Z]{16}"),
     re.compile(r"(?:^|\s)Bearer\s+[A-Za-z0-9._~+/-]{12,}", re.IGNORECASE),
 )
+AUTO_SECTIONS = (
+    "UX & interface",
+    "Directory data",
+    "New features",
+    "Reliability & automation",
+    "Safety & privacy",
+    "Content & outreach",
+    "Internal tools",
+    "Release & operations",
+    "Research & planning",
+    "Other product work",
+)
+_AUTO_SECTION_RULES = (
+    ("Safety & privacy", (
+        (4, "privacy"), (4, "security"), (4, "consent"), (3, "legal"),
+        (3, "risk"), (3, "authentication"), (3, "authorization"),
+        (3, "access control"), (2, "permission"), (2, "sensitive"),
+    )),
+    ("Reliability & automation", (
+        (3, "automation"), (3, "scheduled"), (3, "monitor"),
+        (3, "monitoring"), (3, "stopped"), (3, "failure"), (3, "failed"),
+        (3, "failing"), (3, "degraded"), (3, "outage"), (3, "blocked"),
+        (3, "cron"), (2, "schedule"), (2, "refresh"),
+        (2, "background process"), (2, "stale"), (2, "retry"),
+        (2, "performance"), (2, "detector"), (1, "pipeline"), (1, "sync"),
+    )),
+    ("Directory data", (
+        (3, "directory"), (3, "provider"), (3, "doctor"), (3, "pharmacy"),
+        (3, "providers"), (3, "doctors"), (3, "pharmacies"),
+        (3, "geocode"), (2, "listing"), (2, "listings"), (2, "location"),
+        (2, "locations"), (2, "address"), (2, "addresses"),
+        (2, "duplicate"), (2, "duplicates"), (2, "specialty"),
+        (2, "specialties"), (1, "record"), (1, "records"),
+    )),
+    ("UX & interface", (
+        (3, "mobile"), (3, "interface"), (3, "layout"), (3, "navigation"),
+        (3, "overflow"), (3, "responsive"), (2, "screen"), (2, "button"),
+        (2, "buttons"), (2, "filter"), (2, "filters"), (2, "search"),
+        (2, "form"), (2, "forms"), (2, "icon"), (2, "icons"),
+        (2, "picker"), (2, "nav"), (1, "page"), (1, "pages"),
+        (2, "lazy-load"), (2, "tab"), (2, "style"),
+        (1, "link"), (1, "links"), (1, "login"),
+    )),
+    ("Content & outreach", (
+        (6, "outreach"), (6, "referral"), (5, "campaign"),
+        (5, "subject line"), (3, "content"), (3, "email"),
+        (3, "community"),
+        (3, "wording"), (2, "copy"), (2, "message"), (2, "social"),
+        (3, "narrative"), (3, "narratives"), (3, "taxonomy"),
+        (3, "discoverability"), (3, "indexation"), (2, "summary"),
+        (2, "summaries"), (2, "seo"), (2, "forum"), (2, "article"),
+    )),
+    ("Internal tools", (
+        (4, "hfledger"), (4, "internal tool"), (3, "desktop app"),
+        (3, "desktop host"), (3, "agent"), (3, "agents"),
+        (3, "command"), (3, "commands"), (3, "workflow"),
+        (3, "harness"), (3, "platform"), (3, "pull request"),
+        (2, "pre-merge"), (2, "intake"), (2, "successor"),
+        (2, "skill"), (2, "skills"),
+    )),
+    ("Release & operations", (
+        (4, "deploy"), (4, "deployment"), (3, "production"),
+        (3, "release"), (3, "staging"), (3, "stage"), (3, "prod"),
+        (3, "test site"), (3, "qa"),
+        (3, "quality assurance"), (2, "verification"), (2, "verify"),
+        (2, "promotion"), (2, "rollback"), (1, "live"), (1, "audit"),
+    )),
+    ("Research & planning", (
+        (4, "research"), (3, "investigate"), (3, "scope"), (3, "explore"),
+        (2, "define"), (2, "plan"), (2, "planning"), (2, "specify"),
+        (2, "evaluate"), (2, "audit"), (1, "design"), (1, "compare"),
+    )),
+    ("New features", (
+        (3, "add"), (3, "build"), (3, "create"), (3, "prototype"),
+        (3, "implement"), (3, "introduce"), (3, "feature"),
+        (2, "support"), (2, "enable"), (2, "restore"),
+        (2, "report"), (2, "reports"),
+    )),
+)
 
 
 class OwnerControlError(ValueError):
@@ -48,6 +127,25 @@ class OwnerControlError(ValueError):
 
 def _now_iso():
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+
+
+def suggest_section(title):
+    """Return a reversible starting section without changing owner priority."""
+    if not isinstance(title, str) or not title.strip():
+        return "Other product work"
+    normalized = unicodedata.normalize("NFKC", title).casefold()
+    best_section = "Other product work"
+    best_score = 0
+    for section, terms in _AUTO_SECTION_RULES:
+        score = 0
+        for weight, term in terms:
+            pattern = r"(?<![a-z0-9])%s(?![a-z0-9])" % re.escape(term)
+            if re.search(pattern, normalized):
+                score += weight
+        if score > best_score:
+            best_section = section
+            best_score = score
+    return best_section if best_score >= 2 else "Other product work"
 
 
 def _path(home):
@@ -358,12 +456,14 @@ def build_view(home, candidates, events=None):
     for candidate in candidates:
         item = dict(candidate)
         override = state["overrides"].get(item["id"], {})
+        section_source = "owner" if "section" in override else "automatic"
         item.update({
             "sourceTitle": item["title"],
             "title": override.get("title", item["title"]),
             "intent": override.get("intent"),
             "note": override.get("note"),
-            "section": override.get("section"),
+            "section": override.get("section", suggest_section(item["title"])),
+            "sectionSource": section_source,
             "disposition": override.get(
                 "disposition", "parked" if item.get("sourceHome") == "parked" else "active"),
             "overriddenFields": sorted(override),
@@ -384,6 +484,7 @@ def build_view(home, candidates, events=None):
         "available": True,
         "revision": state["revision"],
         "updatedAt": state["updatedAt"],
+        "sectionSuggestions": list(AUTO_SECTIONS),
         "activeOrder": ordered,
         "completedOwnerTaskIds": list(state["ownerTaskCompletions"]),
         "ownerTaskCompletions": [

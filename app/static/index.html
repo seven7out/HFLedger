@@ -238,15 +238,21 @@
       <label class="dialog-field">
         <span>Section</span>
         <input id="owner-task-section" type="text" maxlength="48" list="owner-task-section-suggestions"
-               placeholder="For example, UX &amp; interface">
+               placeholder="For example, UX &amp; interface"
+               aria-describedby="owner-task-section-note">
       </label>
+      <small id="owner-task-section-note" class="dialog-field-note"></small>
       <datalist id="owner-task-section-suggestions">
         <option value="UX &amp; interface"></option>
-        <option value="Data quality"></option>
+        <option value="Directory data"></option>
         <option value="New features"></option>
-        <option value="Reliability"></option>
-        <option value="Operations"></option>
-        <option value="Research"></option>
+        <option value="Reliability &amp; automation"></option>
+        <option value="Safety &amp; privacy"></option>
+        <option value="Content &amp; outreach"></option>
+        <option value="Internal tools"></option>
+        <option value="Release &amp; operations"></option>
+        <option value="Research &amp; planning"></option>
+        <option value="Other product work"></option>
       </datalist>
       <label class="dialog-field">
         <span>Outcome for people</span>
