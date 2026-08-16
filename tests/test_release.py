@@ -78,7 +78,9 @@ class DemoQuickstartTests(unittest.TestCase):
                 for event in calendar["events"]))
             self.assertEqual(board_view["operations"]["state"], "degraded")
             self.assertEqual(board_view["operations"]["counts"], {
-                "commands": 2, "schedules": 2, "failing": 1})
+                "commands": 2, "schedules": 3, "failing": 1, "runners": 3,
+                "healthy": 2, "problematic": 1, "running": 0, "unknown": 0,
+                "paused": 0})
             card = cards[0]
             answer = server.answer_card(runtime, {
                 "id": card["id"], "srcHash": card["srcHash"], "action": "accept",

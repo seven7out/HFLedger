@@ -1647,6 +1647,48 @@ function operationRunLabel(value) {
   return ({ succeeded: "Succeeded", failed: "Failed", running: "Running", missed: "Missed", unknown: "Unknown", disabled: "Disabled" })[value] || "Unknown";
 }
 
+function operationHealth(schedule) {
+  const reported = safeText(schedule?.health, 24);
+  if (["healthy", "problematic", "running", "unknown", "paused"].includes(reported)) return reported;
+  if (schedule?.enabled === false) return "paused";
+  return ({ succeeded: "healthy", failed: "problematic", missed: "problematic", running: "running" })[
+    safeText(schedule?.lastRun?.status, 24)
+  ] || "unknown";
+}
+
+function operationHealthLabel(value) {
+  return ({ healthy: "Healthy", problematic: "Problematic", running: "Running", unknown: "Unknown", paused: "Paused" })[value] || "Unknown";
+}
+
+function operationRunnerLabel(schedule) {
+  const name = safeText(schedule?.runner?.name, 80) || "Runner not reported";
+  const model = safeText(schedule?.runner?.model, 120);
+  return model ? `${name} · ${model}` : name;
+}
+
+function groupOperationsByRunner(schedules) {
+  const groups = new Map();
+  (Array.isArray(schedules) ? schedules : []).forEach((schedule) => {
+    const type = ["agent", "local_automation", "unknown"].includes(schedule?.runner?.type)
+      ? schedule.runner.type : "unknown";
+    const name = safeText(schedule?.runner?.name, 80) || "Runner not reported";
+    const key = `${type}\u0000${name}`;
+    if (!groups.has(key)) groups.set(key, { type, name, schedules: [] });
+    groups.get(key).schedules.push(schedule);
+  });
+  const typeOrder = { agent: 0, local_automation: 1, unknown: 2 };
+  const healthOrder = { problematic: 0, running: 1, unknown: 2, healthy: 3, paused: 4 };
+  return [...groups.values()]
+    .sort((left, right) => (typeOrder[left.type] - typeOrder[right.type]) || left.name.localeCompare(right.name))
+    .map((group) => ({
+      ...group,
+      schedules: [...group.schedules].sort((left, right) => (
+        (healthOrder[operationHealth(left)] - healthOrder[operationHealth(right)]) ||
+        safeText(left.label || left.id, 120).localeCompare(safeText(right.label || right.id, 120))
+      )),
+    }));
+}
+
 function openCalendarEvent(event) {
   const itemId = safeText(event?.itemId, 160);
   if (itemId && itemMap().has(itemId)) {
@@ -1794,28 +1836,41 @@ function renderOperations() {
   summary.append(
     node("span", "operations-state-dot", "●"),
     node("strong", "", operationStateLabel(model.state)),
-    node("span", "", model.summary || "Commands and scheduled work have not been connected yet."),
+    node("span", "", model.summary || "Commands and recurring jobs have not been connected yet."),
   );
   if (model.observedAt) summary.append(node("time", "", `Updated ${relativeTime(model.observedAt)}`));
   fragment.append(summary);
 
-  const schedules = node("div", "operations-list");
-  (model.schedules || []).forEach((schedule) => {
-    const lastRun = schedule.lastRun;
-    const runState = schedule.enabled === false ? "disabled" : safeText(lastRun?.status, 24) || "unknown";
-    const row = node("article", `operation-row schedule-row state-${runState}`);
-    const heading = node("header", "operation-heading");
-    heading.append(node("strong", "", schedule.label || schedule.id), node("span", "operation-status", operationRunLabel(runState)));
-    row.append(heading, node("p", "", schedule.description || "No product description was supplied."));
-    const facts = node("dl", "operation-facts");
-    facts.append(node("dt", "", "Runs"), node("dd", "", schedule.cadence || "Cadence unknown"));
-    facts.append(node("dt", "", "Next"), node("dd", "", schedule.enabled === false ? "Disabled" : schedule.nextRunAt ? exactTime(schedule.nextRunAt) : "Not reported"));
-    facts.append(node("dt", "", "Latest"), node("dd", "", lastRun?.summary || "No run has been recorded yet."));
-    row.append(facts);
-    schedules.append(row);
+  const schedules = node("div", "operations-runner-groups");
+  groupOperationsByRunner(model.schedules).forEach((group) => {
+    const runner = node("section", `operation-runner-group type-${group.type.replace("_", "-")}`);
+    const runnerHeading = node("header", "operation-runner-heading");
+    runnerHeading.append(
+      node("strong", "", group.name),
+      node("span", "", `${group.schedules.length} recurring job${group.schedules.length === 1 ? "" : "s"}`),
+    );
+    runner.append(runnerHeading);
+    const list = node("div", "operations-list");
+    group.schedules.forEach((schedule) => {
+      const lastRun = schedule.lastRun;
+      const health = operationHealth(schedule);
+      const row = node("article", `operation-row schedule-row health-${health}`);
+      const heading = node("header", "operation-heading");
+      heading.append(node("strong", "", schedule.label || schedule.id), node("span", "operation-status", operationHealthLabel(health)));
+      row.append(heading, node("p", "", schedule.description || "No product description was supplied."));
+      const facts = node("dl", "operation-facts");
+      facts.append(node("dt", "", "Runs through"), node("dd", "", operationRunnerLabel(schedule)));
+      facts.append(node("dt", "", "Schedule"), node("dd", "", schedule.cadence || "Cadence unknown"));
+      facts.append(node("dt", "", "Next"), node("dd", "", schedule.enabled === false ? "Paused" : schedule.nextRunAt ? exactTime(schedule.nextRunAt) : "Not reported"));
+      facts.append(node("dt", "", "Latest"), node("dd", "", lastRun?.summary || "No run has been recorded yet."));
+      row.append(facts);
+      list.append(row);
+    });
+    runner.append(list);
+    schedules.append(runner);
   });
-  if (!schedules.childElementCount) schedules.append(emptyState("No schedules are connected", "Connect an operations report to see when recurring work runs and whether it succeeded."));
-  fragment.append(section("Scheduled tasks", model.counts?.schedules || 0, schedules));
+  if (!schedules.childElementCount) schedules.append(emptyState("No recurring jobs are connected", "Connect an operations report to see who runs recurring work and whether it is healthy."));
+  fragment.append(section("Recurring jobs", model.counts?.schedules || 0, schedules));
 
   const commands = node("div", "operations-list");
   (model.commands || []).forEach((command) => {
@@ -3408,6 +3463,10 @@ globalThis.HFLedgerUI = Object.freeze({
   splitUrgentPriorities,
   operationStateLabel,
   operationRunLabel,
+  operationHealth,
+  operationHealthLabel,
+  operationRunnerLabel,
+  groupOperationsByRunner,
   calendarDateKey,
   calendarEventDateKey,
   calendarMonthCells,

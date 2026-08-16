@@ -59,7 +59,9 @@ class TodayUIContractTests(unittest.TestCase):
                 "dragstart", "moveOwnerTask", "set-priority", "set-task",
                 'id="owner-complete-dialog"', "Mark complete",
                 "complete-owner-task", "ownerCompletionAvailable",
-                "renderOperations", "Show command", "No run has been recorded yet."):
+                "renderOperations", "Recurring jobs", "Runs through",
+                "groupOperationsByRunner", "Healthy", "Problematic",
+                "Show command", "No run has been recorded yet."):
             self.assertIn(required, markup + script + style)
         self.assertIn("Execution status remains agent-reported", script)
         self.assertIn("Urgent is always the first five in Exact order", script)

@@ -15,8 +15,10 @@ need-by dates, and active/parked choices. Existing work starts in deterministic,
 product sections so a large queue is useful before manual cleanup.
 Calendar brings those dates together with owner-decision deadlines, deferred
 items returning for attention, and the next scheduled operations run.
-Operations shows available commands, scheduled tasks, and their latest success
-or failure in plain language. An owner-only manual task has a separate **Mark
+Operations groups recurring jobs by the agent or local runner responsible for
+them. Each job shows its model when known, plain-language purpose, cadence,
+next run, and current Healthy, Problematic, Running, Unknown, or Paused state.
+An owner-only manual task has a separate **Mark
 complete** action because the owner, not an agent, knows whether that action was
 performed.
 
@@ -184,8 +186,9 @@ The standard-library HTTP service provides:
   read through the CLI;
 - Calendar with a familiar month grid and agenda for task need-by dates,
   decision deadlines, deferred-item returns, and next scheduled runs;
-- Operations with a product-facing command catalog, schedule cadence, next run,
-  latest outcome, and explicit failed/stale/unconfigured states;
+- Operations with recurring jobs grouped across agents and local automation,
+  including runner, model when known, cadence, next run, product purpose, and
+  explicit health, stale, and unconfigured states;
 - a responsive board for queue, inbox, owner tasks, admitted asks, and outcomes;
 - a mobile decision deck with option selection, recommendation acceptance, snooze, need-more-info, completion, skip, and digest-bound undo where safe;
 - bounded deterministic Command-K search over projected metadata plus

@@ -16,9 +16,10 @@ UTC = datetime.timezone.utc
 NOW = datetime.datetime(2026, 8, 14, 12, 0, tzinfo=UTC)
 
 
-def operation_report(observed_at="2026-08-14T11:55:00+00:00", status="succeeded"):
-    return {
-        "version": 1,
+def operation_report(observed_at="2026-08-14T11:55:00+00:00", status="succeeded",
+                     version=2):
+    report = {
+        "version": version,
         "observedAt": observed_at,
         "staleAfterSeconds": 3600,
         "commands": [{
@@ -32,6 +33,11 @@ def operation_report(observed_at="2026-08-14T11:55:00+00:00", status="succeeded"
             "label": "Morning workspace refresh",
             "description": "Makes new product work visible before planning begins.",
             "cadence": "Every weekday morning",
+            "runner": {
+                "type": "agent",
+                "name": "Example Agent",
+                "model": "Example Model",
+            },
             "enabled": True,
             "commandId": "refresh-workspace",
             "nextRunAt": "2026-08-15T08:00:00+00:00",
@@ -45,6 +51,9 @@ def operation_report(observed_at="2026-08-14T11:55:00+00:00", status="succeeded"
             },
         }],
     }
+    if version == 1:
+        report["schedules"][0].pop("runner")
+    return report
 
 
 class OwnerControlTests(unittest.TestCase):
@@ -370,11 +379,57 @@ class OperationsTests(unittest.TestCase):
         self.write_report(operation_report())
         healthy = operations.build_view(self.home, NOW)
         self.assertEqual(healthy["state"], "healthy")
-        self.assertEqual(healthy["counts"], {"commands": 1, "schedules": 1, "failing": 0})
+        self.assertEqual(healthy["counts"], {
+            "commands": 1, "schedules": 1, "failing": 0, "runners": 1,
+            "healthy": 1, "problematic": 0, "running": 0, "unknown": 0,
+            "paused": 0,
+        })
+        self.assertEqual(healthy["schedules"][0]["health"], "healthy")
         self.write_report(operation_report(status="failed"))
-        self.assertEqual(operations.build_view(self.home, NOW)["state"], "degraded")
+        degraded = operations.build_view(self.home, NOW)
+        self.assertEqual(degraded["state"], "degraded")
+        self.assertEqual(degraded["schedules"][0]["health"], "problematic")
         self.write_report(operation_report(observed_at="2026-08-14T01:00:00+00:00"))
-        self.assertEqual(operations.build_view(self.home, NOW)["state"], "stale")
+        stale = operations.build_view(self.home, NOW)
+        self.assertEqual(stale["state"], "stale")
+        self.assertEqual(stale["schedules"][0]["health"], "unknown")
+
+    def test_version_one_reports_remain_readable_without_runner_metadata(self):
+        self.write_report(operation_report(version=1))
+        view = operations.build_view(self.home, NOW)
+        self.assertEqual(view["state"], "healthy")
+        self.assertEqual(view["version"], 2)
+        self.assertEqual(view["schedules"][0]["runner"], {
+            "type": "unknown", "name": "Runner not reported", "model": None,
+        })
+
+    def test_version_two_runner_is_closed_and_required(self):
+        report = operation_report()
+        report["schedules"][0]["runner"]["extra"] = "unsupported"
+        self.write_report(report)
+        self.assertEqual(operations.build_view(self.home, NOW)["state"], "invalid")
+        report = operation_report()
+        report["schedules"][0].pop("runner")
+        self.write_report(report)
+        self.assertEqual(operations.build_view(self.home, NOW)["state"], "invalid")
+
+    def test_paused_running_and_unknown_health_are_explicit(self):
+        report = operation_report(status="running")
+        self.write_report(report)
+        self.assertEqual(
+            operations.build_view(self.home, NOW)["schedules"][0]["health"],
+            "running")
+        report["schedules"][0]["enabled"] = False
+        self.write_report(report)
+        self.assertEqual(
+            operations.build_view(self.home, NOW)["schedules"][0]["health"],
+            "paused")
+        report = operation_report()
+        report["schedules"][0]["lastRun"] = None
+        self.write_report(report)
+        self.assertEqual(
+            operations.build_view(self.home, NOW)["schedules"][0]["health"],
+            "unknown")
 
     def test_invalid_unsafe_and_unknown_reports_are_contained(self):
         path = self.write_report({"version": 1})

@@ -111,6 +111,25 @@ test("operations uses closed owner-facing health labels", () => {
   assert.equal(ui.operationStateLabel("anything-else"), "Unknown");
   assert.equal(ui.operationRunLabel("running"), "Running");
   assert.equal(ui.operationRunLabel("missed"), "Missed");
+  assert.equal(ui.operationHealth({ enabled: true, lastRun: { status: "succeeded" } }), "healthy");
+  assert.equal(ui.operationHealth({ enabled: true, lastRun: { status: "failed" } }), "problematic");
+  assert.equal(ui.operationHealthLabel("problematic"), "Problematic");
+  assert.equal(ui.operationRunnerLabel({ runner: { name: "Example Agent", model: "Model One" } }), "Example Agent · Model One");
+});
+
+test("operations groups recurring jobs by runner with problems first", () => {
+  const groups = ui.groupOperationsByRunner([{
+    id: "healthy", label: "Healthy job", health: "healthy",
+    runner: { type: "agent", name: "Example Agent", model: "Model One" },
+  }, {
+    id: "problem", label: "Problem job", health: "problematic",
+    runner: { type: "agent", name: "Example Agent", model: "Model One" },
+  }, {
+    id: "local", label: "Local job", health: "healthy",
+    runner: { type: "local_automation", name: "Local automation", model: "Python" },
+  }]);
+  assert.deepEqual(groups.map((group) => group.name), ["Example Agent", "Local automation"]);
+  assert.deepEqual(groups[0].schedules.map((schedule) => schedule.id), ["problem", "healthy"]);
 });
 
 test("pane resize continues and cleans up after the pointer leaves the divider", () => {

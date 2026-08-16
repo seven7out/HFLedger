@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Expanded Operations into a cross-agent recurring-jobs registry. Jobs are
+  grouped by agent or local runner and show the model when known, product
+  purpose, cadence, next run, and a derived owner-facing health state. Existing
+  version-1 reports remain readable without claiming runner details they never
+  supplied.
 - Added an owner calendar with a familiar month grid and agenda. It populates
   automatically from task need-by dates, owner-decision deadlines, deferred
   returns, and enabled schedules' next runs while excluding routine activity

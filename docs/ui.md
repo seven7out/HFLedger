@@ -175,11 +175,13 @@ timestamps into commitments.
 
 ## Operations
 
-Operations answers what commands exist, what scheduled work is enabled, when it
-should run next, and whether its latest run succeeded or failed. Product purpose
-and consequence are primary; invocation text is hidden in a secondary
-disclosure. Failed, missed, stale, invalid, and unconfigured reporting cannot
-appear healthy.
+Operations answers which recurring jobs exist across agents and local
+automation, who runs each one, which model it uses when known, when it runs,
+what product purpose it serves, and whether it is Healthy, Problematic, Running,
+Unknown, or Paused. Jobs are grouped by runner and problematic jobs appear
+first within their group. Invocation text is hidden in a secondary disclosure.
+Failed, missed, stale, invalid, and unconfigured reporting cannot appear
+healthy.
 
 The source is an optional private `reports/operations-latest.json` observation.
 The view never runs a command, installs a schedule, retries work, or grants new
@@ -305,7 +307,7 @@ Owner direction can still be written to its independent append-only lane.
 - **Browser-only:** supports session triage state but not native menus, durable
   state across process restarts, file watching, Dock badges, or native window
   restoration.
-- **Operations unconfigured:** says commands and scheduled work have not been
+- **Operations unconfigured:** says commands and recurring jobs have not been
   connected; it never substitutes an empty green success state.
 
 ## Keyboard and native menus

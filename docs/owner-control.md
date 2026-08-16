@@ -4,7 +4,7 @@ HFLedger gives a non-developer owner one durable place to shape what agents work
 on without asking the owner to manage branches, checks, or implementation state.
 The control plane has three surfaces: **Priorities** for owner-authored product
 direction, **Calendar** for dated work and scheduled runs, and **Operations**
-for visibility into commands and scheduled work.
+for visibility into commands and recurring jobs across agents and local automation.
 
 ## What the owner controls
 
@@ -90,28 +90,34 @@ files directly or treat this report as proof of agent execution.
 Operations answers three owner questions in plain language:
 
 1. What commands are available and what does each one do?
-2. What scheduled work is enabled and when should it run?
+2. Which recurring jobs exist, who runs them, and when should they run?
 3. Did the latest run succeed, fail, or stop reporting?
 
-Command purpose and schedule outcome are primary. Invocation text, runtime names,
-and evidence links are secondary reference material. A failed run must include a
-one-sentence product or process consequence; raw stack traces and secrets never
-appear in the primary summary.
+Job purpose and health are primary. The responsible agent or local runner,
+model when known, cadence, and next run make each recurring responsibility
+legible without exposing its implementation. Invocation text and evidence links
+are secondary reference material. A failed run must include a one-sentence
+product or process consequence; raw stack traces and secrets never appear in
+the primary summary.
 
 An optional, closed `reports/operations-latest.json` report supplies the command
-catalog and schedule observations. It is read-only evidence: seeing a command or
-schedule never grants authority to execute it, enable it, merge, deploy, or write
+catalog and recurring-job observations. It is read-only evidence: seeing a command or
+job never grants authority to execute it, enable it, merge, deploy, or write
 to production. Missing or stale observations say so directly and never appear as
 a reassuring success.
 
-The report has version `1`, an `observedAt` timestamp, a bounded freshness
-window, and closed `commands` and `schedules` lists. A command supplies an id,
-product label, product description, and secondary invocation text. A schedule
-supplies its cadence, enabled state, optional command association and next run,
-plus an optional latest run with one of `succeeded`, `failed`, `running`,
-`missed`, or `unknown`. Unknown fields and unsafe file permissions invalidate
-the report as a unit; the app contains that failure as an Operations status
-instead of refusing to show the rest of the workspace.
+The current report has version `2`, an `observedAt` timestamp, a bounded
+freshness window, and closed `commands` and `schedules` lists. A command supplies
+an id, product label, product description, and secondary invocation text. A
+schedule supplies a closed runner object (`agent`, `local_automation`, or
+`unknown`) with a display name and optional model, plus its cadence, enabled
+state, optional command association, next run, and optional latest run. Latest
+run status is one of `succeeded`, `failed`, `running`, `missed`, or `unknown`;
+the engine derives the owner-facing Healthy, Problematic, Running, Unknown, or
+Paused health state. Version `1` remains readable and is surfaced as **Runner
+not reported**. Unknown fields and unsafe file permissions invalidate the report
+as a unit; the app contains that failure as an Operations status instead of
+refusing to show the rest of the workspace.
 
 ## Calendar
 
@@ -140,8 +146,8 @@ events, or expand an indefinite recurrence series.
   collapsed history section.
 - **Calendar** collects task dates, owner-response deadlines, returning items,
   and next scheduled runs in a month grid and agenda without inventing dates.
-- **Operations** lists commands, schedules, their next expected run, latest
-  outcome, and a bounded error summary.
+- **Operations** groups recurring jobs by agent or local runner and shows their
+  model when known, next expected run, latest outcome, and health.
 - **All Work** and the inspector show the effective owner title and intent while
   preserving observed status and source provenance.
 
