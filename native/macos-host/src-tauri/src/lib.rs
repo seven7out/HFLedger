@@ -774,9 +774,31 @@ fn refresh_demo_sessions(destination: &Path) -> Result<(), String> {
             ),
         );
     }
+    let temporary = path.with_extension("json.tmp");
+    if temporary.exists() {
+        reject_symlink(&temporary)?;
+        fs::remove_file(&temporary).map_err(|error| {
+            format!("could not clear the fictional session staging file: {error}")
+        })?;
+    }
     let payload = serde_json::to_vec_pretty(&report)
         .map_err(|error| format!("could not encode the fictional session report: {error}"))?;
-    write_private_file(&path, &payload)?;
+    let mut file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(&temporary)
+        .map_err(|error| format!("could not stage the fictional session report: {error}"))?;
+    file.write_all(&payload)
+        .and_then(|_| file.write_all(b"\n"))
+        .and_then(|_| file.sync_all())
+        .map_err(|error| format!("could not save the fictional session report: {error}"))?;
+    fs::rename(&temporary, &path)
+        .map_err(|error| format!("could not replace the fictional session report: {error}"))?;
+    private_permissions(&path, 0o600)?;
+    File::open(path.parent().unwrap_or(destination))
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| format!("could not finish the fictional session report: {error}"))?;
     Ok(())
 }
 
