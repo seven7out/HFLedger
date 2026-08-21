@@ -674,6 +674,16 @@ def build_cards_view(runtime, context_id=None):
     return response
 
 
+def build_runtime_health_view(runtime, context_id=None):
+    """Return the validated engine identity without building the full board."""
+    context = runtime.context(context_id)
+    return {
+        "version": 1,
+        "status": "ready",
+        "project": context.config["project"],
+    }
+
+
 def _assert_source(item, body):
     supplied = body.get("srcHash")
     if supplied is not None and supplied != _card_hash(item):
@@ -1343,6 +1353,10 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         context_id = None
         try:
+            if parsed.path == "/api/health":
+                context_id = _context_from_query(parsed)
+                self._send_json(build_runtime_health_view(self.runtime, context_id))
+                return
             if parsed.path == "/api/board":
                 context_id = _context_from_query(parsed)
                 self._send_json(build_board_view(self.runtime, context_id))

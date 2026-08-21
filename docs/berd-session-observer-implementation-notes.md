@@ -25,6 +25,9 @@
 4. Current Berd releases require the CLI to inherit a Berd-started control-file
    environment. The public observer does not discover private control files or
    bypass that boundary; missing environment degrades the source safely.
+5. Native startup verifies the engine and workspace identity through a bounded
+   readiness response. It does not repeatedly build the full owner projection
+   while a large valid workspace is opening.
 
 ## Deferred
 

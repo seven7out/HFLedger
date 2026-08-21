@@ -1505,12 +1505,15 @@ fn fetch_board(port: u16) -> Option<Value> {
 }
 
 fn verified_board(port: u16, expected_project: &str) -> bool {
-    fetch_board(port)
+    fetch_json(port, "/api/health")
         .and_then(|value| {
-            value
-                .get("project")
-                .and_then(Value::as_str)
-                .map(str::to_string)
+            let ready = value.get("status").and_then(Value::as_str) == Some("ready");
+            ready.then(|| {
+                value
+                    .get("project")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })?
         })
         .as_deref()
         == Some(expected_project)

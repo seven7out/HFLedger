@@ -393,6 +393,18 @@ class ViewAndStaticTests(ServerCase):
         self.assertIsNone(response.getheader("Access-Control-Allow-Origin"))
         self.assertIn("default-src 'self'", response.getheader("Content-Security-Policy"))
 
+    def test_runtime_health_skips_the_full_board_projection(self):
+        expected_project = self.httpd.runtime.context().config["project"]
+        with mock.patch.object(
+                server, "build_board_view",
+                side_effect=AssertionError("full board must not be built")):
+            response, body, _connection = self.get("/api/health")
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.getheader("Cache-Control"), "no-store")
+        self.assertEqual(body, {
+            "version": 1, "status": "ready", "project": expected_project,
+        })
+
     def test_normalized_item_lookup_is_projection_bounded(self):
         self.decision()
         _response, board, _connection = self.get("/api/board")
