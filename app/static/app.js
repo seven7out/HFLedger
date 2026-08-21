@@ -1918,9 +1918,17 @@ function renderOperations() {
     row.append(details);
     sessions.append(row);
   });
-  if (!sessions.childElementCount) sessions.append(emptyState(
-    "No agent sessions are connected",
-    "Connect the optional metadata-only session observer to see working, waiting, stopped, and problem states."));
+  if (!sessions.childElementCount) {
+    const observation = model.sessionObservation || {};
+    const connected = observation.connected === true && !["unconfigured", "disabled"].includes(observation.state);
+    sessions.append(connected
+      ? emptyState(
+        "No agent sessions are active",
+        "The observer is connected. New sessions will appear here when agents start work through the connected harness.")
+      : emptyState(
+        "No agent sessions are connected",
+        "Connect the optional metadata-only session observer to see working, waiting, stopped, and problem states."));
+  }
   fragment.append(section("Agent sessions", model.counts?.sessions || 0, sessions));
 
   const schedules = node("div", "operations-runner-groups");

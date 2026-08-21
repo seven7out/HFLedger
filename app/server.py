@@ -1046,6 +1046,15 @@ def _validate_local_state_command_body(allowed_context_ids, body):
                 any(ord(character) < 32 or ord(character) == 127
                     for character in cursor)):
             raise local_state.LocalStateError("invalid-arguments", 400)
+    if command == "snooze-attention":
+        until = arguments.get("snoozedUntil")
+        try:
+            parsed_until = datetime.datetime.fromisoformat(
+                until.replace("Z", "+00:00"))
+            if parsed_until.tzinfo is None:
+                raise ValueError
+        except (AttributeError, TypeError, ValueError):
+            raise local_state.LocalStateError("invalid-arguments", 400)
     return context_id
 
 

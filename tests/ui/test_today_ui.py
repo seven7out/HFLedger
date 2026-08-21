@@ -62,7 +62,8 @@ class TodayUIContractTests(unittest.TestCase):
                 "renderOperations", "Agent sessions", "Recurring jobs", "Runs through",
                 "groupOperationsByRunner", "Healthy", "Problematic",
                 "Agents now", "Open Operations", "Unlinked agent session",
-                "Show command", "No run has been recorded yet."):
+                "Show command", "No run has been recorded yet.",
+                "No agent sessions are active", "The observer is connected."):
             self.assertIn(required, markup + script + style)
         self.assertIn("Execution status remains agent-reported", script)
         self.assertIn("Urgent is always the first five in Exact order", script)

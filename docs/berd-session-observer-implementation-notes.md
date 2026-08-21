@@ -22,6 +22,9 @@
 3. The observer does not infer that `waiting` needs the owner or that `stopped`
    means done. Those claims require HFLedger's existing admission and completion
    evidence rather than runtime metadata.
+4. Current Berd releases require the CLI to inherit a Berd-started control-file
+   environment. The public observer does not discover private control files or
+   bypass that boundary; missing environment degrades the source safely.
 
 ## Deferred
 
@@ -29,5 +32,6 @@
   behind a new closed report version later.
 - A sanctioned deep link back to a Berd session can be added when both products
   expose and document a stable safe-link contract.
-- Automated polling remains an installation choice; this change does not
-  install, enable, or repair a schedule.
+- Self-contained external polling remains deferred until Berd exposes a stable,
+  vendor-supported discovery contract. Scheduling and environment handoff stay
+  installation choices; this change does not install, enable, or repair them.

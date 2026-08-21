@@ -46,6 +46,13 @@ Berd must be open and its bundled CLI must be available. A missing app, missing
 CLI, timeout, non-zero exit, malformed response, or partially unreadable list
 is reported as degraded rather than healthy.
 
+Current Berd releases also require `berdctl` to inherit the control-file
+environment of a Berd-started session. HFLedger does not discover Berd's
+private control files or bypass that boundary. An unattended installation must
+arrange for the supported environment to be present when it runs `collect`;
+otherwise the source degrades safely. A stable vendor-supported discovery
+contract remains a prerequisite for a self-contained external scheduler.
+
 ## Metadata boundary
 
 The adapter calls only the read-only metadata surface:
