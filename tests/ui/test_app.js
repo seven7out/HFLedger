@@ -132,6 +132,21 @@ test("operations groups recurring jobs by runner with problems first", () => {
   assert.deepEqual(groups[0].schedules.map((schedule) => schedule.id), ["problem", "healthy"]);
 });
 
+test("agent sessions use product headlines and keep runtime identity secondary", () => {
+  const session = {
+    taskId: "task-menu",
+    runner: { harness: "codex-acp", model: "Example Model", agent: "Reviewer" },
+  };
+  assert.equal(ui.agentSessionHeadline(
+    session, [{ id: "task-menu", title: "Make the daily menu easier to choose from" }]),
+  "Make the daily menu easier to choose from");
+  assert.equal(ui.agentSessionHeadline(session, []), "Unlinked agent session");
+  assert.equal(ui.agentSessionRunnerLabel(session), "codex-acp · Example Model");
+  assert.equal(ui.agentSessionStateLabel("working"), "Working");
+  assert.equal(ui.agentSessionStateLabel("stopped"), "Stopped");
+  assert.equal(ui.agentSessionStateLabel("unrecognized"), "Unknown");
+});
+
 test("pane resize continues and cleans up after the pointer leaves the divider", () => {
   const resizer = new FakeResizer();
   const windowTarget = new FakeEventTarget();

@@ -443,9 +443,30 @@ class Handler(SimpleHTTPRequestHandler):
                     }],
                 },
                 "operations": {
-                    "version": 2, "connected": True, "state": "degraded",
-                    "summary": "1 recurring job needs attention.",
+                    "version": 3, "connected": True, "state": "degraded",
+                    "summary": "1 operation needs attention.",
                     "observedAt": OBSERVED, "commands": [],
+                    "sessionObservation": {
+                        "version": 1, "source": "berd", "connected": True,
+                        "state": "healthy", "summary": "Agent sessions are reporting normally.",
+                        "observedAt": OBSERVED,
+                    },
+                    "sessions": [{
+                        "id": "fictional-session-1", "state": "working",
+                        "startedAt": "2026-07-18T16:30:00Z", "updatedAt": OBSERVED,
+                        "taskId": ITEMS[4]["sourceItemRef"],
+                        "runner": {"harness": "Codex", "model": "Example model", "agent": "Mobile guide"},
+                    }, {
+                        "id": "fictional-session-2", "state": "waiting",
+                        "startedAt": "2026-07-18T16:00:00Z", "updatedAt": "2026-07-18T17:50:00Z",
+                        "taskId": ITEMS[3]["sourceItemRef"],
+                        "runner": {"harness": "Claude Code", "model": "Example model", "agent": "Storage watcher"},
+                    }, {
+                        "id": "fictional-session-3", "state": "stopped",
+                        "startedAt": "2026-07-18T15:30:00Z", "updatedAt": "2026-07-18T17:40:00Z",
+                        "taskId": None,
+                        "runner": {"harness": "Goose", "model": None, "agent": None},
+                    }],
                     "schedules": [{
                         "id": "morning-menu-brief",
                         "label": "Prepare the morning menu brief",
@@ -482,7 +503,11 @@ class Handler(SimpleHTTPRequestHandler):
                     }],
                     "counts": {"commands": 0, "schedules": 3, "failing": 1,
                                "runners": 3, "healthy": 2, "problematic": 1,
-                               "running": 0, "unknown": 0, "paused": 0},
+                               "running": 0, "unknown": 0, "paused": 0,
+                               "sessions": 3, "sessionsWorking": 1,
+                               "sessionsWaiting": 1, "sessionsStopped": 1,
+                               "sessionsProblematic": 0, "sessionsUnknown": 0,
+                               "sessionsUnlinked": 1},
                 },
             })
         if parsed.path == "/api/cards":

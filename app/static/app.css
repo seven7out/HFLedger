@@ -605,6 +605,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .state-actions { display: flex; gap: 8px; }
 
 .owner-today-summary { border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--content) 96%, var(--accent)); }
+.today-agent-snapshot {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--content);
+}
+.today-agent-copy { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 3px 10px; }
+.today-agent-copy strong { font-size: 12px; }
+.today-agent-copy span { min-width: 0; overflow: hidden; color: var(--ink); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.today-agent-copy small { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
+.today-agent-snapshot.is-degraded,
+.today-agent-snapshot.is-invalid,
+.today-agent-snapshot.is-stale { background: color-mix(in srgb, var(--danger) 5%, var(--content)); }
 .production-health { min-height: 42px; display: flex; align-items: center; gap: 8px; padding: 9px 18px; border-bottom: 1px solid var(--line); font-size: 13px; }
 .production-health-dot { color: var(--success); font-size: 9px; }
 .production-health-copy { display: grid; gap: 2px; }
@@ -958,6 +975,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .operation-runner-group > .operations-list { border-top: 1px solid var(--line); }
 .operation-row { padding: 11px 18px; border-bottom: 1px solid var(--line); background: var(--content); }
 .operation-row.health-problematic { background: color-mix(in srgb, var(--danger) 5%, var(--content)); }
+.agent-session-row.state-problematic { background: color-mix(in srgb, var(--danger) 5%, var(--content)); }
+.agent-session-row.state-working .operation-status { color: var(--accent); }
+.agent-session-row.state-waiting .operation-status { color: var(--warning); }
+.agent-session-row.state-problematic .operation-status { color: var(--danger); }
+.agent-session-row.state-stopped .operation-status,
+.agent-session-row.state-unknown .operation-status { color: var(--muted); }
 .operation-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .operation-heading strong,
 .command-row > strong { font-size: 12px; }

@@ -38,10 +38,18 @@ const LEGACY_CONFIG_VERSION: u32 = 1;
 const LOG_LIMIT_BYTES: u64 = 1_048_576;
 const CORE_FILES: [&str; 3] = ["config.json", "board.json", "ledger.jsonl"];
 const DATA_DIRECTORIES: [&str; 3] = ["locks", "backups", "reports"];
-const DEMO_AUXILIARY_FILES: [&str; 2] = ["owner-control.jsonl", "reports/operations-latest.json"];
+const DEMO_AUXILIARY_FILES: [&str; 3] = [
+    "owner-control.jsonl",
+    "reports/operations-latest.json",
+    "reports/session-observer-latest.json",
+];
 const WATCHED_WORKSPACE_FILES: [&str; 2] = ["board.json", "ledger.jsonl"];
 const WATCHED_OPTIONAL_WORKSPACE_FILES: [&str; 1] = ["owner-control.jsonl"];
-const WATCHED_REPORT_FILES: [&str; 2] = ["collector-latest.json", "operations-latest.json"];
+const WATCHED_REPORT_FILES: [&str; 3] = [
+    "collector-latest.json",
+    "operations-latest.json",
+    "session-observer-latest.json",
+];
 const WATCH_DEBOUNCE: Duration = Duration::from_millis(350);
 const NATIVE_CHROME_POLL: Duration = Duration::from_secs(3);
 const PRODUCTION_MONITOR_INTERVAL_SECONDS: u32 = 60;
@@ -728,6 +736,50 @@ fn refresh_demo_operations(destination: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn refresh_demo_sessions(destination: &Path) -> Result<(), String> {
+    let path = destination.join("reports/session-observer-latest.json");
+    reject_symlink(&path)?;
+    let bytes = fs::read(&path)
+        .map_err(|error| format!("could not read the fictional session report: {error}"))?;
+    let mut report: Value = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("fictional session report is invalid: {error}"))?;
+    let object = report
+        .as_object_mut()
+        .ok_or_else(|| "fictional session report must be an object".to_string())?;
+    let now = Utc::now();
+    object.insert(
+        "observedAt".into(),
+        Value::String(now.to_rfc3339_opts(SecondsFormat::Secs, false)),
+    );
+    let sessions = object
+        .get_mut("sessions")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| "fictional sessions are invalid".to_string())?;
+    for (index, session) in sessions.iter_mut().enumerate() {
+        let session = session
+            .as_object_mut()
+            .ok_or_else(|| "fictional session is invalid".to_string())?;
+        session.insert(
+            "startedAt".into(),
+            Value::String(
+                (now - ChronoDuration::minutes(40 + index as i64 * 20))
+                    .to_rfc3339_opts(SecondsFormat::Secs, false),
+            ),
+        );
+        session.insert(
+            "updatedAt".into(),
+            Value::String(
+                (now - ChronoDuration::minutes(index as i64 + 1))
+                    .to_rfc3339_opts(SecondsFormat::Secs, false),
+            ),
+        );
+    }
+    let payload = serde_json::to_vec_pretty(&report)
+        .map_err(|error| format!("could not encode the fictional session report: {error}"))?;
+    write_private_file(&path, &payload)?;
+    Ok(())
+}
+
 fn copy_demo(source: &Path, destination: &Path) -> Result<(), String> {
     reject_symlink(source)?;
     if destination.exists() {
@@ -780,6 +832,7 @@ fn copy_demo(source: &Path, destination: &Path) -> Result<(), String> {
             private_permissions(&to, 0o600)?;
         }
         refresh_demo_operations(destination)?;
+        refresh_demo_sessions(destination)?;
         return Ok(());
     }
     create_private_dir(destination)?;
@@ -811,6 +864,7 @@ fn copy_demo(source: &Path, destination: &Path) -> Result<(), String> {
         private_permissions(&to, 0o600)?;
     }
     refresh_demo_operations(destination)?;
+    refresh_demo_sessions(destination)?;
     Ok(())
 }
 
@@ -4475,6 +4529,9 @@ mod tests {
             .contains(&first_root.join("reports/operations-latest.json")));
         assert!(first_plan
             .allowed_files
+            .contains(&first_root.join("reports/session-observer-latest.json")));
+        assert!(first_plan
+            .allowed_files
             .is_disjoint(&second_plan.allowed_files));
 
         let board_event = Event::new(EventKind::Any).add_path(first_root.join("board.json"));
@@ -5059,6 +5116,11 @@ mod tests {
             b"{\"observedAt\":\"2000-01-01T00:00:00+00:00\",\"schedules\":[]}",
         )
         .expect("write included operations report");
+        fs::write(
+            source.join("reports/session-observer-latest.json"),
+            b"{\"observedAt\":\"2000-01-01T00:00:00+00:00\",\"sessions\":[]}",
+        )
+        .expect("write included session report");
 
         let board_before =
             fs::read(destination.join("board.json")).expect("read previous board before upgrade");
@@ -5066,6 +5128,9 @@ mod tests {
 
         assert!(destination.join("owner-control.jsonl").is_file());
         assert!(destination.join("reports/operations-latest.json").is_file());
+        assert!(destination
+            .join("reports/session-observer-latest.json")
+            .is_file());
         assert_eq!(
             fs::read(destination.join("board.json")).expect("read board after upgrade"),
             board_before

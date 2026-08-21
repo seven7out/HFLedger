@@ -77,6 +77,11 @@ The test site is a proving ground and is explicitly allowed to break. A failure
 there keeps neutral styling and says “Allowed to break.” Only production
 degradation uses alarm styling.
 
+A compact **Agents now** line follows that primary owner summary when session
+observation is connected. It reports only working, waiting, stopped, and problem
+counts and links to Operations for detail; it does not displace production,
+owner judgments, or product flow.
+
 Below that summary, Today remains ordered by consequence rather than a weighted
 score:
 
@@ -175,17 +180,19 @@ timestamps into commitments.
 
 ## Operations
 
-Operations answers which recurring jobs exist across agents and local
-automation, who runs each one, which model it uses when known, when it runs,
-what product purpose it serves, and whether it is Healthy, Problematic, Running,
-Unknown, or Paused. Jobs are grouped by runner and problematic jobs appear
-first within their group. Invocation text is hidden in a secondary disclosure.
-Failed, missed, stale, invalid, and unconfigured reporting cannot appear
+Operations answers which agent sessions are working, waiting, stopped, or in
+trouble, plus which recurring jobs exist across agents and local automation.
+Linked sessions lead with the owner-facing product task headline. Runtime
+identity, source reference, cadence, and invocation text remain secondary.
+Jobs are grouped by runner and problematic jobs appear first within their
+group. Failed, missed, stale, invalid, and unconfigured reporting cannot appear
 healthy.
 
-The source is an optional private `reports/operations-latest.json` observation.
-The view never runs a command, installs a schedule, retries work, or grants new
-authority. `ledger operations` returns the same bounded projection for agents.
+The sources are optional private `reports/operations-latest.json` and
+`reports/session-observer-latest.json` observations. Their freshness is
+evaluated independently. The view never controls an agent, runs a command,
+installs a schedule, retries work, changes task status, or grants new authority.
+`ledger operations` returns the same bounded projection for agents.
 
 ## Evidence, provenance, and two clocks
 
@@ -307,8 +314,8 @@ Owner direction can still be written to its independent append-only lane.
 - **Browser-only:** supports session triage state but not native menus, durable
   state across process restarts, file watching, Dock badges, or native window
   restoration.
-- **Operations unconfigured:** says commands and recurring jobs have not been
-  connected; it never substitutes an empty green success state.
+- **Operations unconfigured:** says sessions, commands, and recurring jobs have
+  not been connected; it never substitutes an empty green success state.
 
 ## Keyboard and native menus
 

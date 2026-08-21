@@ -37,6 +37,7 @@ The optional `automation` object in `config.json` has this closed shape:
 | `repositories[]` | Repository id, GitHub `owner/repository` slug, stage branch, and production branch. |
 | `sources.github` | Enable switch and bounded limits for open PRs, merged PRs, runs, and issues. |
 | `sources.localFiles.roots[]` | Local root id, path, relative glob patterns, and per-root file limit. |
+| `sources.berd` | Optional CLI, session limit, freshness window, and exact session-to-task links. |
 | `workPolicy` | Ready/review statuses, stage-merge eligibility, and the required `productionWrites: false`. |
 | `packs.runtimes` | Unique selection of `generic` and `claude-code`. |
 | `schedule` | Whether a generated schedule is intended and its local hour/minute. |
@@ -85,13 +86,28 @@ Authenticate and inspect access separately with `gh auth status`. HFLedger does 
 
 The local adapter walks configured roots without following directory or file symlinks. It matches relative globs and records only the root id, a digest of the relative path, a bounded display summary of that path, extension, byte size, and modification time. It never opens or reads file contents. Missing or unreadable roots degrade the source; reaching `maxFiles` is reported through `truncatedRoots`.
 
+### Berd sessions
+
+The optional Berd adapter calls the Berd-bundled `berdctl` with argument arrays,
+never a shell. It lists a bounded number of sessions and requests each session
+with `--messages 0`. Only id, normalized process state, timestamps, an optional
+exact configured task id, and secondary harness/model/agent labels survive
+normalization. Conversation titles, project ids, working directories, message
+counts, messages, and unknown fields are dropped.
+
+The normalized mode-`0600` report has its own freshness window. A missing Berd
+app or CLI, timeout, invalid response, partial read, or stale report stays
+degraded or unknown. Working does not prove progress, waiting does not prove an
+owner blocker, and stopped does not prove completion. See
+[`berd-session-observer.md`](berd-session-observer.md) for the closed contract.
+
 Collector reports are observations. An agent must not treat a title, path, status, or report change as authority to execute work, create an owner ask, merge, or deploy.
 
 ## Operations observation
 
-The owner-facing Operations view reads an optional private
-`reports/operations-latest.json` report. It is a closed observation contract,
-not a scheduler or command runner. Installations may map their explicitly known
+The owner-facing Operations view reads optional private commands/schedules and
+session reports. Both are closed observation contracts, not schedulers or
+agent controllers. Installations may map their explicitly known
 commands and recurring jobs into that report with product labels, product
 descriptions, runner and model identity, cadence, enabled state, next expected
 run, and the latest bounded outcome. Invocation text is secondary and

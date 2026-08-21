@@ -209,13 +209,15 @@ def build_parser():
 
     sub.add_parser("validate", help="validate config, board, cursor, provenance, and generated counts")
     sub.add_parser("reconcile", help="atomically fold all unprocessed ledger events into the board")
-    sub.add_parser("collect", help="write a read-only local/GitHub observation report")
+    sub.add_parser(
+        "collect",
+        help="write read-only local, GitHub, and optional Berd metadata reports")
     sub.add_parser(
         "owner-control",
         help="print the effective owner priority order and product directions")
     sub.add_parser(
         "operations",
-        help="print observed commands, schedules, and latest run outcomes")
+        help="print observed sessions, commands, schedules, and latest outcomes")
     render = sub.add_parser("render-packs", help="generate configured agent instruction packs")
     render.add_argument("--runtime", action="append", choices=("codex", "generic", "claude-code"),
                         help="runtime to render; repeat as needed")

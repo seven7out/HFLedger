@@ -8,7 +8,7 @@ import threading
 import unittest
 
 from app import server
-from core import operations, owner_control, schema, store
+from core import operations, owner_control, schema, session_observer, store
 from tests.helpers import new_home
 
 
@@ -382,7 +382,10 @@ class OperationsTests(unittest.TestCase):
         self.assertEqual(healthy["counts"], {
             "commands": 1, "schedules": 1, "failing": 0, "runners": 1,
             "healthy": 1, "problematic": 0, "running": 0, "unknown": 0,
-            "paused": 0,
+            "paused": 0, "sessions": 0, "sessionsWorking": 0,
+            "sessionsWaiting": 0, "sessionsStopped": 0,
+            "sessionsProblematic": 0, "sessionsUnknown": 0,
+            "sessionsUnlinked": 0,
         })
         self.assertEqual(healthy["schedules"][0]["health"], "healthy")
         self.write_report(operation_report(status="failed"))
@@ -398,7 +401,7 @@ class OperationsTests(unittest.TestCase):
         self.write_report(operation_report(version=1))
         view = operations.build_view(self.home, NOW)
         self.assertEqual(view["state"], "healthy")
-        self.assertEqual(view["version"], 2)
+        self.assertEqual(view["version"], 3)
         self.assertEqual(view["schedules"][0]["runner"], {
             "type": "unknown", "name": "Runner not reported", "model": None,
         })
@@ -457,6 +460,74 @@ class OperationsTests(unittest.TestCase):
         target.mkdir()
         reports.symlink_to(target, target_is_directory=True)
         self.assertEqual(operations.build_view(self.home, NOW)["state"], "invalid")
+
+    def test_session_freshness_is_independent_and_stale_work_is_not_claimed_active(self):
+        self.write_report(operation_report())
+        session_observer.write_report(self.home, {
+            "version": 1,
+            "source": "berd",
+            "state": "healthy",
+            "observedAt": "2026-08-14T11:50:00+00:00",
+            "staleAfterSeconds": 300,
+            "sessions": [{
+                "id": "fictional-session-1",
+                "state": "working",
+                "startedAt": "2026-08-14T11:00:00+00:00",
+                "updatedAt": "2026-08-14T11:49:00+00:00",
+                "taskId": "task-menu",
+                "runner": {
+                    "harness": "Example harness",
+                    "model": "Example model",
+                    "agent": None,
+                },
+            }],
+        })
+        stale = operations.build_view(self.home, NOW)
+        self.assertEqual(stale["state"], "stale")
+        self.assertEqual(stale["schedules"][0]["health"], "healthy")
+        self.assertEqual(stale["sessions"][0]["state"], "unknown")
+        self.assertEqual(stale["sessions"][0]["reportedState"], "working")
+        self.assertEqual(stale["counts"]["sessionsWorking"], 0)
+        self.assertEqual(stale["counts"]["sessionsUnknown"], 1)
+
+    def test_invalid_session_report_does_not_hide_a_valid_operations_report(self):
+        self.write_report(operation_report())
+        path = Path(self.home, session_observer.REPORT_RELATIVE_PATH)
+        path.write_text('{"version": 1, "messages": ["not allowed"]}')
+        path.chmod(0o600)
+        view = operations.build_view(self.home, NOW)
+        self.assertEqual(view["state"], "invalid")
+        self.assertEqual(view["schedules"][0]["health"], "healthy")
+        self.assertEqual(view["sessions"], [])
+
+    def test_secret_shaped_session_labels_invalidate_only_session_reporting(self):
+        self.write_report(operation_report())
+        path = Path(self.home, session_observer.REPORT_RELATIVE_PATH)
+        report = {
+            "version": 1,
+            "source": "berd",
+            "state": "healthy",
+            "observedAt": "2026-08-14T11:50:00+00:00",
+            "staleAfterSeconds": 300,
+            "sessions": [{
+                "id": "fictional-session-1",
+                "state": "working",
+                "startedAt": None,
+                "updatedAt": "2026-08-14T11:49:00+00:00",
+                "taskId": None,
+                "runner": {
+                    "harness": "Bearer abcdefghijklmnop",
+                    "model": None,
+                    "agent": None,
+                },
+            }],
+        }
+        path.write_text(json.dumps(report))
+        path.chmod(0o600)
+        view = operations.build_view(self.home, NOW)
+        self.assertEqual(view["state"], "invalid")
+        self.assertEqual(view["schedules"][0]["health"], "healthy")
+        self.assertEqual(view["sessions"], [])
 
 
 class OwnerControlServerTests(unittest.TestCase):

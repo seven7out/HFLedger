@@ -58,6 +58,27 @@ class AutomationConfigTests(unittest.TestCase):
         self.assertTrue(any("must differ" in error for error in errors))
         self.assertTrue(any("absolute or home-relative" in error for error in errors))
 
+    def test_optional_berd_source_is_closed_bounded_and_exactly_linked(self):
+        self.assertEqual(store.config_errors(self.config), [])
+
+        def malformed(automation):
+            automation["sources"]["berd"] = {
+                "enabled": "yes",
+                "executable": "/bin/other-tool",
+                "sessionLimit": 101,
+                "staleAfterSeconds": 10,
+                "sessionTasks": {"bad/session": "bad task"},
+                "messages": True,
+            }
+
+        errors = self.errors(malformed)
+        self.assertTrue(any("unsupported field" in error for error in errors))
+        self.assertTrue(any("ending in berdctl" in error for error in errors))
+        self.assertTrue(any("sessionLimit" in error for error in errors))
+        self.assertTrue(any("staleAfterSeconds" in error for error in errors))
+        self.assertTrue(any("invalid session id" in error for error in errors))
+        self.assertTrue(any("stable task ids" in error for error in errors))
+
     def test_queue_automation_safety_fields_are_typed(self):
         board = schema.default_board("Fictional orchard tools")
         board["queue"].append({

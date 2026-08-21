@@ -16,8 +16,9 @@ product sections so a large queue is useful before manual cleanup.
 Calendar brings those dates together with owner-decision deadlines, deferred
 items returning for attention, and the next scheduled operations run.
 Operations groups recurring jobs by the agent or local runner responsible for
-them. Each job shows its model when known, plain-language purpose, cadence,
-next run, and current Healthy, Problematic, Running, Unknown, or Paused state.
+them and can optionally show metadata-only Berd sessions as working, waiting,
+stopped, or problematic. Product task headlines lead; model, harness, cadence,
+source references, and commands remain secondary detail.
 An owner-only manual task has a separate **Mark
 complete** action because the owner, not an agent, knows whether that action was
 performed.
@@ -167,7 +168,9 @@ The Codex, generic, and Claude Code instruction adapters inject the same policy
 and runtime-labeled evidence commands into their respective layouts. The
 optional GitHub collector reads PR, CI, issue, and branch-comparison facts
 through an authenticated `gh` CLI. The local-files collector records metadata
-without reading contents. Details and inactive launchd/systemd schedule
+without reading contents. An optional Berd adapter reads bounded session
+metadata through `berdctl` with `--messages 0`; it never retains conversation
+titles, paths, projects, message counts, or messages. Details and inactive launchd/systemd schedule
 generation are in [`docs/automation.md`](docs/automation.md).
 
 ## Reference interface
@@ -186,9 +189,10 @@ The standard-library HTTP service provides:
   read through the CLI;
 - Calendar with a familiar month grid and agenda for task need-by dates,
   decision deadlines, deferred-item returns, and next scheduled runs;
-- Operations with recurring jobs grouped across agents and local automation,
-  including runner, model when known, cadence, next run, product purpose, and
-  explicit health, stale, and unconfigured states;
+- Operations with product-led live session state plus recurring jobs grouped
+  across agents and local automation, including runner, model when known,
+  cadence, next run, product purpose, and explicit health, stale, and
+  unconfigured states;
 - a responsive board for queue, inbox, owner tasks, admitted asks, and outcomes;
 - a mobile decision deck with option selection, recommendation acceptance, snooze, need-more-info, completion, skip, and digest-bound undo where safe;
 - bounded deterministic Command-K search over projected metadata plus
@@ -236,8 +240,8 @@ Both leave `board.json` and `ledger.jsonl` byte-identical. See
 - GitHub collection requires a separately installed and authenticated `gh` CLI.
 - Collectors are explicit and off by default. Disabled or never-observed
   sources are shown as unobserved, never as quiet or all clear.
-- HFLedger observes commands and schedules but does not execute, install,
-  enable, or repair them from the Operations view.
+- HFLedger observes sessions, commands, and schedules but does not control
+  agents or execute, install, enable, or repair commands from Operations.
 - Production writes are unsupported by the automation policy.
 - Transition notifications, a rich menu-bar popover, Quick Look, analytics,
   advanced disputes, and multi-machine skew remain deferred.

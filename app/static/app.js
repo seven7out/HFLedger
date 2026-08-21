@@ -1045,6 +1045,8 @@ function renderToday() {
   const fragment = document.createDocumentFragment();
   const ownerSummary = renderOwnerTodaySummary();
   if (ownerSummary) fragment.append(ownerSummary);
+  const agentSnapshot = renderTodayAgentSessions();
+  if (agentSnapshot) fragment.append(agentSnapshot);
   const alerts = orientation.coverage?.metaAlerts || [];
   if (alerts.length || orientation.coverage?.screen?.state === "invalid") {
     const list = node("div", "ledger-list");
@@ -1666,6 +1668,52 @@ function operationRunnerLabel(schedule) {
   return model ? `${name} · ${model}` : name;
 }
 
+function agentSessionStateLabel(value) {
+  return {
+    working: "Working",
+    waiting: "Waiting",
+    stopped: "Stopped",
+    problematic: "Problem",
+    unknown: "Unknown",
+  }[safeText(value, 24)] || "Unknown";
+}
+
+function agentSessionRunnerLabel(session) {
+  const harness = safeText(session?.runner?.harness, 120) || "Harness not reported";
+  const model = safeText(session?.runner?.model, 120);
+  return model ? `${harness} · ${model}` : harness;
+}
+
+function agentSessionHeadline(session, ownerItems) {
+  const taskId = safeText(session?.taskId, 128);
+  const linked = (Array.isArray(ownerItems) ? ownerItems : []).find(
+    (item) => item?.id === taskId);
+  return safeText(linked?.title, 160) || "Unlinked agent session";
+}
+
+function renderTodayAgentSessions() {
+  const model = state.data?.operations || {};
+  const observation = model.sessionObservation || {};
+  const counts = model.counts || {};
+  if (["unconfigured", "disabled"].includes(observation.state) && !counts.sessions) {
+    return null;
+  }
+  const snapshot = node("section", `today-agent-snapshot is-${safeText(observation.state, 24) || "unknown"}`);
+  const copy = node("div", "today-agent-copy");
+  copy.append(
+    node("strong", "", "Agents now"),
+    node("span", "", [
+      `${Number(counts.sessionsWorking) || 0} working`,
+      `${Number(counts.sessionsWaiting) || 0} waiting`,
+      `${Number(counts.sessionsStopped) || 0} stopped`,
+      ...(Number(counts.sessionsProblematic) ? [`${Number(counts.sessionsProblematic)} with a problem`] : []),
+    ].join(" · ")),
+    node("small", "", observation.summary || "Agent session state is not available."),
+  );
+  snapshot.append(copy, button("control-button", "Open Operations", () => setView("operations")));
+  return snapshot;
+}
+
 function groupOperationsByRunner(schedules) {
   const groups = new Map();
   (Array.isArray(schedules) ? schedules : []).forEach((schedule) => {
@@ -1836,10 +1884,44 @@ function renderOperations() {
   summary.append(
     node("span", "operations-state-dot", "●"),
     node("strong", "", operationStateLabel(model.state)),
-    node("span", "", model.summary || "Commands and recurring jobs have not been connected yet."),
+    node("span", "", model.summary || "Sessions, commands, and recurring jobs have not been connected yet."),
   );
   if (model.observedAt) summary.append(node("time", "", `Updated ${relativeTime(model.observedAt)}`));
   fragment.append(summary);
+
+  const sessions = node("div", "operations-list agent-session-list");
+  const ownerItems = state.data?.ownerControl?.items || [];
+  (model.sessions || []).forEach((session) => {
+    const sessionState = ["working", "waiting", "stopped", "problematic", "unknown"].includes(session?.state)
+      ? session.state : "unknown";
+    const row = node("article", `operation-row agent-session-row state-${sessionState}`);
+    const heading = node("header", "operation-heading");
+    heading.append(
+      node("strong", "", agentSessionHeadline(session, ownerItems)),
+      node("span", "operation-status", agentSessionStateLabel(sessionState)),
+    );
+    const description = session?.taskId
+      ? "Linked to an exact item in the owner plan."
+      : "Not yet linked to an item in the owner plan.";
+    row.append(heading, node("p", "", description));
+    const facts = node("dl", "operation-facts");
+    facts.append(node("dt", "", "Runs through"), node("dd", "", agentSessionRunnerLabel(session)));
+    facts.append(node("dt", "", "Agent"), node("dd", "", safeText(session?.runner?.agent, 120) || "Not reported"));
+    facts.append(node("dt", "", "Started"), node("dd", "", session?.startedAt ? exactTime(session.startedAt) : "Not reported"));
+    facts.append(node("dt", "", "Last activity"), node("dd", "", session?.updatedAt ? exactTime(session.updatedAt) : "Not reported"));
+    row.append(facts);
+    const details = node("details", "operation-invocation");
+    details.append(
+      node("summary", "", "Show source reference"),
+      node("code", "", safeText(session?.id, 128) || "Unavailable"),
+    );
+    row.append(details);
+    sessions.append(row);
+  });
+  if (!sessions.childElementCount) sessions.append(emptyState(
+    "No agent sessions are connected",
+    "Connect the optional metadata-only session observer to see working, waiting, stopped, and problem states."));
+  fragment.append(section("Agent sessions", model.counts?.sessions || 0, sessions));
 
   const schedules = node("div", "operations-runner-groups");
   groupOperationsByRunner(model.schedules).forEach((group) => {
@@ -2081,7 +2163,7 @@ function viewMetadata() {
   if (state.view === "calendar") return [
     "Calendar", state.data?.calendar?.summary || "Dated owner work and scheduled runs",
   ];
-  if (state.view === "operations") return ["Operations", state.data?.operations?.summary || "Command and schedule reporting"];
+  if (state.view === "operations") return ["Operations", state.data?.operations?.summary || "Session, command, and schedule reporting"];
   if (state.view === "changes") return ["Changes", `${state.orientation?.changes?.unseenTotal || 0} unseen · ${observed || "coverage time unavailable"}`];
   if (state.view === "all-work") return ["All Work", `${state.orientation?.totals?.items || 0} items · one primary home each`];
   if (state.view === "shipped-log") return ["Shipped Log", "Independently corroborated outcomes only"];
@@ -3466,6 +3548,9 @@ globalThis.HFLedgerUI = Object.freeze({
   operationHealth,
   operationHealthLabel,
   operationRunnerLabel,
+  agentSessionStateLabel,
+  agentSessionRunnerLabel,
+  agentSessionHeadline,
   groupOperationsByRunner,
   calendarDateKey,
   calendarEventDateKey,
