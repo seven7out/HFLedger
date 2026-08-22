@@ -3014,19 +3014,12 @@ function showLoadError(error, preserve) {
 function syncRefreshControl() {
   const control = $("#refresh-button");
   if (!control) return;
-  const readOnly = state.data?.ui?.readOnly === true;
-  control.disabled = state.loading || state.refreshingSources || readOnly || !state.context;
-  control.title = readOnly
-    ? "Refresh is unavailable while this workspace is read-only"
-    : "Scan every connected source and update this workspace";
+  control.disabled = state.loading || state.refreshingSources || !state.context;
+  control.title = "Scan every connected source and update this workspace";
 }
 
 async function refreshNow() {
   if (state.loading || state.refreshingSources || !state.context) return;
-  if (state.data?.ui?.readOnly === true) {
-    announce("Refresh is unavailable while this workspace is read-only.");
-    return;
-  }
   window.clearTimeout(refreshNow.messageTimer);
   state.refreshingSources = true;
   syncRefreshControl();

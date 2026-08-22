@@ -1218,7 +1218,7 @@ def owner_control_command(runtime, body):
 
 
 def refresh_workspace(runtime, body):
-    """Reconcile pending events and run every configured read-only source once."""
+    """Refresh the selected workspace without crossing its write boundary."""
     fields = {"schemaVersion", "context"}
     missing = sorted(fields - set(body))
     unknown = sorted(set(body) - fields)
@@ -1231,9 +1231,11 @@ def refresh_workspace(runtime, body):
     context_id = _text(body.get("context"), "context", 32)
     context = runtime.context(context_id)
 
-    # Reconciliation stays on the existing fail-closed single-writer path.
-    # Collection is observation-only and writes only bounded private reports.
-    reconcile.reconcile(context.home, config=context.config)
+    # Reconciliation stays on the existing fail-closed single-writer path and
+    # is never attempted for an observer/imported workspace. Collection is
+    # observation-only and writes only bounded private reports.
+    if not context.read_only:
+        reconcile.reconcile(context.home, config=context.config)
     if context.config.get("automation") is None:
         collection = {
             "status": "idle",
@@ -1284,11 +1286,14 @@ POST_ROUTES = {
     "/api/tasks/reorder": lambda runtime, body: reorder(runtime, body, "ownerTasks"),
     "/api/tasks/done": toggle_task,
     "/api/cards/answer": answer_card,
-    "/api/refresh": refresh_workspace,
 }
 
 LOCAL_POST_ROUTES = {
     "/api/local-state/command": local_state_command,
+}
+
+OBSERVATION_POST_ROUTES = {
+    "/api/refresh": refresh_workspace,
 }
 
 OWNER_CONTROL_POST_ROUTES = {
@@ -1466,6 +1471,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             path = urlparse(self.path).path
             is_local = path in LOCAL_POST_ROUTES
+            is_observation = path in OBSERVATION_POST_ROUTES
             is_owner_control = path in OWNER_CONTROL_POST_ROUTES
             raw = self._read_raw(
                 LOCAL_STATE_MAX_BODY_BYTES if is_local else MAX_BODY_BYTES)
@@ -1473,6 +1479,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"error": "forbidden: non-loopback Host"}, status=403)
                 return
             route = (LOCAL_POST_ROUTES.get(path) if is_local else
+                     OBSERVATION_POST_ROUTES.get(path) if is_observation else
                      OWNER_CONTROL_POST_ROUTES.get(path) if is_owner_control else
                      POST_ROUTES.get(path))
             if route is None:
@@ -1480,7 +1487,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             body = self._json_body(raw)
             context_id = body.get("context") if isinstance(body.get("context"), str) else None
-            if not is_local and not is_owner_control and self.runtime.context(context_id).read_only:
+            if (not is_local and not is_observation and not is_owner_control and
+                    self.runtime.context(context_id).read_only):
                 self._send_json({"error": "workspace is read-only"}, status=403)
                 return
             with _WRITE_LOCK:

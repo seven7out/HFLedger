@@ -6,6 +6,8 @@
   runs every configured read-only source for the selected workspace, reloads
   the validated owner view, and reports healthy, degraded, idle, or already
   running outcomes in plain language while preserving the last successful view.
+  Observer workspaces scan without mutating their authoritative board, ledger,
+  or configuration.
 - Added an optional metadata-only Berd session observer. Today summarizes
   working, waiting, stopped, and problem states; Operations leads linked
   sessions with product task headlines and keeps runtime identity secondary.

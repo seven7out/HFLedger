@@ -193,9 +193,9 @@ The standard-library HTTP service provides:
   across agents and local automation, including runner, model when known,
   cadence, next run, product purpose, and explicit health, stale, and
   unconfigured states;
-- a global **Refresh now** control that reconciles pending events, scans every
-  configured read-only source in the selected workspace, and reloads the
-  validated owner view with one plain-language result;
+- a global **Refresh now** control that scans every configured read-only source
+  in the selected workspace, reconciles pending events when the workspace is
+  writable, and reloads the validated owner view with one plain-language result;
 - a responsive board for queue, inbox, owner tasks, admitted asks, and outcomes;
 - a mobile decision deck with option selection, recommendation acceptance, snooze, need-more-info, completion, skip, and digest-bound undo where safe;
 - bounded deterministic Command-K search over projected metadata plus

@@ -51,6 +51,7 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertIn('request("/api/refresh"', refresh)
         self.assertIn("schemaVersion: 1, context: state.context", refresh)
         self.assertIn("Scanning everything…", refresh)
+        self.assertNotIn("readOnly", refresh)
         for forbidden in ("repository", "path", "command", "prompt"):
             self.assertNotIn(forbidden, refresh)
 

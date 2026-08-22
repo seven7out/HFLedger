@@ -309,11 +309,13 @@ Owner direction can still be written to its independent append-only lane.
   source or scope.
 - **Invalid projection:** contains the failure. Any last-successful content is
   labeled historical rather than current.
-- **Refresh now:** reconciles pending events, runs every configured read-only
-  source for the selected writable workspace, and reloads the validated view.
-  It keeps the last successful content visible with `aria-busy` and does not
-  invent skeleton counts or prose. A source failure is reported as degraded;
-  an overlapping scheduled scan is reported as already running.
+- **Refresh now:** runs every configured read-only source for the selected
+  workspace and reloads the validated view. Writable workspaces first reconcile
+  pending events; observer and imported workspaces scan without changing their
+  authoritative board, ledger, or configuration. It keeps the last successful
+  content visible with `aria-busy` and does not invent skeleton counts or prose.
+  A source failure is reported as degraded; an overlapping scheduled scan is
+  reported as already running.
 - **Browser-only:** supports session triage state but not native menus, durable
   state across process restarts, file watching, Dock badges, or native window
   restoration.
