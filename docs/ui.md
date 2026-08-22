@@ -309,8 +309,11 @@ Owner direction can still be written to its independent append-only lane.
   source or scope.
 - **Invalid projection:** contains the failure. Any last-successful content is
   labeled historical rather than current.
-- **Refresh:** keeps the last successful content visible with `aria-busy`; it
-  does not invent skeleton counts or prose.
+- **Refresh now:** reconciles pending events, runs every configured read-only
+  source for the selected writable workspace, and reloads the validated view.
+  It keeps the last successful content visible with `aria-busy` and does not
+  invent skeleton counts or prose. A source failure is reported as degraded;
+  an overlapping scheduled scan is reported as already running.
 - **Browser-only:** supports session triage state but not native menus, durable
   state across process restarts, file watching, Dock badges, or native window
   restoration.
@@ -334,6 +337,7 @@ Window, and Help menus.
 | `W` | Set watch/unwatch through private local state. |
 | Command-F | Filter the current destination only. |
 | Command-K | Focus app-wide search over bounded projected metadata only. |
+| Command-R | Refresh the selected workspace now. |
 | Command-1…5 | Today, Changes, All Work, Shipped Log, Watched. |
 | Escape | Close the topmost transient surface and restore its originating focus. |
 
@@ -355,8 +359,11 @@ reference lives in a separate Help dialog.
 
 The native host watches only already configured, allowlisted board, ledger,
 collector, and adapter report files. It rejects symlinks, debounces write
-bursts, and refreshes without a primary Refresh button, recursive discovery,
-`git pull`, or collector enablement. Separately, an owner may enable one
+bursts, and reloads the view automatically without starting another scan. The
+owner-facing **Refresh now** button is separate: it invokes the existing
+reconciler and configured read-only collectors for the selected workspace only.
+It performs no recursive discovery, `git pull`, collector enablement, agent
+work, merge, or deployment. Separately, an owner may enable one
 production-health check for a workspace in native Settings. That address stays
 in private app data, requires HTTPS, follows no redirects, and never enters the
 board or ledger. The monitor checks once per minute while HFLedger is running,

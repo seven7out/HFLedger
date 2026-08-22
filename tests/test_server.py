@@ -277,6 +277,94 @@ class ViewAndStaticTests(ServerCase):
         self.assertEqual(body["ui"]["localState"]["mode"], "session")
         self.assertTrue(body["ui"]["localState"]["available"])
 
+    def test_refresh_reconciles_pending_events_and_scans_configured_sources(self):
+        package = decision_package(self.config, key="test:decision:manual-refresh")
+        ledger.append_ask(package, self.home, self.config)
+        report = {
+            "status": "healthy",
+            "completedAt": "2026-08-21T12:00:00+00:00",
+            "sources": [
+                {"source": "github", "status": "healthy", "observations": [{"private": True}]},
+                {"source": "localFiles", "status": "disabled", "observations": []},
+                {"source": "berd", "status": "healthy", "observations": [],
+                 "error": "must not reach the owner response"},
+            ],
+        }
+        with mock.patch.object(server, "collect_sources", return_value=report) as collect:
+            response, body, _connection = self.post("/api/refresh", {
+                "schemaVersion": 1,
+                "context": "main",
+            })
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(body, {
+            "version": 1,
+            "status": "healthy",
+            "summary": "Everything connected was scanned and the Ledger is up to date.",
+            "refreshedAt": "2026-08-21T12:00:00+00:00",
+            "context": "main",
+            "sources": [
+                {"source": "github", "status": "healthy"},
+                {"source": "localFiles", "status": "disabled"},
+                {"source": "berd", "status": "healthy"},
+            ],
+        })
+        collect.assert_called_once()
+        self.assertEqual(
+            load_board(self.home)["decisions"]["items"][0]["id"], package["id"])
+
+    def test_refresh_reports_degraded_and_in_progress_scans_without_hiding_the_view(self):
+        degraded = {
+            "status": "degraded",
+            "completedAt": "2026-08-21T12:01:00+00:00",
+            "sources": [{"source": "github", "status": "degraded", "observations": []}],
+        }
+        with mock.patch.object(server, "collect_sources", return_value=degraded):
+            response, body, _connection = self.post("/api/refresh", {
+                "schemaVersion": 1, "context": "main",
+            })
+        self.assertEqual(response.status, 200)
+        self.assertEqual(body["status"], "degraded")
+        self.assertIn("some connected sources could not be reached", body["summary"])
+
+        with mock.patch.object(
+                server, "collect_sources",
+                side_effect=server.CollectorBusyError("fictional busy scan")):
+            response, body, _connection = self.post("/api/refresh", {
+                "schemaVersion": 1, "context": "main",
+            })
+        self.assertEqual(response.status, 200)
+        self.assertEqual(body["status"], "busy")
+        self.assertIn("already running", body["summary"])
+
+    def test_refresh_runs_the_real_idle_collector_end_to_end(self):
+        response, body, _connection = self.post("/api/refresh", {
+            "schemaVersion": 1, "context": "main",
+        })
+        self.assertEqual(response.status, 200)
+        self.assertEqual(body["status"], "idle")
+        self.assertEqual(body["sources"], [
+            {"source": "github", "status": "disabled"},
+            {"source": "localFiles", "status": "disabled"},
+            {"source": "berd", "status": "disabled"},
+        ])
+        for name in ("collector-latest.json", "session-observer-latest.json"):
+            path = os.path.join(self.home, "reports", name)
+            self.assertTrue(os.path.isfile(path))
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+        board_response, board, _connection = self.get("/api/board")
+        self.assertEqual(board_response.status, 200)
+        self.assertEqual(board["activeContext"], "main")
+
+    def test_refresh_request_is_closed_and_requires_the_selected_context(self):
+        for body in (
+                {"schemaVersion": 1},
+                {"schemaVersion": 1, "context": "main", "command": "anything"},
+                {"schemaVersion": True, "context": "main"},
+                {"schemaVersion": 1, "context": "../other"}):
+            response, _payload, _connection = self.post("/api/refresh", body)
+            self.assertEqual(response.status, 400)
+
     def test_search_route_uses_the_closed_projection_search_contract(self):
         self.decision()
         _response, board, _connection = self.get("/api/board")

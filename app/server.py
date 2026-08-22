@@ -21,6 +21,7 @@ from core import (admission, calendar_view, item_metadata, ledger, local_state,
                   reconcile, schema, search_links)  # noqa: E402
 from core.link_safety import resolve_projected_link  # noqa: E402
 from core.store import BoardStore, BoardValidationError, load_config, resolve_home  # noqa: E402
+from collectors import CollectorBusyError, collect as collect_sources  # noqa: E402
 
 
 HOST = "127.0.0.1"
@@ -1216,6 +1217,66 @@ def owner_control_command(runtime, body):
     return {"event": event, "ownerControl": refreshed}
 
 
+def refresh_workspace(runtime, body):
+    """Reconcile pending events and run every configured read-only source once."""
+    fields = {"schemaVersion", "context"}
+    missing = sorted(fields - set(body))
+    unknown = sorted(set(body) - fields)
+    if missing:
+        raise ApiError(400, "missing refresh field(s): %s" % ", ".join(missing))
+    if unknown:
+        raise ApiError(400, "unsupported refresh field(s): %s" % ", ".join(unknown))
+    if body.get("schemaVersion") != 1 or isinstance(body.get("schemaVersion"), bool):
+        raise ApiError(400, "refresh schemaVersion must be 1")
+    context_id = _text(body.get("context"), "context", 32)
+    context = runtime.context(context_id)
+
+    # Reconciliation stays on the existing fail-closed single-writer path.
+    # Collection is observation-only and writes only bounded private reports.
+    reconcile.reconcile(context.home, config=context.config)
+    if context.config.get("automation") is None:
+        collection = {
+            "status": "idle",
+            "completedAt": runtime.now_fn().isoformat(),
+            "sources": [],
+        }
+    else:
+        try:
+            collection = collect_sources(context.home, config=context.config)
+        except CollectorBusyError:
+            collection = {
+                "status": "busy",
+                "completedAt": runtime.now_fn().isoformat(),
+                "sources": [],
+            }
+
+    status = collection.get("status")
+    if status == "healthy":
+        summary = "Everything connected was scanned and the Ledger is up to date."
+    elif status == "degraded":
+        summary = "The Ledger updated, but some connected sources could not be reached."
+    elif status == "busy":
+        summary = "A scan is already running. The latest saved Ledger view is shown."
+    else:
+        status = "idle"
+        summary = "The Ledger updated. No external sources are connected."
+    sources = [
+        {"source": item.get("source"), "status": item.get("status")}
+        for item in collection.get("sources", [])
+        if isinstance(item, dict) and item.get("source") in (
+            "github", "localFiles", "berd") and
+        item.get("status") in ("healthy", "degraded", "disabled")
+    ]
+    return {
+        "version": 1,
+        "status": status,
+        "summary": summary,
+        "refreshedAt": collection.get("completedAt") or runtime.now_fn().isoformat(),
+        "context": context.context_id,
+        "sources": sources,
+    }
+
+
 POST_ROUTES = {
     "/api/decisions/reorder": lambda runtime, body: reorder(runtime, body, "decisions"),
     "/api/decisions/resolve": resolve_decision,
@@ -1223,6 +1284,7 @@ POST_ROUTES = {
     "/api/tasks/reorder": lambda runtime, body: reorder(runtime, body, "ownerTasks"),
     "/api/tasks/done": toggle_task,
     "/api/cards/answer": answer_card,
+    "/api/refresh": refresh_workspace,
 }
 
 LOCAL_POST_ROUTES = {

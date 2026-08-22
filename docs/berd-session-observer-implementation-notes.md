@@ -7,6 +7,8 @@
 - Independent private freshness report and Operations projection.
 - Compact Today counts plus product-led Operations rows.
 - Exact task association only; no conversation-title or path inference.
+- One owner-facing refresh action that uses the existing reconciler and
+  collector rather than a parallel observer path.
 
 ## Deviations
 
@@ -28,6 +30,9 @@
 5. Native startup verifies the engine and workspace identity through a bounded
    readiness response. It does not repeatedly build the full owner projection
    while a large valid workspace is opening.
+6. Automatic file-watch reloads remain presentation-only. The explicit
+   **Refresh now** action has its own allowlisted request so report-file changes
+   cannot recursively start more scans.
 
 ## Deferred
 

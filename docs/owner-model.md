@@ -109,6 +109,13 @@ or unknown state. Harness, model, agent identity, timestamps, and source ids are
 secondary. Runtime state never proves that work is complete or that the owner
 is blocking it, and it never files a card automatically.
 
+**Refresh now** supports production health and keeping agents unblocked. It
+reconciles pending events, scans each already configured read-only source for
+the selected workspace, and reloads the validated owner view. Its result is one
+plain sentence: up to date, partially unreachable, no sources connected, or a
+scan already running. It never discovers new sources, changes configuration,
+runs agent work, or grants delivery authority.
+
 Opening queue work leads with a bounded product brief derived from the
 authoritative task: **What changes**, **Why it matters**, **What done looks
 like**, and **Risks or constraints**. Rank and workflow status never substitute

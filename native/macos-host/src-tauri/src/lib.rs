@@ -153,6 +153,7 @@ enum NativeCommand {
     ViewWatched,
     ViewFilter,
     ViewCommands,
+    ViewRefreshNow,
     ViewReload,
     ToggleSidebar,
     ToggleInspector,
@@ -177,6 +178,7 @@ impl NativeCommand {
             Self::ViewWatched => "view.watched",
             Self::ViewFilter => "view.filter",
             Self::ViewCommands => "view.commands",
+            Self::ViewRefreshNow => "view.refresh-now",
             Self::ViewReload => "view.reload",
             Self::ToggleSidebar => "pane.toggle-sidebar",
             Self::ToggleInspector => "pane.toggle-inspector",
@@ -201,6 +203,7 @@ impl NativeCommand {
             Self::ViewWatched => native_event_script!("view.watched"),
             Self::ViewFilter => native_event_script!("view.filter"),
             Self::ViewCommands => native_event_script!("view.commands"),
+            Self::ViewRefreshNow => native_event_script!("view.refresh-now"),
             Self::ViewReload => native_event_script!("view.reload"),
             Self::ToggleSidebar => native_event_script!("pane.toggle-sidebar"),
             Self::ToggleInspector => native_event_script!("pane.toggle-inspector"),
@@ -1695,9 +1698,7 @@ fn start_workspace_watch(
             if saw_error {
                 set_observer_error(
                     &app_handle.state::<HostRuntime>(),
-                    Some(
-                        "Workspace observation paused; use Refresh Sources or restart the engine.",
-                    ),
+                    Some("Workspace observation paused; use Refresh now or restart the engine."),
                 );
             } else {
                 set_observer_error(&app_handle.state::<HostRuntime>(), None);
@@ -3215,8 +3216,8 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
     )?;
     let reload = custom_menu_item(
         app,
-        "view.reload",
-        "Refresh Sources",
+        "view.refresh-now",
+        "Refresh Now",
         false,
         Some("CmdOrCtrl+R"),
     )?;
@@ -3808,6 +3809,7 @@ fn native_command_for_menu_id(id: &str) -> Option<NativeCommand> {
         "view.watched" => Some(NativeCommand::ViewWatched),
         "view.filter" => Some(NativeCommand::ViewFilter),
         "view.commands" => Some(NativeCommand::ViewCommands),
+        "view.refresh-now" => Some(NativeCommand::ViewRefreshNow),
         "view.reload" => Some(NativeCommand::ViewReload),
         "pane.toggle-sidebar" => Some(NativeCommand::ToggleSidebar),
         "pane.toggle-inspector" => Some(NativeCommand::ToggleInspector),
@@ -4623,6 +4625,7 @@ mod tests {
             ("view.watched", NativeCommand::ViewWatched),
             ("view.filter", NativeCommand::ViewFilter),
             ("view.commands", NativeCommand::ViewCommands),
+            ("view.refresh-now", NativeCommand::ViewRefreshNow),
             ("view.reload", NativeCommand::ViewReload),
             ("pane.toggle-sidebar", NativeCommand::ToggleSidebar),
             ("pane.toggle-inspector", NativeCommand::ToggleInspector),

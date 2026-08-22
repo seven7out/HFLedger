@@ -332,6 +332,9 @@ class NoWriteBackBoundaryTests(unittest.TestCase):
                 "context": "main", "id": self.package["id"],
                 "srcHash": src_hash, "action": "accept",
             },
+            "/api/refresh": {
+                "schemaVersion": 1, "context": "main",
+            },
         }
         self.assertEqual(
             set(route_bodies), set(server.POST_ROUTES),
@@ -584,7 +587,8 @@ process.stdout.write(JSON.stringify({
         post_targets = re.findall(
             r'request\("([^\"]+)"\s*,\s*\{\s*method:\s*"POST"', script)
         self.assertEqual(post_targets, [
-            "/api/local-state/command", "/api/owner-control/command"])
+            "/api/local-state/command", "/api/owner-control/command",
+            "/api/refresh"])
 
     def test_projected_link_resolver_rejects_local_and_credentialed_targets(self):
         def web(target):
@@ -654,7 +658,8 @@ process.stdout.write(JSON.stringify({
         self.assertEqual(native_menu_ids, {
             "view.today", "view.priorities", "view.calendar", "view.operations",
             "view.changes", "view.all-work", "view.shipped-log",
-            "view.watched", "view.filter", "view.commands", "view.reload",
+            "view.watched", "view.filter", "view.commands", "view.refresh-now",
+            "view.reload",
             "pane.toggle-sidebar", "pane.toggle-inspector", "file.open-source",
             "item.open", "item.acknowledge", "item.snooze", "item.watch",
             "edit.copy-context", "item.copy-context", "help.commands",

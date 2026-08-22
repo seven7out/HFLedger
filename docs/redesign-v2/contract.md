@@ -1109,6 +1109,7 @@ retaining understandable loading/status text.
 | `W` | absolute watch/unwatch through local state |
 | Command-F | filter current destination only |
 | Command-K | command palette/reference only |
+| Command-R | reconcile, scan configured read-only sources, and reload the selected workspace |
 | Command-1…5 | Today, Changes, All Work, Shipped Log, Watched |
 | Escape | close topmost transient surface and restore originating focus |
 
@@ -1130,7 +1131,8 @@ Native menu dispatch uses a one-way allowlisted page event named
 view.today                 view.changes
 view.all-work              view.shipped-log
 view.watched               view.filter
-view.commands              view.reload
+view.commands              view.refresh-now
+view.reload
 pane.toggle-sidebar        pane.toggle-inspector
 item.open                  item.acknowledge
 item.snooze                item.watch

@@ -547,7 +547,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .view-toolbar h1 { margin: 0; font-size: 22px; line-height: 28px; font-weight: 650; letter-spacing: -.015em; }
 .view-subtitle { margin: 1px 0 0; color: var(--muted); font-size: 11px; line-height: 15px; }
 .view-tools { display: flex; align-items: center; gap: 8px; }
-.refresh-state { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.refresh-button { white-space: nowrap; }
+.refresh-state {
+  max-width: min(36vw, 360px);
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .is-loading .refresh-state::before { content: "↻ "; }
 
 .filter-panel {

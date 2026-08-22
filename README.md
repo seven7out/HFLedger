@@ -193,6 +193,9 @@ The standard-library HTTP service provides:
   across agents and local automation, including runner, model when known,
   cadence, next run, product purpose, and explicit health, stale, and
   unconfigured states;
+- a global **Refresh now** control that reconciles pending events, scans every
+  configured read-only source in the selected workspace, and reloads the
+  validated owner view with one plain-language result;
 - a responsive board for queue, inbox, owner tasks, admitted asks, and outcomes;
 - a mobile decision deck with option selection, recommendation acceptance, snooze, need-more-info, completion, skip, and digest-bound undo where safe;
 - bounded deterministic Command-K search over projected metadata plus
@@ -207,6 +210,9 @@ collector configuration, merges, or deploys. Separately, Priorities writes only
 the append-only owner-control lane; it never rewrites the observed board or
 event ledger. Those other actions remain in the Decision Deck or the named
 authoritative source.
+**Refresh now** uses only the existing fail-closed reconciler and configured
+read-only collectors. It does not discover folders, enable integrations, pull
+code, run agent work, or follow links found in observed data.
 See [`docs/ui.md`](docs/ui.md) for the nine one-home states, evidence vocabulary,
 coverage model, keyboard/menu behavior, and first-run/degraded limitations.
 

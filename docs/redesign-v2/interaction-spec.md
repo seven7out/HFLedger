@@ -686,7 +686,7 @@ window when applicable.
 
 - Open Workspace…
 - Open Authoritative Source (`Return`, alternate `O` shown in the Item menu)
-- Refresh Sources (`Command-R`)
+- Refresh Now (`Command-R`)
 - Close Window (`Command-W`)
 
 **Edit**

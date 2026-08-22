@@ -67,6 +67,12 @@ The command takes a nonblocking `locks/collector.lock` so scheduled runs cannot 
 
 Exit status is `0` for healthy or explicitly idle, `1` when any enabled source is degraded, `2` for invalid configuration or an operating error, and `3` when another collection holds the lock. A configured source failure is durable in the JSON report and never reported as healthy.
 
+The owner-facing **Refresh now** button runs the same bounded collector after
+the existing fail-closed reconciler, then reloads the validated selected
+workspace. It does not add a second collection path: the collector lock still
+prevents overlap, disabled sources remain disabled, and degraded sources remain
+visible. The button is unavailable when the selected workspace is read-only.
+
 The redesigned Today projection keeps collector health distinct from work
 status. Source states are `disabled`, `never-observed`, `unavailable`,
 `degraded`, `stale`, `idle`, or `healthy`. Only a complete current `idle` or

@@ -61,6 +61,7 @@
     "view.watched",
     "view.filter",
     "view.commands",
+    "view.refresh-now",
     "view.reload",
     "pane.toggle-sidebar",
     "pane.toggle-inspector",

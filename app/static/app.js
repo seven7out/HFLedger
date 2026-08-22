@@ -101,6 +101,7 @@ const state = {
   priorityViewMode: "sections",
   parkedPriorityExpanded: false,
   completedPriorityExpanded: false,
+  refreshingSources: false,
   calendarMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   collapsedPrioritySections: new Set(
     PRIORITY_SECTION_SUGGESTIONS.map((section) => section.toLocaleLowerCase())),
@@ -678,6 +679,7 @@ function renderShell() {
     return option;
   }));
   $("#context-control").hidden = contexts.length < 2;
+  syncRefreshControl();
 
   const attention = Number(orientation?.attention?.total) || 0;
   const unseen = Number(orientation?.changes?.unseenTotal) || 0;
@@ -3009,9 +3011,56 @@ function showLoadError(error, preserve) {
   $("#error-message").textContent = safeText(error.message, 280) || "The validated board response was unavailable.";
 }
 
+function syncRefreshControl() {
+  const control = $("#refresh-button");
+  if (!control) return;
+  const readOnly = state.data?.ui?.readOnly === true;
+  control.disabled = state.loading || state.refreshingSources || readOnly || !state.context;
+  control.title = readOnly
+    ? "Refresh is unavailable while this workspace is read-only"
+    : "Scan every connected source and update this workspace";
+}
+
+async function refreshNow() {
+  if (state.loading || state.refreshingSources || !state.context) return;
+  if (state.data?.ui?.readOnly === true) {
+    announce("Refresh is unavailable while this workspace is read-only.");
+    return;
+  }
+  window.clearTimeout(refreshNow.messageTimer);
+  state.refreshingSources = true;
+  syncRefreshControl();
+  $("#app-shell").setAttribute("aria-busy", "true");
+  $("#refresh-state").textContent = "Scanning everything…";
+  let result;
+  try {
+    result = await request("/api/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ schemaVersion: 1, context: state.context }),
+    });
+  } catch (error) {
+    showLoadError(error, true);
+    return;
+  } finally {
+    state.refreshingSources = false;
+    $("#app-shell").setAttribute("aria-busy", "false");
+    syncRefreshControl();
+  }
+  const loaded = await loadBoard({ preserve: true });
+  if (!loaded) return;
+  const summary = safeText(result?.summary, 180) || "The Ledger is up to date.";
+  $("#refresh-state").textContent = summary;
+  announce(summary);
+  refreshNow.messageTimer = window.setTimeout(() => {
+    if (!state.loading && !state.refreshingSources) $("#refresh-state").textContent = "";
+  }, 6000);
+}
+
 async function loadBoard({ preserve = false } = {}) {
-  if (state.loading) return;
+  if (state.loading || state.refreshingSources) return false;
   state.loading = true;
+  syncRefreshControl();
   $("#app-shell").classList.add("is-loading");
   $("#app-shell").setAttribute("aria-busy", "true");
   $("#refresh-state").textContent = state.orientation ? "Refreshing…" : "";
@@ -3037,12 +3086,15 @@ async function loadBoard({ preserve = false } = {}) {
     $("#app-shell").classList.remove("has-error");
     $("#refresh-state").textContent = "";
     scheduleSuccessfulVisit();
+    return true;
   } catch (error) {
     showLoadError(error, preserve);
+    return false;
   } finally {
     state.loading = false;
     $("#app-shell").classList.remove("is-loading");
     $("#app-shell").setAttribute("aria-busy", "false");
+    syncRefreshControl();
   }
 }
 
@@ -3178,7 +3230,8 @@ const COMMANDS = [
   ["view.operations", "Operations", ""],
   ["view.all-work", "All Work", "⌘3"], ["view.shipped-log", "Shipped Log", "⌘4"],
   ["view.watched", "Watched", "⌘5"], ["view.filter", "Filter Current View", "⌘F"],
-  ["view.reload", "Refresh Sources", "⌘R"], ["pane.toggle-sidebar", "Show or Hide Sidebar", "⌃⌘S"],
+  ["view.refresh-now", "Refresh Now", "⌘R"], ["view.reload", "Reload View", ""],
+  ["pane.toggle-sidebar", "Show or Hide Sidebar", "⌃⌘S"],
   ["pane.toggle-inspector", "Show or Hide Inspector", "⌥⌘I"], ["item.open", "Open Authoritative Source", "Return / O"],
   ["item.acknowledge", "Acknowledge Locally", "E"], ["item.snooze", "Snooze Locally", "S"],
   ["item.watch", "Watch or Unwatch", "W"], ["item.copy-context", "Copy Context", "⇧⌘C"],
@@ -3270,6 +3323,7 @@ function dispatchCommand(id) {
     "view.watched": () => setView("watched"),
     "view.filter": () => toggleFilter(true),
     "view.commands": focusGlobalSearch,
+    "view.refresh-now": refreshNow,
     "view.reload": () => loadBoard({ preserve: true }),
     "pane.toggle-sidebar": toggleSidebar,
     "pane.toggle-inspector": toggleInspector,
@@ -3385,7 +3439,7 @@ function handleKeyboard(event) {
     }
     if (event.key.toLocaleLowerCase() === "f") { event.preventDefault(); toggleFilter(true); return; }
     if (event.key.toLocaleLowerCase() === "k") { event.preventDefault(); focusGlobalSearch(); return; }
-    if (event.key.toLocaleLowerCase() === "r") { event.preventDefault(); loadBoard({ preserve: true }); return; }
+    if (event.key.toLocaleLowerCase() === "r") { event.preventDefault(); refreshNow(); return; }
     if (event.shiftKey && event.key.toLocaleLowerCase() === "c") { event.preventDefault(); copyContext(); return; }
   }
   if (editing) return;
@@ -3463,6 +3517,7 @@ function boot() {
     if (!event.currentTarget.contains(event.relatedTarget)) closeGlobalSearch();
   });
   $("#settings-button").addEventListener("click", openSettings);
+  $("#refresh-button").addEventListener("click", refreshNow);
   $("#retry-button").addEventListener("click", () => loadBoard());
   $("#diagnostics-button").addEventListener("click", () => selectDescriptor({ kind: "coverage", id: "screen" }));
   $("#open-workspace-button").addEventListener("click", () => announce("Open Workspace is available from the File menu."));

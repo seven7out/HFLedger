@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added a global **Refresh now** control. It reconciles pending ledger events,
+  runs every configured read-only source for the selected workspace, reloads
+  the validated owner view, and reports healthy, degraded, idle, or already
+  running outcomes in plain language while preserving the last successful view.
 - Added an optional metadata-only Berd session observer. Today summarizes
   working, waiting, stopped, and problem states; Operations leads linked
   sessions with product task headlines and keeps runtime identity secondary.
