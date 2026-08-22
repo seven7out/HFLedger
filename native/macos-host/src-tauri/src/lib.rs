@@ -38,10 +38,18 @@ const LEGACY_CONFIG_VERSION: u32 = 1;
 const LOG_LIMIT_BYTES: u64 = 1_048_576;
 const CORE_FILES: [&str; 3] = ["config.json", "board.json", "ledger.jsonl"];
 const DATA_DIRECTORIES: [&str; 3] = ["locks", "backups", "reports"];
-const DEMO_AUXILIARY_FILES: [&str; 2] = ["owner-control.jsonl", "reports/operations-latest.json"];
+const DEMO_AUXILIARY_FILES: [&str; 3] = [
+    "owner-control.jsonl",
+    "reports/operations-latest.json",
+    "reports/session-observer-latest.json",
+];
 const WATCHED_WORKSPACE_FILES: [&str; 2] = ["board.json", "ledger.jsonl"];
 const WATCHED_OPTIONAL_WORKSPACE_FILES: [&str; 1] = ["owner-control.jsonl"];
-const WATCHED_REPORT_FILES: [&str; 2] = ["collector-latest.json", "operations-latest.json"];
+const WATCHED_REPORT_FILES: [&str; 3] = [
+    "collector-latest.json",
+    "operations-latest.json",
+    "session-observer-latest.json",
+];
 const WATCH_DEBOUNCE: Duration = Duration::from_millis(350);
 const NATIVE_CHROME_POLL: Duration = Duration::from_secs(3);
 const PRODUCTION_MONITOR_INTERVAL_SECONDS: u32 = 60;
@@ -145,6 +153,7 @@ enum NativeCommand {
     ViewWatched,
     ViewFilter,
     ViewCommands,
+    ViewRefreshNow,
     ViewReload,
     ToggleSidebar,
     ToggleInspector,
@@ -169,6 +178,7 @@ impl NativeCommand {
             Self::ViewWatched => "view.watched",
             Self::ViewFilter => "view.filter",
             Self::ViewCommands => "view.commands",
+            Self::ViewRefreshNow => "view.refresh-now",
             Self::ViewReload => "view.reload",
             Self::ToggleSidebar => "pane.toggle-sidebar",
             Self::ToggleInspector => "pane.toggle-inspector",
@@ -193,6 +203,7 @@ impl NativeCommand {
             Self::ViewWatched => native_event_script!("view.watched"),
             Self::ViewFilter => native_event_script!("view.filter"),
             Self::ViewCommands => native_event_script!("view.commands"),
+            Self::ViewRefreshNow => native_event_script!("view.refresh-now"),
             Self::ViewReload => native_event_script!("view.reload"),
             Self::ToggleSidebar => native_event_script!("pane.toggle-sidebar"),
             Self::ToggleInspector => native_event_script!("pane.toggle-inspector"),
@@ -728,6 +739,72 @@ fn refresh_demo_operations(destination: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn refresh_demo_sessions(destination: &Path) -> Result<(), String> {
+    let path = destination.join("reports/session-observer-latest.json");
+    reject_symlink(&path)?;
+    let bytes = fs::read(&path)
+        .map_err(|error| format!("could not read the fictional session report: {error}"))?;
+    let mut report: Value = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("fictional session report is invalid: {error}"))?;
+    let object = report
+        .as_object_mut()
+        .ok_or_else(|| "fictional session report must be an object".to_string())?;
+    let now = Utc::now();
+    object.insert(
+        "observedAt".into(),
+        Value::String(now.to_rfc3339_opts(SecondsFormat::Secs, false)),
+    );
+    let sessions = object
+        .get_mut("sessions")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| "fictional sessions are invalid".to_string())?;
+    for (index, session) in sessions.iter_mut().enumerate() {
+        let session = session
+            .as_object_mut()
+            .ok_or_else(|| "fictional session is invalid".to_string())?;
+        session.insert(
+            "startedAt".into(),
+            Value::String(
+                (now - ChronoDuration::minutes(40 + index as i64 * 20))
+                    .to_rfc3339_opts(SecondsFormat::Secs, false),
+            ),
+        );
+        session.insert(
+            "updatedAt".into(),
+            Value::String(
+                (now - ChronoDuration::minutes(index as i64 + 1))
+                    .to_rfc3339_opts(SecondsFormat::Secs, false),
+            ),
+        );
+    }
+    let temporary = path.with_extension("json.tmp");
+    if temporary.exists() {
+        reject_symlink(&temporary)?;
+        fs::remove_file(&temporary).map_err(|error| {
+            format!("could not clear the fictional session staging file: {error}")
+        })?;
+    }
+    let payload = serde_json::to_vec_pretty(&report)
+        .map_err(|error| format!("could not encode the fictional session report: {error}"))?;
+    let mut file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(&temporary)
+        .map_err(|error| format!("could not stage the fictional session report: {error}"))?;
+    file.write_all(&payload)
+        .and_then(|_| file.write_all(b"\n"))
+        .and_then(|_| file.sync_all())
+        .map_err(|error| format!("could not save the fictional session report: {error}"))?;
+    fs::rename(&temporary, &path)
+        .map_err(|error| format!("could not replace the fictional session report: {error}"))?;
+    private_permissions(&path, 0o600)?;
+    File::open(path.parent().unwrap_or(destination))
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| format!("could not finish the fictional session report: {error}"))?;
+    Ok(())
+}
+
 fn copy_demo(source: &Path, destination: &Path) -> Result<(), String> {
     reject_symlink(source)?;
     if destination.exists() {
@@ -780,6 +857,7 @@ fn copy_demo(source: &Path, destination: &Path) -> Result<(), String> {
             private_permissions(&to, 0o600)?;
         }
         refresh_demo_operations(destination)?;
+        refresh_demo_sessions(destination)?;
         return Ok(());
     }
     create_private_dir(destination)?;
@@ -811,6 +889,7 @@ fn copy_demo(source: &Path, destination: &Path) -> Result<(), String> {
         private_permissions(&to, 0o600)?;
     }
     refresh_demo_operations(destination)?;
+    refresh_demo_sessions(destination)?;
     Ok(())
 }
 
@@ -1429,12 +1508,15 @@ fn fetch_board(port: u16) -> Option<Value> {
 }
 
 fn verified_board(port: u16, expected_project: &str) -> bool {
-    fetch_board(port)
+    fetch_json(port, "/api/health")
         .and_then(|value| {
-            value
-                .get("project")
-                .and_then(Value::as_str)
-                .map(str::to_string)
+            let ready = value.get("status").and_then(Value::as_str) == Some("ready");
+            ready.then(|| {
+                value
+                    .get("project")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })?
         })
         .as_deref()
         == Some(expected_project)
@@ -1616,9 +1698,7 @@ fn start_workspace_watch(
             if saw_error {
                 set_observer_error(
                     &app_handle.state::<HostRuntime>(),
-                    Some(
-                        "Workspace observation paused; use Refresh Sources or restart the engine.",
-                    ),
+                    Some("Workspace observation paused; use Refresh now or restart the engine."),
                 );
             } else {
                 set_observer_error(&app_handle.state::<HostRuntime>(), None);
@@ -3136,8 +3216,8 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
     )?;
     let reload = custom_menu_item(
         app,
-        "view.reload",
-        "Refresh Sources",
+        "view.refresh-now",
+        "Refresh Now",
         false,
         Some("CmdOrCtrl+R"),
     )?;
@@ -3729,6 +3809,7 @@ fn native_command_for_menu_id(id: &str) -> Option<NativeCommand> {
         "view.watched" => Some(NativeCommand::ViewWatched),
         "view.filter" => Some(NativeCommand::ViewFilter),
         "view.commands" => Some(NativeCommand::ViewCommands),
+        "view.refresh-now" => Some(NativeCommand::ViewRefreshNow),
         "view.reload" => Some(NativeCommand::ViewReload),
         "pane.toggle-sidebar" => Some(NativeCommand::ToggleSidebar),
         "pane.toggle-inspector" => Some(NativeCommand::ToggleInspector),
@@ -4475,6 +4556,9 @@ mod tests {
             .contains(&first_root.join("reports/operations-latest.json")));
         assert!(first_plan
             .allowed_files
+            .contains(&first_root.join("reports/session-observer-latest.json")));
+        assert!(first_plan
+            .allowed_files
             .is_disjoint(&second_plan.allowed_files));
 
         let board_event = Event::new(EventKind::Any).add_path(first_root.join("board.json"));
@@ -4541,6 +4625,7 @@ mod tests {
             ("view.watched", NativeCommand::ViewWatched),
             ("view.filter", NativeCommand::ViewFilter),
             ("view.commands", NativeCommand::ViewCommands),
+            ("view.refresh-now", NativeCommand::ViewRefreshNow),
             ("view.reload", NativeCommand::ViewReload),
             ("pane.toggle-sidebar", NativeCommand::ToggleSidebar),
             ("pane.toggle-inspector", NativeCommand::ToggleInspector),
@@ -5059,6 +5144,11 @@ mod tests {
             b"{\"observedAt\":\"2000-01-01T00:00:00+00:00\",\"schedules\":[]}",
         )
         .expect("write included operations report");
+        fs::write(
+            source.join("reports/session-observer-latest.json"),
+            b"{\"observedAt\":\"2000-01-01T00:00:00+00:00\",\"sessions\":[]}",
+        )
+        .expect("write included session report");
 
         let board_before =
             fs::read(destination.join("board.json")).expect("read previous board before upgrade");
@@ -5066,6 +5156,9 @@ mod tests {
 
         assert!(destination.join("owner-control.jsonl").is_file());
         assert!(destination.join("reports/operations-latest.json").is_file());
+        assert!(destination
+            .join("reports/session-observer-latest.json")
+            .is_file());
         assert_eq!(
             fs::read(destination.join("board.json")).expect("read board after upgrade"),
             board_before

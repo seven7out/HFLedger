@@ -38,6 +38,23 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertNotIn("Mark done", markup)
         self.assertNotIn("Record outcome", markup)
 
+    def test_refresh_now_is_a_plain_owner_control_with_a_bounded_request(self):
+        markup = HTML.read_text(encoding="utf-8")
+        script = JS.read_text(encoding="utf-8")
+        self.assertIn('id="refresh-button"', markup)
+        self.assertIn(">Refresh now</button>", markup)
+        self.assertIn("Scan every connected source and update this workspace", markup)
+        refresh = script[
+            script.index("async function refreshNow"):
+            script.index("async function loadBoard")
+        ]
+        self.assertIn('request("/api/refresh"', refresh)
+        self.assertIn("schemaVersion: 1, context: state.context", refresh)
+        self.assertIn("Scanning everything…", refresh)
+        self.assertNotIn("readOnly", refresh)
+        for forbidden in ("repository", "path", "command", "prompt"):
+            self.assertNotIn(forbidden, refresh)
+
     def test_owner_control_and_operations_are_product_facing_real_surfaces(self):
         markup = HTML.read_text(encoding="utf-8")
         script = JS.read_text(encoding="utf-8")
@@ -59,9 +76,11 @@ class TodayUIContractTests(unittest.TestCase):
                 "dragstart", "moveOwnerTask", "set-priority", "set-task",
                 'id="owner-complete-dialog"', "Mark complete",
                 "complete-owner-task", "ownerCompletionAvailable",
-                "renderOperations", "Recurring jobs", "Runs through",
+                "renderOperations", "Agent sessions", "Recurring jobs", "Runs through",
                 "groupOperationsByRunner", "Healthy", "Problematic",
-                "Show command", "No run has been recorded yet."):
+                "Agents now", "Open Operations", "Unlinked agent session",
+                "Show command", "No run has been recorded yet.",
+                "No agent sessions are active", "The observer is connected."):
             self.assertIn(required, markup + script + style)
         self.assertIn("Execution status remains agent-reported", script)
         self.assertIn("Urgent is always the first five in Exact order", script)
@@ -93,7 +112,7 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertNotIn("No product outcome has been added yet.", script)
         self.assertNotIn("Open source unavailable", script)
 
-    def test_client_has_no_authoritative_write_or_browser_storage_path(self):
+    def test_client_has_only_bounded_owner_local_and_refresh_post_paths(self):
         script = JS.read_text(encoding="utf-8")
         for forbidden in (
             "innerHTML", "outerHTML", "insertAdjacentHTML", "localStorage", "sessionStorage",
@@ -102,7 +121,7 @@ class TodayUIContractTests(unittest.TestCase):
             self.assertNotIn(forbidden, script)
         post_paths = re.findall(r'request\("([^\"]+)"\s*,\s*\{\s*method:\s*"POST"', script)
         self.assertEqual(post_paths, [
-            "/api/local-state/command", "/api/owner-control/command"])
+            "/api/local-state/command", "/api/owner-control/command", "/api/refresh"])
         self.assertNotIn("/api/tasks/reorder", script)
         self.assertNotIn("/api/tasks/done", script)
         self.assertIn("textContent", script)

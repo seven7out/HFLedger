@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "source": "berd",
+  "state": "healthy",
+  "observedAt": "2026-08-02T12:00:00+00:00",
+  "staleAfterSeconds": 86400,
+  "sessions": [
+    {
+      "id": "fictional-session-1",
+      "state": "working",
+      "startedAt": "2026-08-02T11:20:00+00:00",
+      "updatedAt": "2026-08-02T11:59:00+00:00",
+      "taskId": "task:ovenlight:proofing-timer",
+      "runner": {
+        "harness": "Codex",
+        "model": "Example model",
+        "agent": "Menu planner"
+      }
+    },
+    {
+      "id": "fictional-session-2",
+      "state": "waiting",
+      "startedAt": "2026-08-02T10:45:00+00:00",
+      "updatedAt": "2026-08-02T11:57:00+00:00",
+      "taskId": "task:ovenlight:packing-display",
+      "runner": {
+        "harness": "Claude Code",
+        "model": "Example model",
+        "agent": "Display reviewer"
+      }
+    },
+    {
+      "id": "fictional-session-3",
+      "state": "stopped",
+      "startedAt": "2026-08-02T09:10:00+00:00",
+      "updatedAt": "2026-08-02T11:40:00+00:00",
+      "taskId": null,
+      "runner": {
+        "harness": "Goose",
+        "model": null,
+        "agent": null
+      }
+    }
+  ]
+}

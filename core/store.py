@@ -236,7 +236,9 @@ def _automation_config_errors(automation, errors):
                 errors.append("%s stage and production branches must differ" % prefix)
 
     sources = automation.get("sources")
-    if _closed_config_object(sources, "automation.sources", {"github", "localFiles"}, errors):
+    if _closed_config_object(
+            sources, "automation.sources", {"github", "localFiles", "berd"},
+            errors):
         github = sources.get("github")
         if _closed_config_object(
                 github, "automation.sources.github",
@@ -281,6 +283,49 @@ def _automation_config_errors(automation, errors):
                             for pattern in patterns)):
                         errors.append("%s.patterns must be safe relative glob strings" % prefix)
                     _bounded_integer(root.get("maxFiles"), "%s.maxFiles" % prefix, 1, 1000, errors)
+
+        berd = sources.get("berd")
+        if berd is not None and _closed_config_object(
+                berd, "automation.sources.berd", {
+                    "enabled", "executable", "sessionLimit",
+                    "staleAfterSeconds", "sessionTasks",
+                }, errors):
+            if not isinstance(berd.get("enabled"), bool):
+                errors.append("automation.sources.berd.enabled must be boolean")
+            executable = berd.get("executable")
+            if (not isinstance(executable, str) or not executable or
+                    len(executable) > 1024 or any(
+                        character in executable for character in "\r\n\x00") or
+                    (executable != "berdctl" and not (
+                        os.path.isabs(executable) and
+                        os.path.basename(executable) == "berdctl"))):
+                errors.append(
+                    "automation.sources.berd.executable must be berdctl or an absolute path ending in berdctl")
+            _bounded_integer(
+                berd.get("sessionLimit"),
+                "automation.sources.berd.sessionLimit", 1, 100, errors)
+            _bounded_integer(
+                berd.get("staleAfterSeconds"),
+                "automation.sources.berd.staleAfterSeconds", 60, 86_400,
+                errors)
+            session_tasks = berd.get("sessionTasks")
+            if (not isinstance(session_tasks, dict) or len(session_tasks) > 100):
+                errors.append(
+                    "automation.sources.berd.sessionTasks must be a bounded object")
+            else:
+                for session_id, task_id in session_tasks.items():
+                    if (not isinstance(session_id, str) or
+                            not re.fullmatch(
+                                r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}",
+                                session_id)):
+                        errors.append(
+                            "automation.sources.berd.sessionTasks has an invalid session id")
+                    if (not isinstance(task_id, str) or
+                            not re.fullmatch(
+                                r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}",
+                                task_id)):
+                        errors.append(
+                            "automation.sources.berd.sessionTasks values must be stable task ids")
 
     work = automation.get("workPolicy")
     if _closed_config_object(

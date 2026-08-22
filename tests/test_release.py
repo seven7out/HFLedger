@@ -41,7 +41,8 @@ class DemoQuickstartTests(unittest.TestCase):
             self.assertEqual(payload["cards"], 5)
             for name in (
                     "config.json", "board.json", "ledger.jsonl",
-                    "owner-control.jsonl", "reports/operations-latest.json"):
+                    "owner-control.jsonl", "reports/operations-latest.json",
+                    "reports/session-observer-latest.json"):
                 self.assertEqual(stat.S_IMODE(os.stat(os.path.join(home, name)).st_mode), 0o600)
             runtime = server.Runtime(home)
             cards = server.build_cards_view(runtime)["cards"]
@@ -80,7 +81,10 @@ class DemoQuickstartTests(unittest.TestCase):
             self.assertEqual(board_view["operations"]["counts"], {
                 "commands": 2, "schedules": 3, "failing": 1, "runners": 3,
                 "healthy": 2, "problematic": 1, "running": 0, "unknown": 0,
-                "paused": 0})
+                "paused": 0, "sessions": 3, "sessionsWorking": 1,
+                "sessionsWaiting": 1, "sessionsStopped": 1,
+                "sessionsProblematic": 0, "sessionsUnknown": 0,
+                "sessionsUnlinked": 1})
             card = cards[0]
             answer = server.answer_card(runtime, {
                 "id": card["id"], "srcHash": card["srcHash"], "action": "accept",

@@ -103,6 +103,21 @@ enabled scheduled work. Routine created, edited, and evidence timestamps do not
 become calendar events. Task dates are owner-editable from Priorities; decision
 and schedule dates remain read-only projections of their authoritative source.
 
+Operations also supports keeping agents unblocked. Its primary session rows use
+the linked product task headline and a plain working, waiting, stopped, problem,
+or unknown state. Harness, model, agent identity, timestamps, and source ids are
+secondary. Runtime state never proves that work is complete or that the owner
+is blocking it, and it never files a card automatically.
+
+**Refresh now** supports production health and keeping agents unblocked. It
+scans each already configured read-only source for the selected workspace,
+reconciles pending events when that workspace is writable, and reloads the
+validated owner view. Observer workspaces never mutate their authoritative
+board, ledger, or configuration. The result is one plain sentence: up to date,
+partially unreachable, no sources connected, or a scan already running. It
+never discovers new sources, changes configuration, runs agent work, or grants
+delivery authority.
+
 Opening queue work leads with a bounded product brief derived from the
 authoritative task: **What changes**, **Why it matters**, **What done looks
 like**, and **Risks or constraints**. Rank and workflow status never substitute

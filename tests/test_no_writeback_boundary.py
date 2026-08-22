@@ -15,6 +15,7 @@ import subprocess
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 from app import server
 from core import ledger, orientation, reconcile, schema, store
@@ -340,6 +341,8 @@ class NoWriteBackBoundaryTests(unittest.TestCase):
         self.assertEqual(
             set(server.LOCAL_POST_ROUTES), {"/api/local-state/command"})
         self.assertEqual(
+            set(server.OBSERVATION_POST_ROUTES), {"/api/refresh"})
+        self.assertEqual(
             set(server.OWNER_CONTROL_POST_ROUTES),
             {"/api/owner-control/command"})
 
@@ -350,6 +353,25 @@ class NoWriteBackBoundaryTests(unittest.TestCase):
                 self.assertEqual(response.status, 403, (path, payload))
                 self.assertEqual(payload, {"error": "workspace is read-only"})
                 self._assert_authority_unchanged(before, path)
+
+    def test_read_only_refresh_scans_without_authoritative_writeback(self):
+        context = self.httpd.runtime.context("main")
+        context.config["automation"] = {"sources": {}}
+        report = {
+            "status": "healthy",
+            "completedAt": "2026-07-20T12:00:00+00:00",
+            "sources": [{"source": "berd", "status": "healthy"}],
+        }
+        before = self._authority_snapshot()
+        with mock.patch.object(server, "collect_sources", return_value=report) as collect:
+            response, payload = self._request("POST", "/api/refresh", {
+                "schemaVersion": 1,
+                "context": "main",
+            })
+        self.assertEqual(response.status, 200)
+        self.assertEqual(payload["status"], "healthy")
+        collect.assert_called_once_with(str(self.home), config=context.config)
+        self._assert_authority_unchanged(before, "/api/refresh")
 
     def test_unknown_commands_and_argument_smuggling_fail_closed(self):
         item_id = self.item["id"]
@@ -584,7 +606,8 @@ process.stdout.write(JSON.stringify({
         post_targets = re.findall(
             r'request\("([^\"]+)"\s*,\s*\{\s*method:\s*"POST"', script)
         self.assertEqual(post_targets, [
-            "/api/local-state/command", "/api/owner-control/command"])
+            "/api/local-state/command", "/api/owner-control/command",
+            "/api/refresh"])
 
     def test_projected_link_resolver_rejects_local_and_credentialed_targets(self):
         def web(target):
@@ -654,7 +677,8 @@ process.stdout.write(JSON.stringify({
         self.assertEqual(native_menu_ids, {
             "view.today", "view.priorities", "view.calendar", "view.operations",
             "view.changes", "view.all-work", "view.shipped-log",
-            "view.watched", "view.filter", "view.commands", "view.reload",
+            "view.watched", "view.filter", "view.commands", "view.refresh-now",
+            "view.reload",
             "pane.toggle-sidebar", "pane.toggle-inspector", "file.open-source",
             "item.open", "item.acknowledge", "item.snooze", "item.watch",
             "edit.copy-context", "item.copy-context", "help.commands",

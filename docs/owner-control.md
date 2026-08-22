@@ -87,11 +87,12 @@ files directly or treat this report as proof of agent execution.
 
 ## Operations
 
-Operations answers three owner questions in plain language:
+Operations answers four owner questions in plain language:
 
-1. What commands are available and what does each one do?
-2. Which recurring jobs exist, who runs them, and when should they run?
-3. Did the latest run succeed, fail, or stop reporting?
+1. Which agents are working, waiting, stopped, or experiencing a problem?
+2. What commands are available and what does each one do?
+3. Which recurring jobs exist, who runs them, and when should they run?
+4. Did the latest run succeed, fail, or stop reporting?
 
 Job purpose and health are primary. The responsible agent or local runner,
 model when known, cadence, and next run make each recurring responsibility
@@ -100,14 +101,16 @@ are secondary reference material. A failed run must include a one-sentence
 product or process consequence; raw stack traces and secrets never appear in
 the primary summary.
 
-An optional, closed `reports/operations-latest.json` report supplies the command
-catalog and recurring-job observations. It is read-only evidence: seeing a command or
-job never grants authority to execute it, enable it, merge, deploy, or write
+Optional closed commands/schedules and metadata-only session reports supply the
+observations. They are read-only evidence: seeing a command, job, or session
+never grants authority to execute it, enable it, merge, deploy, or write
 to production. Missing or stale observations say so directly and never appear as
 a reassuring success.
 
-The current report has version `2`, an `observedAt` timestamp, a bounded
-freshness window, and closed `commands` and `schedules` lists. A command supplies
+The commands-and-schedules report has version `2`; the separate Berd session
+report has version `1` and an independent freshness window. The operations
+report supplies an `observedAt` timestamp, a bounded freshness window, and
+closed `commands` and `schedules` lists. A command supplies
 an id, product label, product description, and secondary invocation text. A
 schedule supplies a closed runner object (`agent`, `local_automation`, or
 `unknown`) with a display name and optional model, plus its cadence, enabled
@@ -146,8 +149,9 @@ events, or expand an indefinite recurrence series.
   collapsed history section.
 - **Calendar** collects task dates, owner-response deadlines, returning items,
   and next scheduled runs in a month grid and agenda without inventing dates.
-- **Operations** groups recurring jobs by agent or local runner and shows their
-  model when known, next expected run, latest outcome, and health.
+- **Operations** leads linked sessions with product task headlines and a plain
+  runtime state, then groups recurring jobs by agent or local runner with model,
+  next expected run, latest outcome, and health.
 - **All Work** and the inspector show the effective owner title and intent while
   preserving observed status and source provenance.
 

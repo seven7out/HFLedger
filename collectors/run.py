@@ -5,9 +5,9 @@ import json
 import os
 import uuid
 
-from core import store
+from core import session_observer, store
 
-from . import github, local_files
+from . import berd, github, local_files
 from .base import SCHEMA_VERSION, utc_now
 
 
@@ -35,7 +35,7 @@ def _markdown(report):
     return "\n".join(lines) + "\n"
 
 
-def collect(home, config=None, github_runner=None):
+def collect(home, config=None, github_runner=None, berd_runner=None):
     """Run configured read-only sources once; raise when another run holds the lock."""
     home = store.resolve_home(home)
     config = config or store.load_config(home)
@@ -53,6 +53,7 @@ def collect(home, config=None, github_runner=None):
             sources = [
                 github.collect(config) if github_runner is None else github.collect(config, runner=github_runner),
                 local_files.collect(config),
+                berd.collect(config) if berd_runner is None else berd.collect(config, runner=berd_runner),
             ]
             configured = [source for source in sources if source["status"] != "disabled"]
             if any(source["status"] == "degraded" for source in configured):
@@ -61,13 +62,14 @@ def collect(home, config=None, github_runner=None):
                 status = "idle"
             else:
                 status = "healthy"
+            completed = utc_now()
             report = {
                 "schemaVersion": SCHEMA_VERSION,
                 "dataClassification": "untrusted-observations",
                 "grantsAuthority": False,
                 "collectionId": uuid.uuid4().hex,
                 "startedAt": started,
-                "completedAt": utc_now(),
+                "completedAt": completed,
                 "status": status,
                 "sources": sources,
             }
@@ -75,6 +77,18 @@ def collect(home, config=None, github_runner=None):
             json_path = os.path.join(reports, "collector-latest.json")
             markdown_path = os.path.join(reports, "collector-latest.md")
             store._atomic_write(markdown_path, _markdown(report).encode("utf-8"), mode=0o600)
+            berd_result = next(
+                source for source in sources if source["source"] == "berd")
+            berd_settings = config["automation"]["sources"].get("berd") or {}
+            session_observer.write_report(home, {
+                "version": 1,
+                "source": "berd",
+                "state": berd_result["status"],
+                "observedAt": completed,
+                "staleAfterSeconds": berd_settings.get(
+                    "staleAfterSeconds", 300),
+                "sessions": berd_result["observations"],
+            })
             # JSON is the authoritative commit marker and is replaced last.
             store._atomic_write(
                 json_path,

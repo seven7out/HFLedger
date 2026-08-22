@@ -95,6 +95,13 @@ def default_config(project="HFLedger workspace"):
                     "issueLimit": 20,
                 },
                 "localFiles": {"enabled": False, "roots": []},
+                "berd": {
+                    "enabled": False,
+                    "executable": "berdctl",
+                    "sessionLimit": 20,
+                    "staleAfterSeconds": 300,
+                    "sessionTasks": {},
+                },
             },
             "workPolicy": {
                 "readyStatus": "Ready for Build",

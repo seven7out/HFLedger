@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Added a global **Refresh now** control. It reconciles pending ledger events,
+  runs every configured read-only source for the selected workspace, reloads
+  the validated owner view, and reports healthy, degraded, idle, or already
+  running outcomes in plain language while preserving the last successful view.
+  Observer workspaces scan without mutating their authoritative board, ledger,
+  or configuration.
+- Added an optional metadata-only Berd session observer. Today summarizes
+  working, waiting, stopped, and problem states; Operations leads linked
+  sessions with product task headlines and keeps runtime identity secondary.
+  The adapter requests zero messages, drops titles and paths, uses exact task-id
+  links only, and keeps session freshness independent from recurring-job
+  freshness. The native host now uses a bounded readiness response so a large
+  valid workspace cannot be mistaken for a failed engine during cold start.
 - Expanded Operations into a cross-agent recurring-jobs registry. Jobs are
   grouped by agent or local runner and show the model when known, product
   purpose, cadence, next run, and a derived owner-facing health state. Existing

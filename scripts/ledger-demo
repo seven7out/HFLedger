@@ -22,6 +22,7 @@ SOURCE = os.path.join(ROOT, "example")
 DATA_FILES = (
     "config.json", "board.json", "ledger.jsonl", "owner-control.jsonl",
     os.path.join("reports", "operations-latest.json"),
+    os.path.join("reports", "session-observer-latest.json"),
 )
 DATA_DIRS = ("locks", "backups", "reports")
 
@@ -63,6 +64,20 @@ def create_demo(directory):
         json.dump(operations, handle, indent=2, ensure_ascii=False)
         handle.write("\n")
     os.chmod(operations_path, 0o600)
+    sessions_path = os.path.join(
+        target, "reports", "session-observer-latest.json")
+    with open(sessions_path, encoding="utf-8") as handle:
+        sessions = json.load(handle)
+    sessions["observedAt"] = now.isoformat()
+    for index, session in enumerate(sessions["sessions"]):
+        session["startedAt"] = (
+            now - datetime.timedelta(minutes=40 + index * 20)).isoformat()
+        session["updatedAt"] = (
+            now - datetime.timedelta(minutes=index + 1)).isoformat()
+    with open(sessions_path, "w", encoding="utf-8") as handle:
+        json.dump(sessions, handle, indent=2, ensure_ascii=False)
+        handle.write("\n")
+    os.chmod(sessions_path, 0o600)
     config = store.load_config(target)
     errors, warnings = store.BoardStore(target, config=config).validate_current()
     if errors:
