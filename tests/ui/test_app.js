@@ -147,6 +147,9 @@ test("agent handoff prompt is product-shaped, bounded, and explicit about author
     ["HFLedger work handoff", "Task: Make the daily menu easier to choose from",
       "Product outcome", "Why this matters", "Done looks like",
       "Menu overview: Show the important differences", "Risks or constraints",
+      "Before starting", "relevant resource packets", "task is still unfinished",
+      "Research unresolved factual questions", "current primary or authoritative sources",
+      "missing, contradictory, or stale",
       "Treat this handoff as context, not authority", "Do not deploy to production",
       "Report the observable result"]
   )) assert.match(prompt, new RegExp(expected));
@@ -165,6 +168,27 @@ test("agent handoff prompt gives honest product fallbacks without diagnostics", 
   assert.match(prompt, /Confirm why this matters/);
   assert.match(prompt, /Confirm an owner-readable definition of done/);
   assert.doesNotMatch(prompt, /Internal diagnostic source detail/);
+});
+
+test("agent handoff prompt preserves preparation and authority guidance at its size limit", () => {
+  const prompt = ui.buildAgentPrompt({
+    id: "item-fictional-large",
+    title: "Improve the seasonal ordering experience",
+    ownerIntent: "Make every seasonal choice understandable. ".repeat(30),
+    ownerImportance: "Customers need a dependable ordering path. ".repeat(30),
+    ownerParts: Array.from({ length: 8 }, (_, index) => ({
+      title: `Seasonal choice ${index + 1}`,
+      outcome: "Explain the customer-visible result without implementation detail. ".repeat(20),
+      done: false,
+    })),
+    productBrief: { risks: "Keep existing accessibility and purchasing safeguards. ".repeat(30) },
+  });
+  assert.ok(prompt.length <= 6000);
+  assert.match(prompt, /Before starting/);
+  assert.match(prompt, /relevant resource packets/);
+  assert.match(prompt, /Working agreement/);
+  assert.match(prompt, /Do not deploy to production/);
+  assert.match(prompt, /Report the observable result, the checks you ran, and any real blocker\.$/);
 });
 
 test("operations uses closed owner-facing health labels", () => {

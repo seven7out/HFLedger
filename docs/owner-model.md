@@ -104,10 +104,13 @@ item. An owner-chosen section always overrides the automatic suggestion.
 Selecting a priority always opens the same owner-readable product brief in
 Details. The **Start work** handoff supports the keep-agents-unblocked zone: it
 translates that brief into a bounded prompt that names the product outcome,
-importance, definition of done, risks, and authority boundary. Browser use can
-copy it. The Mac app can also open a blank named local agent CLI after copying
-it, but the owner still reviews, pastes, and submits the text. HFLedger never
-treats observed task content as executable instructions or deployment
+importance, definition of done, risks, and authority boundary. Before work, the
+prompt requires the agent to read relevant project instructions and resource
+packets, verify that the task remains unfinished, inspect current state, and
+research unresolved facts from authoritative sources when needed. Browser use
+can copy it. The Mac app can also open a blank named local agent CLI after
+copying it, but the owner still reviews, pastes, and submits the text. HFLedger
+never treats observed task content as executable instructions or deployment
 authority.
 
 Calendar supports priority-setting and keeping agents unblocked. It combines

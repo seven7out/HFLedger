@@ -152,11 +152,17 @@ labeled as needing translation.
 
 **Start work** builds a bounded, product-shaped handoff from the same owner
 brief. It includes the outcome, reason, definition of done, risks, need-by date,
-and a reminder that context is not authority. **Copy agent prompt** works in the
-browser-only interface. In the native Mac app, **Start in Codex** and **Start in
-Claude Code** first copy that prompt and then open a blank local CLI session.
-The owner reviews, pastes, and submits the prompt; observed text never enters a
-native process argument and is never executed automatically.
+and a reminder that context is not authority. Its **Before starting** section
+tells the agent to read relevant project instructions, resource packets,
+specifications, research, evidence, and prior work; confirm the task is still
+unfinished; inspect the current product; and research unresolved factual
+questions from primary or authoritative sources when needed. Missing, stale,
+or contradictory context is reported instead of guessed through. **Copy agent
+prompt** works in the browser-only interface. In the native Mac app, **Start in
+Codex** and **Start in Claude Code** first copy that prompt and then open a blank
+local CLI session. The owner reviews, pastes, and submits the prompt; observed
+text never enters a native process argument and is never executed
+automatically.
 
 **Product outcomes** appears in the inspector. An unsplit task has **Mark
 product outcome complete**. A mixed task may contain two through twelve parts,

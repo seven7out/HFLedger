@@ -6,7 +6,10 @@
   selected and keyboard states. Details now includes a bounded product-shaped
   agent handoff: copy the prompt in any browser, or use the Mac app to copy it
   and open a blank local Codex or Claude Code CLI session. Observed task text is
-  never submitted automatically or passed to native process arguments.
+  never submitted automatically or passed to native process arguments. Every
+  handoff tells the agent to read relevant resource packets and prior evidence,
+  confirm the task is still unfinished, and research unresolved facts from
+  authoritative sources before changing anything.
 - Made every Today owner-card count and product-flow stage an accessible
   navigation control that opens the exact represented items, including an
   explicit empty state for zero-count summaries.

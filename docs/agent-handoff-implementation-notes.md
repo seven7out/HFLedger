@@ -9,9 +9,13 @@ Code.
 
 The handoff uses only the projected owner brief: product outcome, importance,
 definition of done, incomplete product parts, risks, need-by date, and observed
-status. Evidence diagnostics, source excerpts, local notes, paths, and command
-text are excluded. The prompt repeats that it is context rather than authority
-and that protected or production action still requires explicit permission.
+status. It explicitly tells the agent to read available project instructions,
+resource packets, specifications, research, evidence, and prior work; verify
+that the task remains unfinished; inspect current state; and research unresolved
+facts from authoritative sources when needed. Evidence diagnostics, source
+excerpts, local notes, paths, and command text are excluded. The prompt repeats
+that it is context rather than authority and that protected or production
+action still requires explicit permission.
 
 ## Native boundary
 
