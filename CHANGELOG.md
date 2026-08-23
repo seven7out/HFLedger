@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Made the entire priority row open its matching Details dossier, with visible
+  selected and keyboard states. Details now includes a bounded product-shaped
+  agent handoff: copy the prompt in any browser, or use the Mac app to copy it
+  and open a blank local Codex or Claude Code CLI session. Observed task text is
+  never submitted automatically or passed to native process arguments.
 - Made every Today owner-card count and product-flow stage an accessible
   navigation control that opens the exact represented items, including an
   explicit empty state for zero-count summaries.

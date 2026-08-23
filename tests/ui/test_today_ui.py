@@ -79,6 +79,8 @@ class TodayUIContractTests(unittest.TestCase):
                 "renderOperations", "Agent sessions", "Recurring jobs", "Runs through",
                 "groupOperationsByRunner", "Healthy", "Problematic",
                 "Agents now", "Open Operations", "Unlinked agent session",
+                "Start work", "Copy agent prompt", "Start in Codex",
+                "Start in Claude Code", "buildAgentPrompt",
                 "Show command", "No run has been recorded yet.",
                 "No agent sessions are active", "The observer is connected."):
             self.assertIn(required, markup + script + style)
@@ -105,12 +107,30 @@ class TodayUIContractTests(unittest.TestCase):
         for required in (
                 '"What changes"', '"Why it matters"', '"What done looks like"',
                 '"Risks or constraints"', '"Current state"',
+                "const displayTitle", '"dossier-source-title"',
                 'node("details", "dossier-diagnostics")',
                 '"Agent evidence & diagnostics"', '"Observation gaps"'):
             self.assertIn(required, script)
         self.assertIn(".dossier-diagnostics", style)
         self.assertNotIn("No product outcome has been added yet.", script)
         self.assertNotIn("Open source unavailable", script)
+
+    def test_priority_rows_select_their_exact_item_and_show_selected_state(self):
+        script = JS.read_text(encoding="utf-8")
+        style = CSS.read_text(encoding="utf-8")
+        priority_row = script[
+            script.index("function renderPriorityRow"):
+            script.index("function priorityModeControl")
+        ]
+        self.assertIn('row.setAttribute("role", "group")', priority_row)
+        self.assertIn('row.setAttribute("aria-current", "false")', priority_row)
+        self.assertIn(
+            'selectionAttribute: "aria-current"',
+            priority_row,
+        )
+        self.assertIn('event.key !== "Enter" && event.key !== " "', priority_row)
+        self.assertIn("event.stopPropagation()", priority_row)
+        self.assertIn('.owner-priority-row.is-selected', style)
 
     def test_client_has_only_bounded_owner_local_and_refresh_post_paths(self):
         script = JS.read_text(encoding="utf-8")
@@ -146,9 +166,30 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertIn("prefers-reduced-motion: reduce", style)
         for forbidden in (
             "FileReader", "showOpenFilePicker", "webkitRequestFileSystem",
-            "readTextFile", "invoke(", "shell.open", "quick-look/api",
+            "readTextFile", "shell.open", "quick-look/api",
         ):
             self.assertNotIn(forbidden, script)
+
+    def test_agent_handoff_has_one_bounded_native_command_and_no_prompt_payload(self):
+        script = JS.read_text(encoding="utf-8")
+        invocations = re.findall(
+            r'__TAURI__\.core\.invoke\("([^"]+)"\s*,\s*\{\s*([^}]*)\}', script)
+        self.assertEqual(invocations, [("open_agent_session", "agent ")])
+        launch = script[
+            script.index("async function openAgentSession"):
+            script.index("function openSafeTarget")
+        ]
+        self.assertIn("if (!await copyAgentPrompt(item)) return", launch)
+        self.assertIn('invoke("open_agent_session", { agent })', launch)
+        for forbidden in ("content }", "prompt }", "item }", "sourceItemRef"):
+            self.assertNotIn(forbidden, launch)
+
+        capability = (ROOT / "native" / "macos-host" / "src-tauri" /
+                      "capabilities" / "board-agent-handoff.json").read_text(encoding="utf-8")
+        self.assertIn('"local": false', capability)
+        self.assertIn('"windows": ["board"]', capability)
+        self.assertIn('"allow-open-agent-session"', capability)
+        self.assertNotIn("core:default", capability)
 
     def test_decision_deck_keeps_the_bounded_surface_without_undo_controls(self):
         current = CSS.read_text(encoding="utf-8")

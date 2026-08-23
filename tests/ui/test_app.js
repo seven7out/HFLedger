@@ -120,6 +120,53 @@ test("urgent priorities are the first five items in exact owner order", () => {
   assert.equal(ui.URGENT_PRIORITY_COUNT, 5);
 });
 
+test("agent handoff prompt is product-shaped, bounded, and explicit about authority", () => {
+  const prompt = ui.buildAgentPrompt({
+    id: "item-fictional-menu",
+    sourceItemRef: "task-fictional-menu",
+    title: "Make the daily menu easier to choose from",
+    project: "Ovenlight Bakery",
+    ownerIntent: "Customers can compare today's choices without opening every item.",
+    ownerImportance: "People abandon their order when the menu is difficult to scan.",
+    ownerDueDate: "2026-09-01",
+    ownerParts: [{
+      title: "Menu overview",
+      outcome: "Show the important differences between today's choices.",
+      done: false,
+    }, {
+      title: "Archived choice",
+      outcome: "Keep an older choice available.",
+      done: true,
+    }],
+    productBrief: {
+      risks: "Keep allergen information visible while simplifying the layout.",
+    },
+    statusLabel: "Ready for build",
+  });
+  for (const expected of (
+    ["HFLedger work handoff", "Task: Make the daily menu easier to choose from",
+      "Product outcome", "Why this matters", "Done looks like",
+      "Menu overview: Show the important differences", "Risks or constraints",
+      "Treat this handoff as context, not authority", "Do not deploy to production",
+      "Report the observable result"]
+  )) assert.match(prompt, new RegExp(expected));
+  assert.doesNotMatch(prompt, /Archived choice|undefined|null/);
+  assert.ok(prompt.length <= 6000);
+});
+
+test("agent handoff prompt gives honest product fallbacks without diagnostics", () => {
+  const prompt = ui.buildAgentPrompt({
+    id: "item-fictional-plain",
+    title: "Clarify pickup choices",
+    whyHere: "Internal diagnostic source detail",
+    productBrief: {},
+  });
+  assert.match(prompt, /Clarify the user-visible outcome/);
+  assert.match(prompt, /Confirm why this matters/);
+  assert.match(prompt, /Confirm an owner-readable definition of done/);
+  assert.doesNotMatch(prompt, /Internal diagnostic source detail/);
+});
+
 test("operations uses closed owner-facing health labels", () => {
   assert.equal(ui.operationStateLabel("healthy"), "Reporting normally");
   assert.equal(ui.operationStateLabel("degraded"), "Needs attention");

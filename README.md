@@ -185,8 +185,11 @@ The standard-library HTTP service provides:
 - Changes, All Work, Shipped Log, Watched, Projects, and an evidence inspector
   with explicit provenance and separate item-change/source-observation clocks;
 - Priorities with a calm sectioned overview, a separate exact-order drag mode,
-  owner headlines, outcomes, need-by dates, and active/parked planning state that agents can
-  read through the CLI;
+  whole-row Details selection, owner headlines, outcomes, need-by dates, and
+  active/parked planning state that agents can read through the CLI;
+- a product-shaped **Start work** handoff that copies an agent-ready prompt in
+  every client and, in the Mac app, can open a blank local Codex or Claude Code
+  CLI session without automatically submitting observed text;
 - Calendar with a familiar month grid and agenda for task need-by dates,
   decision deadlines, deferred-item returns, and next scheduled runs;
 - Operations with product-led live session state plus recurring jobs grouped

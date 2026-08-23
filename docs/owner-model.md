@@ -101,6 +101,15 @@ priority field. HFLedger supplies deterministic automatic starting sections for
 the remaining work, labels them as suggestions, and lets the owner move any
 item. An owner-chosen section always overrides the automatic suggestion.
 
+Selecting a priority always opens the same owner-readable product brief in
+Details. The **Start work** handoff supports the keep-agents-unblocked zone: it
+translates that brief into a bounded prompt that names the product outcome,
+importance, definition of done, risks, and authority boundary. Browser use can
+copy it. The Mac app can also open a blank named local agent CLI after copying
+it, but the owner still reviews, pastes, and submits the text. HFLedger never
+treats observed task content as executable instructions or deployment
+authority.
+
 Calendar supports priority-setting and keeping agents unblocked. It combines
 only dates that imply future action: owner need-by dates, source deadlines,
 decision deadlines, deferred items returning for attention, and the next run of

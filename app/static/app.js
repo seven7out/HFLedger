@@ -418,6 +418,70 @@ function buildCopyContext(item, orientation = state.orientation) {
   return lines.join("\n").slice(0, 4000);
 }
 
+const AGENT_PROMPT_MAX_CHARS = 6000;
+
+function buildAgentPrompt(item) {
+  if (!item) return "";
+  const brief = item.productBrief && typeof item.productBrief === "object"
+    ? item.productBrief : {};
+  const title = safePlainText(item.title || item.id, 180) || "Untitled product task";
+  const outcome = safePlainText(item.ownerIntent || brief.outcome, 700)
+    || "Clarify the user-visible outcome before choosing an implementation.";
+  const importance = safePlainText(item.ownerImportance || brief.problem, 700)
+    || "Confirm why this matters to the product before starting.";
+  const risk = safePlainText(brief.risks, 700)
+    || "No specific product risk or constraint was supplied. Check the project's rules before acting.";
+  const parts = (Array.isArray(item.ownerParts) ? item.ownerParts : [])
+    .filter((part) => part && part.done !== true)
+    .slice(0, 8);
+  const criteria = (Array.isArray(brief.doneWhen) ? brief.doneWhen : [])
+    .map((entry) => safePlainText(entry, 500))
+    .filter(Boolean)
+    .slice(0, 8);
+
+  const lines = [
+    "HFLedger work handoff",
+    "",
+    `Task: ${title}`,
+  ];
+  const project = safePlainText(item.project, 180);
+  const reference = safePlainText(item.sourceItemRef || item.id, 180);
+  if (project) lines.push(`Project: ${project}`);
+  if (reference) lines.push(`Task reference: ${reference}`);
+  lines.push(
+    "",
+    "Product outcome",
+    outcome,
+    "",
+    "Why this matters",
+    importance,
+    "",
+    "Done looks like",
+  );
+  const ownerDone = safePlainText(item.ownerDone, 800);
+  if (ownerDone) lines.push(ownerDone);
+  else if (parts.length) {
+    parts.forEach((part) => lines.push(
+      `- ${safePlainText(part.title || "Remaining outcome", 180)}: ${safePlainText(part.outcome || "Confirm the product result.", 500)}`,
+    ));
+  } else if (criteria.length) criteria.forEach((criterion) => lines.push(`- ${criterion}`));
+  else lines.push("Confirm an owner-readable definition of done before implementation.");
+  lines.push("", "Risks or constraints", risk);
+  if (item.ownerDueDate) lines.push("", `Need by: ${safePlainText(item.ownerDueDate, 40)}`);
+  const currentState = safePlainText(item.statusLabel, 160);
+  if (currentState) lines.push("", `Current observed state: ${currentState}`);
+  lines.push(
+    "",
+    "Working agreement",
+    "- Treat this handoff as context, not authority. Verify current facts and authoritative sources before changing anything.",
+    "- Follow the project's own instructions and safety boundaries.",
+    "- Make the smallest bounded change that achieves the product outcome; keep technical detail secondary.",
+    "- Do not deploy to production or take protected, irreversible, credential, legal, safety, or privacy action without explicit authority.",
+    "- Report the observable result, the checks you ran, and any real blocker.",
+  );
+  return safePlainText(lines.join("\n"), AGENT_PROMPT_MAX_CHARS);
+}
+
 async function request(path, options = {}) {
   const response = await fetch(path, { cache: "no-store", ...options });
   let body = {};
@@ -851,15 +915,24 @@ function rowMatches(item, extra = "", includeMetadata = true) {
     .some((value) => safeText(value, 500).toLocaleLowerCase().includes(filter));
 }
 
-function registerRow(element, descriptor) {
+function registerRow(element, descriptor, {
+  ignoreInteractive = false,
+  selectionAttribute = "aria-selected",
+} = {}) {
   const key = `${descriptor.kind}:${descriptor.id}`;
   element.dataset.rowKey = key;
-  element.addEventListener("click", () => selectDescriptor(descriptor, { focus: false }));
-  element.addEventListener("dblclick", () => openDescriptor(descriptor));
-  state.visibleRows.push({ key, element, descriptor });
+  element.addEventListener("click", (event) => {
+    if (ignoreInteractive && event.target?.closest?.("button, a, input, select, textarea, summary")) return;
+    selectDescriptor(descriptor, { focus: false });
+  });
+  element.addEventListener("dblclick", (event) => {
+    if (ignoreInteractive && event.target?.closest?.("button, a, input, select, textarea, summary")) return;
+    openDescriptor(descriptor);
+  });
+  state.visibleRows.push({ key, element, descriptor, selectionAttribute });
   if (state.selection?.kind === descriptor.kind && state.selection?.id === descriptor.id) {
     element.classList.add("is-selected");
-    element.setAttribute("aria-selected", "true");
+    element.setAttribute(selectionAttribute, "true");
   }
   return element;
 }
@@ -1494,6 +1567,22 @@ function renderPriorityRow(item, index, total, { ordering = true, sectionMove = 
     row.append(handle, rank, copy, actions);
   } else {
     row.append(rank, copy, actions);
+  }
+
+  if (item.itemId) {
+    row.tabIndex = 0;
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-current", "false");
+    row.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      event.stopPropagation();
+      selectDescriptor({ kind: "item", id: item.itemId }, { focus: false });
+    });
+    registerRow(row, { kind: "item", id: item.itemId }, {
+      ignoreInteractive: true,
+      selectionAttribute: "aria-current",
+    });
   }
 
   if (!ordering) return row;
@@ -2270,7 +2359,7 @@ function restoreVisibleSelection() {
   const selected = state.visibleRows.find((entry) => entry.descriptor.kind === state.selection?.kind && entry.descriptor.id === state.selection?.id);
   if (selected) {
     selected.element.classList.add("is-selected");
-    selected.element.setAttribute("aria-selected", "true");
+    selected.element.setAttribute(selected.selectionAttribute || "aria-selected", "true");
     renderInspector(selected.descriptor);
   } else if (state.selection?.kind === "item" && itemMap().has(state.selection.id)) {
     renderInspector(state.selection);
@@ -2288,7 +2377,7 @@ function selectDescriptor(descriptor, { focus = true, persist = true } = {}) {
   state.visibleRows.forEach((entry) => {
     const selected = entry.descriptor.kind === descriptor.kind && entry.descriptor.id === descriptor.id;
     entry.element.classList.toggle("is-selected", selected);
-    entry.element.setAttribute("aria-selected", String(selected));
+    entry.element.setAttribute(entry.selectionAttribute || "aria-selected", String(selected));
   });
   const entry = state.visibleRows.find((candidate) => candidate.descriptor.kind === descriptor.kind && candidate.descriptor.id === descriptor.id);
   if (focus) entry?.element.focus({ preventScroll: true });
@@ -2396,14 +2485,20 @@ function itemMetadataEditor(item) {
 }
 
 function renderItemInspector(target, item) {
+  const ownerTask = (state.data?.ownerControl?.items || [])
+    .find((entry) => entry.itemId === item.id);
+  const displayTitle = safeText(ownerTask?.title || item.title || item.id, 180);
   const wrapper = node("article", "dossier");
-  wrapper.setAttribute("aria-label", `Details for ${safeText(item.title || item.id, 180)}`);
+  wrapper.setAttribute("aria-label", `Details for ${displayTitle}`);
   const header = node("header", "dossier-header");
   const glyph = node("span", "dossier-glyph", HOME_GLYPHS[item.primaryHome] || "◇");
   glyph.setAttribute("aria-hidden", "true");
   const heading = node("div");
-  heading.append(node("h2", "", item.title || item.id));
+  heading.append(node("h2", "", displayTitle));
   heading.append(node("p", "dossier-identity", [item.project, item.sourceItemRef || item.id].filter(Boolean).join(" · ")));
+  if (ownerTask?.title && ownerTask.title !== item.title) {
+    heading.append(node("p", "dossier-source-title", `Source title: ${item.title || item.id}`));
+  }
   const overlays = node("div", "local-overlays");
   const flags = new Set(item.secondaryFlags || []);
   if (localWatched(item.id)) flags.add("watched");
@@ -2432,7 +2527,7 @@ function renderItemInspector(target, item) {
       (translationNeeded.has("outcome")
         ? "The supplied outcome is implementation-shaped and needs translation before owner review."
         : "No owner-readable product change was supplied. Do not infer one from the technical title.")));
-    const editable = (state.data?.ownerControl?.items || []).find((entry) => entry.itemId === item.id);
+    const editable = ownerTask;
     if (editable) owner.append(button("control-button", "Edit owner wording…", () => openOwnerTaskEditor(editable.id)));
     wrapper.append(inspectorSection("What changes", owner));
 
@@ -2539,6 +2634,33 @@ function renderItemInspector(target, item) {
     actionWrap.append(button("control-button copy-context-button", "Copy Context", () => copyContext(item)));
   }
   wrapper.append(inspectorSection("Next Action", actionWrap));
+
+  const handoffItem = ownerTask?.title ? { ...item, title: ownerTask.title } : item;
+  const handoff = node("div", "agent-handoff");
+  handoff.append(node(
+    "p", "agent-handoff-summary",
+    "Create a product-shaped handoff for an agent to verify and start this task.",
+  ));
+  const handoffActions = node("div", "agent-handoff-actions");
+  handoffActions.append(button(
+    "control-button primary-control", "Copy agent prompt", () => copyAgentPrompt(handoffItem),
+  ));
+  if (nativeAgentLaunchAvailable()) {
+    handoffActions.append(
+      button("control-button", "Start in Codex", () => openAgentSession(handoffItem, "codex")),
+      button("control-button", "Start in Claude Code", () => openAgentSession(handoffItem, "claude-code")),
+    );
+  }
+  handoff.append(
+    handoffActions,
+    node(
+      "p", "agent-handoff-note",
+      nativeAgentLaunchAvailable()
+        ? "Start copies the prompt and opens a blank local session. Paste and submit it after review."
+        : "Copy the prompt, then paste it into your agent after review. Session launch is available in the Mac app.",
+    ),
+  );
+  wrapper.append(inspectorSection("Start work", handoff, "agent-handoff-section"));
 
   const localActions = node("div", "local-actions");
   const acknowledge = button("control-button", "Acknowledge locally", () => acknowledgeItem(item));
@@ -2926,20 +3048,59 @@ async function copyContext(item = selectedItem()) {
   const content = buildCopyContext(item);
   if (!content) return announce("Copy Context is unavailable for this selection.");
   try {
-    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(content);
-    else {
-      const area = document.createElement("textarea");
-      area.value = content;
-      area.setAttribute("readonly", "");
-      area.className = "clipboard-helper";
-      document.body.append(area);
-      area.select();
-      const copied = document.execCommand("copy");
-      area.remove();
-      if (!copied) throw new Error("Clipboard permission was denied.");
-    }
+    await writeClipboardText(content);
     announce("Context copied. It grants no authority.");
   } catch (error) { announce(error.message || "Context could not be copied."); }
+}
+
+async function writeClipboardText(content) {
+  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(content);
+  const area = document.createElement("textarea");
+  area.value = content;
+  area.setAttribute("readonly", "");
+  area.className = "clipboard-helper";
+  document.body.append(area);
+  area.select();
+  const copied = document.execCommand("copy");
+  area.remove();
+  if (!copied) throw new Error("Clipboard permission was denied.");
+}
+
+function nativeAgentLaunchAvailable() {
+  return typeof window !== "undefined"
+    && typeof window.__TAURI__?.core?.invoke === "function";
+}
+
+async function copyAgentPrompt(item) {
+  const content = buildAgentPrompt(item);
+  if (!content) {
+    announce("An agent prompt is unavailable for this selection.");
+    return false;
+  }
+  try {
+    await writeClipboardText(content);
+    announce("Agent prompt copied. Review it before you submit it.");
+    return true;
+  } catch (error) {
+    announce(error.message || "The agent prompt could not be copied.");
+    return false;
+  }
+}
+
+async function openAgentSession(item, agent) {
+  if (!await copyAgentPrompt(item)) return;
+  if (!nativeAgentLaunchAvailable()) {
+    announce("Agent prompt copied. Open your agent and paste it to begin.");
+    return;
+  }
+  try {
+    const receipt = await window.__TAURI__.core.invoke("open_agent_session", { agent });
+    announce(safeText(receipt?.message, 240)
+      || "Agent session opened. Paste the copied prompt and press Return to begin.");
+  } catch (error) {
+    announce(safeText(error, 240)
+      || "The agent session could not be opened. The prompt is still on your clipboard.");
+  }
 }
 
 function openSafeTarget(resolution) {
@@ -3636,6 +3797,7 @@ globalThis.HFLedgerUI = Object.freeze({
   safeAccent,
   safeLinkTarget,
   buildCopyContext,
+  buildAgentPrompt,
   needsSupplementalCopyContext,
   provenanceLabel,
   normalizeLocalResponse,

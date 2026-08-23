@@ -242,6 +242,29 @@ enum WorkspaceKind {
     Demo,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+enum AgentTarget {
+    Codex,
+    ClaudeCode,
+}
+
+impl AgentTarget {
+    fn binary_name(self) -> &'static str {
+        match self {
+            Self::Codex => "codex",
+            Self::ClaudeCode => "claude",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Codex => "Codex",
+            Self::ClaudeCode => "Claude Code",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 enum TextSize {
@@ -607,6 +630,13 @@ struct AppSnapshot {
 struct BackupResult {
     path: String,
     workspace_label: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentLaunchReceipt {
+    agent: AgentTarget,
+    message: String,
 }
 
 #[derive(Serialize)]
@@ -1961,6 +1991,14 @@ fn is_board_settings_navigation(url: &tauri::Url, port: u16) -> bool {
         && url.fragment().is_none()
 }
 
+fn is_board_navigation(url: &tauri::Url, port: u16) -> bool {
+    url.scheme() == "http"
+        && url.host_str() == Some(HOST)
+        && url.port() == Some(port)
+        && url.username().is_empty()
+        && url.password().is_none()
+}
+
 fn show_board_window(app: &AppHandle, workspace: &Workspace, port: u16) -> Result<(), String> {
     let url = format!("http://{HOST}:{port}/")
         .parse()
@@ -1992,7 +2030,7 @@ fn show_board_window(app: &AppHandle, workspace: &Workspace, port: u16) -> Resul
                     show_settings(&settings_app);
                     false
                 } else {
-                    true
+                    is_board_navigation(target, port)
                 }
             })
             .build()
@@ -2332,6 +2370,101 @@ fn report_text_size_error(app: &AppHandle) {
             "window.dispatchEvent(new CustomEvent('hfledger:settings-error',{detail:{message:'Text size could not be saved. The previous size was restored.'}}));",
         );
     }
+}
+
+fn agent_executable_candidates(agent: AgentTarget, home_dir: Option<&Path>) -> Vec<PathBuf> {
+    let binary = agent.binary_name();
+    let mut candidates = Vec::new();
+    if let Some(home_dir) = home_dir {
+        candidates.extend([
+            home_dir.join(".local/bin").join(binary),
+            home_dir.join(".cargo/bin").join(binary),
+            home_dir.join(".npm-global/bin").join(binary),
+        ]);
+    }
+    candidates.extend([
+        PathBuf::from("/opt/homebrew/bin").join(binary),
+        PathBuf::from("/usr/local/bin").join(binary),
+        PathBuf::from("/usr/bin").join(binary),
+    ]);
+    let mut seen = HashSet::new();
+    candidates
+        .into_iter()
+        .filter(|candidate| seen.insert(candidate.clone()))
+        .collect()
+}
+
+fn resolve_agent_executable(agent: AgentTarget) -> Result<PathBuf, String> {
+    let home_dir = std::env::var_os("HOME").map(PathBuf::from);
+    agent_executable_candidates(agent, home_dir.as_deref())
+        .into_iter()
+        .find(|candidate| {
+            fs::metadata(candidate)
+                .map(|metadata| {
+                    metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
+                })
+                .unwrap_or(false)
+        })
+        .ok_or_else(|| {
+            format!(
+                "{} CLI is not installed in a supported location. The prompt is still on your clipboard.",
+                agent.label()
+            )
+        })
+}
+
+fn terminal_agent_arguments(executable: &Path) -> Vec<OsString> {
+    [
+        "-e",
+        "on run argv",
+        "-e",
+        "set agentPath to item 1 of argv",
+        "-e",
+        "tell application \"Terminal\"",
+        "-e",
+        "activate",
+        "-e",
+        "do script \"exec \" & quoted form of agentPath",
+        "-e",
+        "end tell",
+        "-e",
+        "end run",
+    ]
+    .into_iter()
+    .map(OsString::from)
+    .chain(std::iter::once(executable.as_os_str().to_os_string()))
+    .collect()
+}
+
+fn open_agent_session_inner(agent: AgentTarget) -> Result<AgentLaunchReceipt, String> {
+    let executable = resolve_agent_executable(agent)?;
+    let output = Command::new("/usr/bin/osascript")
+        .args(terminal_agent_arguments(&executable))
+        .output()
+        .map_err(|_| {
+            format!(
+                "{} could not be opened. The prompt is still on your clipboard.",
+                agent.label()
+            )
+        })?;
+    if !output.status.success() {
+        return Err(format!(
+            "{} could not be opened. The prompt is still on your clipboard.",
+            agent.label()
+        ));
+    }
+    Ok(AgentLaunchReceipt {
+        agent,
+        message: format!(
+            "{} opened. Paste the copied prompt and press Return to begin.",
+            agent.label()
+        ),
+    })
+}
+
+#[tauri::command]
+fn open_agent_session(agent: AgentTarget) -> Result<AgentLaunchReceipt, String> {
+    open_agent_session_inner(agent)
 }
 
 #[tauri::command]
@@ -4025,6 +4158,7 @@ pub fn run() {
             reveal_logs,
             reveal_backups,
             diagnostics,
+            open_agent_session,
             quit_app,
         ])
         .build(tauri::generate_context!())
@@ -4045,19 +4179,20 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        active_context_id, allowlisted_deep_link, attention_badge_count,
-        canonical_production_endpoint, copy_demo, current_host_status, decision_count,
-        decode_stored_config, deep_link_board_url, deep_link_window_plan, diagnostic_host_value,
-        engine_serve_arguments, event_is_relevant, guarded_item_menu_accelerator,
-        is_board_settings_navigation, menu_eligibility, merge_watch_signal,
-        native_command_for_menu_id, parse_deep_link, primary_surface_plan,
-        production_health_signature, project_slug, recent_duplicate, refresh_demo_operations,
-        sync_production_monitor_config, text_size_after, validate_search_response,
-        validate_stored_config, watch_snapshot_is_safe, workspace_id, workspace_watch_plan,
-        write_config_unlocked, AppPaths, AppSnapshot, Appearance, DeepLinkIntent,
-        DeepLinkRejection, DeepLinkWindowPlan, HostRuntime, HostStatus, NativeCommand, Preferences,
-        PrimarySurfacePlan, ProductionMonitorSettings, SearchResponse, StoredConfig, TextSize,
-        TextSizeAction, Workspace, WorkspaceKind, CONFIG_VERSION, CORE_FILES, DATA_DIRECTORIES,
+        active_context_id, agent_executable_candidates, allowlisted_deep_link,
+        attention_badge_count, canonical_production_endpoint, copy_demo, current_host_status,
+        decision_count, decode_stored_config, deep_link_board_url, deep_link_window_plan,
+        diagnostic_host_value, engine_serve_arguments, event_is_relevant,
+        guarded_item_menu_accelerator, is_board_navigation, is_board_settings_navigation,
+        menu_eligibility, merge_watch_signal, native_command_for_menu_id, parse_deep_link,
+        primary_surface_plan, production_health_signature, project_slug, recent_duplicate,
+        refresh_demo_operations, sync_production_monitor_config, terminal_agent_arguments,
+        text_size_after, validate_search_response, validate_stored_config, watch_snapshot_is_safe,
+        workspace_id, workspace_watch_plan, write_config_unlocked, AgentTarget, AppPaths,
+        AppSnapshot, Appearance, DeepLinkIntent, DeepLinkRejection, DeepLinkWindowPlan,
+        HostRuntime, HostStatus, NativeCommand, Preferences, PrimarySurfacePlan,
+        ProductionMonitorSettings, SearchResponse, StoredConfig, TextSize, TextSizeAction,
+        Workspace, WorkspaceKind, CONFIG_VERSION, CORE_FILES, DATA_DIRECTORIES,
         DEEP_LINK_REJECTION_MESSAGE,
     };
     use notify::{Event, EventKind};
@@ -4141,6 +4276,81 @@ mod tests {
                 "{rejected} must not open Settings"
             );
         }
+    }
+
+    #[test]
+    fn board_navigation_stays_on_the_exact_active_loopback_origin() {
+        for accepted in [
+            "http://127.0.0.1:17171/",
+            "http://127.0.0.1:17171/deck?context=main",
+            "http://127.0.0.1:17171/#item=item-0123456789abcdef01234567",
+        ] {
+            let url = tauri::Url::parse(accepted).expect("valid board URL");
+            assert!(is_board_navigation(&url, 17171), "{accepted}");
+        }
+        for rejected in [
+            "https://127.0.0.1:17171/",
+            "http://localhost:17171/",
+            "http://127.0.0.1:17172/",
+            "http://person@127.0.0.1:17171/",
+            "https://example.test/",
+        ] {
+            let url = tauri::Url::parse(rejected).expect("valid rejection URL");
+            assert!(!is_board_navigation(&url, 17171), "{rejected}");
+        }
+    }
+
+    #[test]
+    fn agent_launch_targets_are_closed_and_use_only_fixed_executable_locations() {
+        assert_eq!(
+            serde_json::from_value::<AgentTarget>(json!("codex")).expect("Codex target"),
+            AgentTarget::Codex
+        );
+        assert_eq!(
+            serde_json::from_value::<AgentTarget>(json!("claude-code"))
+                .expect("Claude Code target"),
+            AgentTarget::ClaudeCode
+        );
+        assert!(serde_json::from_value::<AgentTarget>(json!("other-agent")).is_err());
+
+        let candidates =
+            agent_executable_candidates(AgentTarget::Codex, Some(Path::new("/tmp/fictional-home")));
+        assert_eq!(
+            candidates,
+            vec![
+                PathBuf::from("/tmp/fictional-home/.local/bin/codex"),
+                PathBuf::from("/tmp/fictional-home/.cargo/bin/codex"),
+                PathBuf::from("/tmp/fictional-home/.npm-global/bin/codex"),
+                PathBuf::from("/opt/homebrew/bin/codex"),
+                PathBuf::from("/usr/local/bin/codex"),
+                PathBuf::from("/usr/bin/codex"),
+            ]
+        );
+    }
+
+    #[test]
+    fn agent_launch_arguments_never_contain_observed_task_text() {
+        let executable = Path::new("/tmp/fictional-home/.local/bin/codex");
+        let arguments = terminal_agent_arguments(executable);
+        assert_eq!(
+            arguments.last(),
+            Some(&executable.as_os_str().to_os_string())
+        );
+        let joined = arguments
+            .iter()
+            .map(|value| value.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(joined.contains("quoted form of agentPath"));
+        assert!(!joined.contains("customer task"));
+        assert!(!joined.contains("HFLedger work handoff"));
+        assert_eq!(
+            arguments
+                .iter()
+                .filter(|value| value.as_os_str() == executable.as_os_str())
+                .count(),
+            1
+        );
     }
 
     #[test]

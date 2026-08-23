@@ -31,6 +31,10 @@ NATIVE_LIB = ROOT / "native" / "macos-host" / "src-tauri" / "src" / "lib.rs"
 NATIVE_CAPABILITY = (
     ROOT / "native" / "macos-host" / "src-tauri" / "capabilities" / "default.json"
 )
+NATIVE_BOARD_CAPABILITY = (
+    ROOT / "native" / "macos-host" / "src-tauri" / "capabilities" /
+    "board-agent-handoff.json"
+)
 UTC = datetime.timezone.utc
 FIXED_NOW = datetime.datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
 
@@ -665,9 +669,18 @@ process.stdout.write(JSON.stringify({
         client = APP_JS.read_text(encoding="utf-8")
         markup = APP_HTML.read_text(encoding="utf-8")
         capability = json.loads(NATIVE_CAPABILITY.read_text(encoding="utf-8"))
+        board_capability = json.loads(
+            NATIVE_BOARD_CAPABILITY.read_text(encoding="utf-8"))
 
         self.assertEqual(capability["windows"], ["main"])
-        self.assertEqual(capability["permissions"], ["core:default"])
+        self.assertEqual(capability["permissions"][0], "core:default")
+        self.assertNotIn("allow-open-agent-session", capability["permissions"])
+        self.assertEqual(board_capability["windows"], ["board"])
+        self.assertFalse(board_capability["local"])
+        self.assertEqual(
+            board_capability["permissions"], ["allow-open-agent-session"])
+        self.assertNotIn("core:default", board_capability["permissions"])
+        self.assertEqual(len(board_capability["remote"]["urls"]), 29)
 
         router = native[
             native.index("fn native_command_for_menu_id"):

@@ -137,6 +137,11 @@ section field, where the owner can choose a suggested section or write a custom
 one. Owner choices always override automatic suggestions. The technical source
 title remains secondary provenance in Details and the edit sheet.
 
+Clicking anywhere on a priority row, or pressing Enter or Space while it is
+focused, selects the exact matching item and refreshes Details. The row's Edit,
+Move, and ordering controls retain their own actions instead of changing the
+selection accidentally.
+
 Opening a queue task leads with its effective product brief: **What changes**,
 **Why it matters**, **What done looks like**, and **Risks or constraints**. An
 owner may clarify the source wording for the first three fields without changing
@@ -144,6 +149,14 @@ the observed task. Missing product meaning is named directly; the interface
 never infers importance from rank, age, or an agent-reported status.
 Implementation-shaped legacy wording is omitted from the primary brief and
 labeled as needing translation.
+
+**Start work** builds a bounded, product-shaped handoff from the same owner
+brief. It includes the outcome, reason, definition of done, risks, need-by date,
+and a reminder that context is not authority. **Copy agent prompt** works in the
+browser-only interface. In the native Mac app, **Start in Codex** and **Start in
+Claude Code** first copy that prompt and then open a blank local CLI session.
+The owner reviews, pastes, and submits the prompt; observed text never enters a
+native process argument and is never executed automatically.
 
 **Product outcomes** appears in the inspector. An unsplit task has **Mark
 product outcome complete**. A mixed task may contain two through twelve parts,
@@ -351,18 +364,20 @@ Window, and Help menus.
 Unmodified shortcuts do not fire inside editable controls. Selection moves to
 a nearby row or section when a local action hides the selected row; focus never
 falls silently to the document body. Native menu commands cross into the page
-as one allowlisted command id. The board window receives no general Tauri IPC,
-shell, or filesystem capability.
+as one allowlisted command id. The board window receives no general shell or
+filesystem capability. Its only page-to-native command is the closed
+`open_agent_session` target enum, available solely from the exact active
+loopback origin and carrying no task text or prompt.
 
 The Today toolbar keeps Search and Settings separate. Search is an inline text
 box whose popover contains only ledger-item matches. Settings uses one exact
 native-intercepted loopback sentinel to replace Today with a capability-bounded
 Settings child webview in the same window; the board page itself receives no
-native IPC. Back and the Today menu restore the mounted Today webview. Settings
-retains workspace management, engine recovery, notifications, Launch at Login,
-Reopen Last Board, persistent text size, backups, Finder reveals, diagnostics,
-and quit. Its own Global Search dialog is search-only, while the slash-command
-reference lives in a separate Help dialog.
+other native IPC. Back and the Today menu restore the mounted Today webview.
+Settings retains workspace management, engine recovery, notifications, Launch
+at Login, Reopen Last Board, persistent text size, backups, Finder reveals,
+diagnostics, and quit. Its own Global Search dialog is search-only, while the
+slash-command reference lives in a separate Help dialog.
 
 The native host watches only already configured, allowlisted board, ledger,
 collector, and adapter report files. It rejects symlinks, debounces write
