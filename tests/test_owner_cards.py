@@ -281,6 +281,7 @@ class OwnerCardTests(unittest.TestCase):
         today = server.build_board_view(runtime)["ownerToday"]
         self.assertEqual(today["productionHealth"]["state"], "degraded")
         self.assertEqual(len(today["cardCounts"]), 5)
+        self.assertTrue(all("itemRefs" in item for item in today["cardCounts"]))
         self.assertEqual([stage["id"] for stage in today["pipeline"]], [
             "ideas-waiting-on-pick", "being-specced", "being-built",
             "test-site", "production",
@@ -298,6 +299,9 @@ class OwnerCardTests(unittest.TestCase):
         idea_count = next(item["count"] for item in model["cardCounts"]
                           if item["kind"] == "idea_pick")
         self.assertEqual(idea_count, 0)
+        idea = next(item for item in model["cardCounts"]
+                    if item["kind"] == "idea_pick")
+        self.assertEqual(idea["itemRefs"], [])
 
     def test_today_projects_legacy_asks_into_owner_zones(self):
         board = schema.default_board()
@@ -347,6 +351,15 @@ class OwnerCardTests(unittest.TestCase):
         self.assertEqual({item["kind"]: item["count"] for item in model["cardCounts"]}, {
             kind: 1 for kind in admission.CARD_KINDS
         })
+        self.assertEqual(
+            {item["kind"]: item["itemRefs"] for item in model["cardCounts"]},
+            {kind: [package["id"]] for kind, package in self.packages().items()},
+        )
+        stage_refs = {stage["id"]: stage["itemRefs"] for stage in model["pipeline"]}
+        self.assertEqual(stage_refs["being-specced"], ["task:bakery:spec"])
+        self.assertEqual(stage_refs["being-built"], ["task:bakery:build"])
+        self.assertEqual(stage_refs["test-site"], ["task:bakery:test"])
+        self.assertEqual(stage_refs["production"], ["task:bakery:production"])
         test_site = next(stage for stage in model["pipeline"] if stage["id"] == "test-site")
         self.assertEqual(test_site["state"], "failing")
         self.assertEqual(test_site["tone"], "neutral")

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Made every Today owner-card count and product-flow stage an accessible
+  navigation control that opens the exact represented items, including an
+  explicit empty state for zero-count summaries.
 - Added a global **Refresh now** control. It reconciles pending ledger events,
   runs every configured read-only source for the selected workspace, reloads
   the validated owner view, and reports healthy, degraded, idle, or already

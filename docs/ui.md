@@ -77,6 +77,11 @@ The test site is a proving ground and is explicitly allowed to break. A failure
 there keeps neutral styling and says “Allowed to break.” Only production
 degradation uses alarm styling.
 
+Every card-count box and product-flow stage is clickable and keyboard
+accessible. Activating one replaces the center list with the exact items behind
+that count, titled with the same owner-facing label, plus a **Back to Today**
+control. A zero count opens an explicit empty state rather than doing nothing.
+
 A compact **Agents now** line follows that primary owner summary when session
 observation is connected. It reports only working, waiting, stopped, and problem
 counts and links to Operations for detail; it does not displace production,

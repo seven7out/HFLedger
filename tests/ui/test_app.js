@@ -62,6 +62,22 @@ test("owner priority movement is deterministic and preserves every task", () => 
   ]);
 });
 
+test("Today summary drilldowns select only exact authoritative items", () => {
+  const items = [{
+    id: "item-one", sourceId: "board:main", sourceItemRef: "task-one",
+  }, {
+    id: "item-two", sourceId: "board:main", sourceItemRef: "task-two",
+  }, {
+    id: "item-shadow", sourceId: "adapter:fictional", sourceItemRef: "task-one",
+  }];
+  assert.deepEqual(
+    ui.ownerSummaryItems(items, ["task-two", "task-one"]).map((item) => item.id),
+    ["item-one", "item-two"],
+  );
+  assert.deepEqual(ui.ownerSummaryItems(items, []), []);
+  assert.deepEqual(ui.ownerSummaryItems(items, ["missing"]), []);
+});
+
 test("calendar uses real dates, a six-week month grid, and local scheduled days", () => {
   assert.equal(ui.calendarDateKey("2026-08-20"), "2026-08-20");
   assert.equal(ui.calendarDateKey("2026-02-29"), null);

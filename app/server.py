@@ -322,6 +322,7 @@ def _build_owner_today(board, observed_health=None):
         })
     decisions = board.get("decisions", {})
     card_counts = {kind: 0 for kind in admission.CARD_KINDS}
+    card_refs = {kind: [] for kind in admission.CARD_KINDS}
     for item in decisions.get("items", []) if isinstance(decisions, dict) else []:
         if not isinstance(item, dict) or item.get("state", "open") == "deferred":
             continue
@@ -331,26 +332,39 @@ def _build_owner_today(board, observed_health=None):
                     continue
             except ValueError:
                 continue
-        card_counts[_owner_card_kind(item)] += 1
+        kind = _owner_card_kind(item)
+        card_counts[kind] += 1
+        if isinstance(item.get("id"), str):
+            card_refs[kind].append(item["id"])
 
     pipeline_counts = {stage_id: 0 for stage_id, _label in PIPELINE_LABELS}
+    pipeline_refs = {stage_id: [] for stage_id, _label in PIPELINE_LABELS}
     pipeline_counts["ideas-waiting-on-pick"] = card_counts["idea_pick"]
+    pipeline_refs["ideas-waiting-on-pick"] = list(card_refs["idea_pick"])
     for item in board.get("inbox", []) if isinstance(board.get("inbox"), list) else []:
         if isinstance(item, dict) and item.get("status") in (
                 "Inbox", "Needs Clarification", "Needs Spec"):
             pipeline_counts["being-specced"] += 1
+            if isinstance(item.get("id"), str):
+                pipeline_refs["being-specced"].append(item["id"])
     for item in board.get("queue", []) if isinstance(board.get("queue"), list) else []:
         if not isinstance(item, dict):
             continue
         product_stage = item.get("productStage")
         if product_stage in pipeline_counts:
-            pipeline_counts[product_stage] += 1
+            stage_id = product_stage
         elif item.get("status") == "Needs Spec":
-            pipeline_counts["being-specced"] += 1
+            stage_id = "being-specced"
         elif item.get("status") in ("Ready for Build", "In Progress"):
-            pipeline_counts["being-built"] += 1
+            stage_id = "being-built"
         elif item.get("status") in ("Needs Review", "Final Review"):
-            pipeline_counts["test-site"] += 1
+            stage_id = "test-site"
+        else:
+            stage_id = None
+        if stage_id is not None:
+            pipeline_counts[stage_id] += 1
+            if isinstance(item.get("id"), str):
+                pipeline_refs[stage_id].append(item["id"])
     test_site_failing = any(
         isinstance(item, dict) and item.get("productStage") == "test-site" and
         item.get("testSiteState") == "failing"
@@ -358,7 +372,12 @@ def _build_owner_today(board, observed_health=None):
     )
     pipeline = []
     for stage_id, label in PIPELINE_LABELS:
-        stage = {"id": stage_id, "label": label, "count": pipeline_counts[stage_id]}
+        stage = {
+            "id": stage_id,
+            "label": label,
+            "count": pipeline_counts[stage_id],
+            "itemRefs": pipeline_refs[stage_id],
+        }
         if stage_id == "test-site":
             stage.update({
                 "tone": "neutral",
@@ -373,7 +392,12 @@ def _build_owner_today(board, observed_health=None):
     return {
         "productionHealth": production_health_model,
         "cardCounts": [
-            {"kind": kind, "label": CARD_KIND_LABELS[kind], "count": card_counts[kind]}
+            {
+                "kind": kind,
+                "label": CARD_KIND_LABELS[kind],
+                "count": card_counts[kind],
+                "itemRefs": card_refs[kind],
+            }
             for kind in admission.CARD_KINDS
         ],
         "totalCards": sum(card_counts.values()),

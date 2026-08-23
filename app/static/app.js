@@ -87,6 +87,7 @@ const state = {
   priorityFilter: "",
   workTypeFilter: "",
   metadataSort: "ledger",
+  summaryDrilldown: null,
   selection: null,
   visibleRows: [],
   collapsedRuns: new Set(),
@@ -655,6 +656,15 @@ function changeMap() { return mapById(state.orientation?.changesById); }
 function runMap() { return mapById(state.orientation?.runs); }
 function linkMap() { return mapById(state.orientation?.links); }
 
+function ownerSummaryItems(items, itemRefs) {
+  const refs = new Set(
+    (Array.isArray(itemRefs) ? itemRefs : [])
+      .filter((value) => typeof value === "string" && value.length <= 800),
+  );
+  return (Array.isArray(items) ? items : []).filter((item) =>
+    item?.sourceId === "board:main" && refs.has(item?.sourceItemRef));
+}
+
 function badgeValue(value) {
   const number = Math.max(0, Number(value) || 0);
   return number > 99 ? "99+" : String(number);
@@ -783,12 +793,15 @@ function restoreLocalPreferences() {
   state.restoredLocalNavigation = true;
 }
 
-function setView(view, { project = null, home = null, focus = true, persist = true } = {}) {
+function setView(view, {
+  project = null, home = null, summaryDrilldown = null, focus = true, persist = true,
+} = {}) {
   if (!NAVIGATION_VIEWS.includes(view)) return;
   closeQuickLook({ restoreFocus: false });
   state.view = view;
   state.selectedProject = view === "project" ? project : null;
   state.homeFilter = view === "all-work" ? home : null;
+  state.summaryDrilldown = view === "all-work" ? summaryDrilldown : null;
   resetFilterState();
   closeTransientPanes();
   renderCenter();
@@ -1020,8 +1033,14 @@ function renderOwnerTodaySummary() {
   cards.append(node("p", "owner-summary-label", `${model.totalCards || 0} awaiting your judgment`));
   const cardList = node("div", "owner-card-count-list");
   (model.cardCounts || []).forEach((card) => {
-    const item = node("div", `owner-card-count kind-${card.kind}`);
-    item.append(node("strong", "", card.count || 0), node("span", "", card.label));
+    const count = Number(card.count) || 0;
+    const item = button(
+      `owner-card-count owner-summary-button kind-${card.kind}`,
+      "",
+      () => openOwnerSummaryDrilldown(card.label, card.itemRefs),
+    );
+    item.setAttribute("aria-label", `${card.label}, ${count} item${count === 1 ? "" : "s"}. Show these items.`);
+    item.append(node("strong", "", count), node("span", "", card.label));
     cardList.append(item);
   });
   cards.append(cardList);
@@ -1031,15 +1050,30 @@ function renderOwnerTodaySummary() {
   flow.append(node("p", "owner-summary-label", "Product flow"));
   const stages = node("div", "owner-pipeline-stages");
   (model.pipeline || []).forEach((stage) => {
-    const item = node("div", `owner-pipeline-stage tone-${stage.tone || "neutral"} state-${stage.state || "normal"}`);
+    const count = Number(stage.count) || 0;
+    const item = button(
+      `owner-pipeline-stage owner-summary-button tone-${stage.tone || "neutral"} state-${stage.state || "normal"}`,
+      "",
+      () => openOwnerSummaryDrilldown(stage.label, stage.itemRefs),
+    );
     item.dataset.stage = stage.id;
-    item.append(node("strong", "", stage.count || 0), node("span", "", stage.label));
+    item.setAttribute("aria-label", `${stage.label}, ${count} item${count === 1 ? "" : "s"}. Show these items.`);
+    item.append(node("strong", "", count), node("span", "", stage.label));
     if (stage.note) item.append(node("small", "", stage.note));
     stages.append(item);
   });
   flow.append(stages);
   wrap.append(flow);
   return wrap;
+}
+
+function openOwnerSummaryDrilldown(label, itemRefs) {
+  setView("all-work", {
+    summaryDrilldown: {
+      label: safeText(label, 80) || "Today summary",
+      itemRefs: Array.isArray(itemRefs) ? itemRefs : [],
+    },
+  });
 }
 
 function renderToday() {
@@ -2051,6 +2085,21 @@ function renderItemGroups(items, { includeControls = false } = {}) {
 }
 
 function renderAllWork() {
+  if (state.summaryDrilldown) {
+    const fragment = document.createDocumentFragment();
+    const back = node("div", "summary-drilldown-bar");
+    back.append(button("text-button", "← Back to Today", () => setView("today")));
+    fragment.append(back);
+    const items = ownerSummaryItems(
+      state.orientation?.items || [], state.summaryDrilldown.itemRefs);
+    if (items.length) fragment.append(renderItemGroups(items));
+    else fragment.append(emptyState(
+      `No ${state.summaryDrilldown.label.toLocaleLowerCase()} right now`,
+      "This Today summary is currently empty.",
+      button("text-button", "Back to Today", () => setView("today")),
+    ));
+    return fragment;
+  }
   return renderItemGroups(state.orientation?.items || [], { includeControls: true });
 }
 
@@ -2175,6 +2224,11 @@ function viewMetadata() {
   ];
   if (state.view === "operations") return ["Operations", state.data?.operations?.summary || "Session, command, and schedule reporting"];
   if (state.view === "changes") return ["Changes", `${state.orientation?.changes?.unseenTotal || 0} unseen · ${observed || "coverage time unavailable"}`];
+  if (state.view === "all-work" && state.summaryDrilldown) {
+    const count = ownerSummaryItems(
+      state.orientation?.items || [], state.summaryDrilldown.itemRefs).length;
+    return [state.summaryDrilldown.label, `${count} item${count === 1 ? "" : "s"} from Today`];
+  }
   if (state.view === "all-work") return ["All Work", `${state.orientation?.totals?.items || 0} items · one primary home each`];
   if (state.view === "shipped-log") return ["Shipped Log", "Independently corroborated outcomes only"];
   if (state.view === "watched") return ["Watched", "Local collection · authoritative work unchanged"];
@@ -3462,6 +3516,7 @@ function boot() {
     state.restoredLocalNavigation = false;
     state.view = "today";
     state.selectedProject = null;
+    state.summaryDrilldown = null;
     state.selection = null;
     resetFilterState();
     const url = new URL(location.href);
@@ -3591,6 +3646,7 @@ globalThis.HFLedgerUI = Object.freeze({
   QUICK_LOOK_MAX_EVIDENCE,
   parseItemNavigation,
   parseItemNavigationHash,
+  ownerSummaryItems,
   bindPaneResizer,
   HOME_ORDER: Object.freeze([...HOME_ORDER]),
   PRIMARY_VIEWS: Object.freeze([...PRIMARY_VIEWS]),

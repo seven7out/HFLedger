@@ -195,6 +195,9 @@ class TodayUIContractTests(unittest.TestCase):
         failing_rule = style[style.index(".owner-pipeline-stage[data-stage"):
                              style.index(".ledger-section", style.index(".owner-pipeline-stage[data-stage"))]
         self.assertIn("item.dataset.stage = stage.id", summary)
+        self.assertIn("owner-summary-button", summary)
+        self.assertIn("openOwnerSummaryDrilldown", summary)
+        self.assertIn("Show these items", summary)
         self.assertIn("var(--line)", failing_rule)
         self.assertNotIn("var(--danger)", failing_rule)
         self.assertNotIn(".state-failing", failing_rule)

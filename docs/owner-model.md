@@ -74,6 +74,11 @@ styling. Card counts and flow labels use the vocabulary above, while any source
 or implementation detail remains available only through secondary links or the
 existing evidence inspector.
 
+Each card-count box and product-flow stage is an owner navigation control. It
+opens the exact items represented by that count in the current validated view;
+an empty count opens an honest empty state. The filtered list keeps the same
+plain product headlines and secondary evidence drill-down used everywhere else.
+
 When the native production monitor is enabled, its observation replaces the
 stored production-health snapshot on Today without changing the authoritative
 workspace. The primary sentence remains product-shaped. “Checked a minute ago”
