@@ -12,6 +12,7 @@ from tests.helpers import ROOT
 DEMO = os.path.join(ROOT, "scripts", "ledger-demo")
 RELEASE_CHECK = os.path.join(ROOT, "scripts", "release-check")
 CLI = os.path.join(ROOT, "cli", "ledger")
+ENGINE_BUILD = os.path.join(ROOT, "native", "macos-host", "scripts", "build_engine.py")
 DECISION_DECK_SCREENSHOT = os.path.join(ROOT, "docs", "assets", "decision-deck.jpg")
 
 
@@ -85,6 +86,11 @@ class DemoQuickstartTests(unittest.TestCase):
                 "sessionsWaiting": 1, "sessionsStopped": 1,
                 "sessionsProblematic": 0, "sessionsUnknown": 0,
                 "sessionsUnlinked": 1})
+            latest_job = board_view["operations"]["schedules"][0]
+            self.assertEqual(
+                latest_job["taskId"], "task:ovenlight:packing-display")
+            self.assertEqual(
+                latest_job["latestArtifact"]["kind"], "candidate_research")
             card = cards[0]
             answer = server.answer_card(runtime, {
                 "id": card["id"], "srcHash": card["srcHash"], "action": "accept",
@@ -110,6 +116,13 @@ class DemoQuickstartTests(unittest.TestCase):
             capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("RELEASE READY", result.stdout)
+
+    def test_native_engine_license_lookup_follows_the_build_interpreter(self):
+        with open(ENGINE_BUILD, encoding="utf-8") as handle:
+            source = handle.read()
+        self.assertIn("sysconfig.get_path('purelib')", source)
+        self.assertIn("sysconfig.get_path('stdlib')", source)
+        self.assertNotIn("python3.9", source)
 
 
 if __name__ == "__main__":

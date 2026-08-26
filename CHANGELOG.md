@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added bounded external-agent output observation to Operations. Version-3
+  reports can associate a job with one exact task and one latest candidate
+  research packet, report, evidence record, or generic output. Owners see the
+  product summary and can open related work; transcripts, prompts, paths, and
+  automatic status or priority changes remain outside the contract.
 - Made the entire priority row open its matching Details dossier, with visible
   selected and keyboard states. Details now includes a bounded product-shaped
   agent handoff: copy the prompt in any browser, or use the Mac app to copy it

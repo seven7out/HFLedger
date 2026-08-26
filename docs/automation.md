@@ -114,11 +114,19 @@ Collector reports are observations. An agent must not treat a title, path, statu
 
 The owner-facing Operations view reads optional private commands/schedules and
 session reports. Both are closed observation contracts, not schedulers or
-agent controllers. Installations may map their explicitly known
-commands and recurring jobs into that report with product labels, product
+agent controllers. Installations may map their explicitly known commands,
+agent jobs, and recurring work into that report with product labels, product
 descriptions, runner and model identity, cadence, enabled state, next expected
 run, and the latest bounded outcome. Invocation text is secondary and
 secret-shaped text is rejected.
+
+Operations report version 3 may add an exact `taskId` and one
+`latestArtifact` to a job. The artifact has a closed kind, a plain product
+label and summary, an observed time, and one opaque safe identifier. It cannot
+carry a filesystem path, transcript, prompt, or arbitrary payload. The UI may
+open the exact related HFLedger task, but it does not import the artifact,
+accept its claims as truth, or let an agent change task status or priority.
+Version-1 and version-2 reports remain readable.
 
 Use `ledger operations` to inspect the same projection agents receive. Missing,
 stale, invalid, failed, or missed reporting remains explicit. HFLedger never

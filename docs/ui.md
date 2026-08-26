@@ -205,12 +205,21 @@ timestamps into commitments.
 ## Operations
 
 Operations answers which agent sessions are working, waiting, stopped, or in
-trouble, plus which recurring jobs exist across agents and local automation.
+trouble, plus which agent jobs and recurring work exist across agents and local
+automation.
 Linked sessions lead with the owner-facing product task headline. Runtime
 identity, source reference, cadence, and invocation text remain secondary.
 Jobs are grouped by runner and problematic jobs appear first within their
 group. Failed, missed, stale, invalid, and unconfigured reporting cannot appear
 healthy.
+
+Version-3 operations reports may attach one exact related task and one bounded
+latest artifact to a job. The owner sees its product summary, kind, and time and
+can open related work in Details. The opaque artifact reference stays behind a
+secondary disclosure. Only candidate research, reports, evidence, or a generic
+output are accepted; conversation text, local paths, and technical prose are
+not an artifact channel. An artifact is an observation, not proof that its
+claims are true or that the related task is complete.
 
 The sources are optional private `reports/operations-latest.json` and
 `reports/session-observer-latest.json` observations. Their freshness is

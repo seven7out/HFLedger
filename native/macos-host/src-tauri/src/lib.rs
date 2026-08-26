@@ -740,6 +740,15 @@ fn refresh_demo_operations(destination: &Path) -> Result<(), String> {
                 Value::String(completed.to_rfc3339_opts(SecondsFormat::Secs, false)),
             );
         }
+        if let Some(artifact) = schedule
+            .get_mut("latestArtifact")
+            .and_then(Value::as_object_mut)
+        {
+            artifact.insert(
+                "observedAt".into(),
+                Value::String(completed.to_rfc3339_opts(SecondsFormat::Secs, false)),
+            );
+        }
     }
     let temporary = path.with_extension("json.tmp");
     if temporary.exists() {
@@ -5299,6 +5308,9 @@ mod tests {
                     "lastRun": {
                         "startedAt": "2000-01-01T23:58:00+00:00",
                         "completedAt": "2000-01-01T23:59:00+00:00"
+                    },
+                    "latestArtifact": {
+                        "observedAt": "2000-01-01T23:57:00+00:00"
                     }
                 }]
             }))
@@ -5313,6 +5325,10 @@ mod tests {
         assert_ne!(
             refreshed["schedules"][0]["nextRunAt"],
             "2000-01-02T00:00:00+00:00"
+        );
+        assert_ne!(
+            refreshed["schedules"][0]["latestArtifact"]["observedAt"],
+            "2000-01-01T23:57:00+00:00"
         );
         assert_eq!(
             fs::metadata(&path)

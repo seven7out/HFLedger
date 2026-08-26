@@ -1801,6 +1801,22 @@ function operationRunnerLabel(schedule) {
   return model ? `${name} · ${model}` : name;
 }
 
+function operationArtifactKindLabel(value) {
+  return ({
+    candidate_research: "Candidate research",
+    report: "Report",
+    evidence: "Evidence",
+    other: "Output",
+  })[safeText(value, 32)] || "Output";
+}
+
+function operationRelatedItem(taskId, items) {
+  const exact = safeText(taskId, 128);
+  if (!exact) return null;
+  return (Array.isArray(items) ? items : []).find(
+    (item) => item?.id === exact || item?.sourceItemRef === exact) || null;
+}
+
 function agentSessionStateLabel(value) {
   return {
     working: "Working",
@@ -2076,6 +2092,8 @@ function renderOperations() {
     const list = node("div", "operations-list");
     group.schedules.forEach((schedule) => {
       const lastRun = schedule.lastRun;
+      const latestArtifact = schedule.latestArtifact && typeof schedule.latestArtifact === "object"
+        ? schedule.latestArtifact : null;
       const health = operationHealth(schedule);
       const row = node("article", `operation-row schedule-row health-${health}`);
       const heading = node("header", "operation-heading");
@@ -2086,14 +2104,40 @@ function renderOperations() {
       facts.append(node("dt", "", "Schedule"), node("dd", "", schedule.cadence || "Cadence unknown"));
       facts.append(node("dt", "", "Next"), node("dd", "", schedule.enabled === false ? "Paused" : schedule.nextRunAt ? exactTime(schedule.nextRunAt) : "Not reported"));
       facts.append(node("dt", "", "Latest"), node("dd", "", lastRun?.summary || "No run has been recorded yet."));
+      if (latestArtifact) {
+        facts.append(
+          node("dt", "", operationArtifactKindLabel(latestArtifact.kind)),
+          node("dd", "", safeText(latestArtifact.summary, 300) || safeText(latestArtifact.label, 120) || "A bounded output was reported."),
+          node("dt", "", "Produced"),
+          node("dd", "", latestArtifact.observedAt ? exactTime(latestArtifact.observedAt) : "Not reported"),
+        );
+      }
       row.append(facts);
+      const taskId = safeText(schedule.taskId, 128);
+      const relatedItem = operationRelatedItem(taskId, state.orientation?.items);
+      if (relatedItem) {
+        const actions = node("div", "operation-actions");
+        actions.append(button("control-button", "Open related work", () => {
+          selectDescriptor({ kind: "item", id: relatedItem.id }, { focus: false });
+          announce("Opened the related work in Details.");
+        }));
+        row.append(actions);
+      }
+      if (latestArtifact?.reference) {
+        const details = node("details", "operation-invocation");
+        details.append(
+          node("summary", "", "Show output reference"),
+          node("code", "", safeText(latestArtifact.reference, 128)),
+        );
+        row.append(details);
+      }
       list.append(row);
     });
     runner.append(list);
     schedules.append(runner);
   });
-  if (!schedules.childElementCount) schedules.append(emptyState("No recurring jobs are connected", "Connect an operations report to see who runs recurring work and whether it is healthy."));
-  fragment.append(section("Recurring jobs", model.counts?.schedules || 0, schedules));
+  if (!schedules.childElementCount) schedules.append(emptyState("No agent jobs are connected", "Connect an operations report to see who runs scheduled or requested work and whether it is healthy."));
+  fragment.append(section("Agent jobs & recurring work", model.counts?.schedules || 0, schedules));
 
   const commands = node("div", "operations-list");
   (model.commands || []).forEach((command) => {
@@ -3830,6 +3874,8 @@ globalThis.HFLedgerUI = Object.freeze({
   operationHealth,
   operationHealthLabel,
   operationRunnerLabel,
+  operationArtifactKindLabel,
+  operationRelatedItem,
   agentSessionStateLabel,
   agentSessionRunnerLabel,
   agentSessionHeadline,

@@ -15,10 +15,12 @@ need-by dates, and active/parked choices. Existing work starts in deterministic,
 product sections so a large queue is useful before manual cleanup.
 Calendar brings those dates together with owner-decision deadlines, deferred
 items returning for attention, and the next scheduled operations run.
-Operations groups recurring jobs by the agent or local runner responsible for
-them and can optionally show metadata-only Berd sessions as working, waiting,
-stopped, or problematic. Product task headlines lead; model, harness, cadence,
-source references, and commands remain secondary detail.
+Operations groups agent jobs and recurring work by the agent or local runner
+responsible for them and can optionally show metadata-only Berd sessions as
+working, waiting, stopped, or problematic. A job may expose one bounded latest
+output and an exact related-task link without importing a conversation. Product
+task headlines lead; model, harness, cadence, output references, source
+references, and commands remain secondary detail.
 An owner-only manual task has a separate **Mark
 complete** action because the owner, not an agent, knows whether that action was
 performed.
@@ -192,10 +194,10 @@ The standard-library HTTP service provides:
   CLI session without automatically submitting observed text;
 - Calendar with a familiar month grid and agenda for task need-by dates,
   decision deadlines, deferred-item returns, and next scheduled runs;
-- Operations with product-led live session state plus recurring jobs grouped
-  across agents and local automation, including runner, model when known,
-  cadence, next run, product purpose, and explicit health, stale, and
-  unconfigured states;
+- Operations with product-led live session state plus agent jobs and recurring
+  work grouped across agents and local automation, including runner, model when
+  known, cadence, next run, product purpose, bounded latest output, exact
+  related work, and explicit health, stale, and unconfigured states;
 - a global **Refresh now** control that scans every configured read-only source
   in the selected workspace, reconciles pending events when the workspace is
   writable, and reloads the validated owner view with one plain-language result;

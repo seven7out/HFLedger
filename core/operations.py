@@ -10,9 +10,9 @@ import unicodedata
 from . import admission, session_observer
 
 
-VERSION = 3
-LATEST_REPORT_VERSION = 2
-SUPPORTED_VERSIONS = frozenset((1, LATEST_REPORT_VERSION))
+VERSION = 4
+LATEST_REPORT_VERSION = 3
+SUPPORTED_VERSIONS = frozenset((1, 2, LATEST_REPORT_VERSION))
 REPORT_RELATIVE_PATH = os.path.join("reports", "operations-latest.json")
 MAX_REPORT_BYTES = 256 * 1024
 MAX_COMMANDS = 64
@@ -20,6 +20,9 @@ MAX_SCHEDULES = 128
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,127}$")
 RUN_STATUSES = frozenset(("succeeded", "failed", "running", "missed", "unknown"))
 RUNNER_TYPES = frozenset(("agent", "local_automation", "unknown"))
+ARTIFACT_KINDS = frozenset((
+    "candidate_research", "report", "evidence", "other",
+))
 SECRET_PATTERNS = (
     re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----", re.IGNORECASE),
     re.compile(r"(?:^|\s)(?:sk|rk)-[A-Za-z0-9_-]{12,}"),
@@ -91,7 +94,7 @@ def validate_report(value):
     })
     report_version = value.get("version")
     if report_version not in SUPPORTED_VERSIONS:
-        raise OperationsError("operations report version must be 1 or 2")
+        raise OperationsError("operations report version must be 1, 2, or 3")
     _timestamp(value.get("observedAt"), "observedAt")
     stale_after = value.get("staleAfterSeconds")
     if (not isinstance(stale_after, int) or isinstance(stale_after, bool) or
@@ -123,6 +126,8 @@ def validate_report(value):
         }
         if report_version >= 2:
             schedule_fields.add("runner")
+        if report_version >= 3:
+            schedule_fields.update(("taskId", "latestArtifact"))
         _closed(schedule, label, schedule_fields)
         schedule_id = _id(schedule.get("id"), "%s id" % label)
         if schedule_id in schedule_ids:
@@ -139,6 +144,30 @@ def validate_report(value):
             _one_line(runner.get("name"), "%s runner name" % label, 80)
             if runner.get("model") is not None:
                 _one_line(runner.get("model"), "%s runner model" % label, 120)
+        if report_version >= 3:
+            task_id = schedule.get("taskId")
+            if task_id is not None:
+                _id(task_id, "%s taskId" % label)
+            artifact = schedule.get("latestArtifact")
+            if artifact is not None:
+                _closed(artifact, "%s latestArtifact" % label, {
+                    "kind", "label", "summary", "observedAt", "reference",
+                })
+                if artifact.get("kind") not in ARTIFACT_KINDS:
+                    raise OperationsError(
+                        "%s latestArtifact kind is invalid" % label)
+                _one_line(
+                    artifact.get("label"),
+                    "%s latestArtifact label" % label, 120, True)
+                _one_line(
+                    artifact.get("summary"),
+                    "%s latestArtifact summary" % label, 300, True)
+                _timestamp(
+                    artifact.get("observedAt"),
+                    "%s latestArtifact observedAt" % label)
+                _id(
+                    artifact.get("reference"),
+                    "%s latestArtifact reference" % label)
         if not isinstance(schedule.get("enabled"), bool):
             raise OperationsError("%s enabled must be boolean" % label)
         command_id = schedule.get("commandId")
@@ -321,8 +350,10 @@ def _combine_views(operations_view, sessions_view):
             combined["counts"]["failing"] +
             combined["counts"]["sessionsProblematic"])
         combined["summary"] = (
-            "%d operation%s need attention." % (
-                problem_count, "" if problem_count == 1 else "s")
+            "%d operation%s %s attention." % (
+                problem_count,
+                "" if problem_count == 1 else "s",
+                "needs" if problem_count == 1 else "need")
             if problem_count else
             "Some Operations reporting could not be refreshed.")
     elif "stale" in (operations_state, sessions_state):

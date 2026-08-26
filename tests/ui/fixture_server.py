@@ -443,7 +443,7 @@ class Handler(SimpleHTTPRequestHandler):
                     }],
                 },
                 "operations": {
-                    "version": 3, "connected": True, "state": "degraded",
+                    "version": 4, "connected": True, "state": "degraded",
                     "summary": "1 operation needs attention.",
                     "observedAt": OBSERVED, "commands": [],
                     "sessionObservation": {
@@ -474,10 +474,18 @@ class Handler(SimpleHTTPRequestHandler):
                         "cadence": "Every day at 7:00 AM",
                         "runner": {"type": "agent", "name": "Claude Code", "model": "Configured default"},
                         "enabled": True, "commandId": None,
+                        "taskId": ITEMS[4]["sourceItemRef"],
                         "nextRunAt": "2026-07-19T14:00:00+00:00",
                         "health": "healthy",
                         "lastRun": {"status": "succeeded", "startedAt": None, "completedAt": None,
                                     "summary": "The menu brief was ready before planning."},
+                        "latestArtifact": {
+                            "kind": "candidate_research",
+                            "label": "Mobile menu observations",
+                            "summary": "A fictional customer-observation packet is ready for product review.",
+                            "observedAt": "2026-07-18T17:50:00Z",
+                            "reference": "packet:fictional-mobile-menu",
+                        },
                     }, {
                         "id": "weekly-order-review",
                         "label": "Review weekly order patterns",

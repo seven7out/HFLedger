@@ -6,7 +6,6 @@ import os
 import shutil
 import subprocess
 import sys
-import sysconfig
 import venv
 
 
@@ -20,6 +19,13 @@ ENTRYPOINT = REPO_ROOT / "cli" / "ledger"
 
 def run(*args: object, cwd: Path = HOST_ROOT) -> None:
     subprocess.run([str(value) for value in args], cwd=cwd, check=True)
+
+
+def python_path(python: Path, expression: str) -> Path:
+    completed = subprocess.run(
+        [str(python), "-c", "import sysconfig; print(%s)" % expression],
+        cwd=HOST_ROOT, check=True, capture_output=True, text=True)
+    return Path(completed.stdout.strip())
 
 
 def ensure_venv() -> Path:
@@ -63,12 +69,14 @@ def main() -> None:
     executable = BUILD_ROOT / "dist" / "hfledger-engine" / "hfledger-engine"
     license_root = executable.parent / "THIRD_PARTY_LICENSES"
     license_root.mkdir()
+    site_packages = python_path(python, "sysconfig.get_path('purelib')")
+    standard_library = python_path(python, "sysconfig.get_path('stdlib')")
     license_sources = {
         "HFLedger-MIT.txt": REPO_ROOT / "LICENSE",
-        "Python-3.9.txt": Path(sysconfig.get_path("stdlib")) / "LICENSE.txt",
-        "PyInstaller.txt": VENV / "lib" / "python3.9" / "site-packages" /
+        "Python.txt": standard_library / "LICENSE.txt",
+        "PyInstaller.txt": site_packages /
             "pyinstaller-6.21.0.dist-info" / "licenses" / "COPYING.txt",
-        "PyInstaller-hooks-contrib.txt": VENV / "lib" / "python3.9" / "site-packages" /
+        "PyInstaller-hooks-contrib.txt": site_packages /
             "pyinstaller_hooks_contrib-2026.6.dist-info" / "licenses" / "LICENSE",
     }
     for name, source in license_sources.items():

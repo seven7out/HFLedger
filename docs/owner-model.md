@@ -126,6 +126,12 @@ or unknown state. Harness, model, agent identity, timestamps, and source ids are
 secondary. Runtime state never proves that work is complete or that the owner
 is blocking it, and it never files a card automatically.
 
+Agent jobs use the same rule. The owner sees what the job does, who runs it,
+when it runs, whether its latest run worked, and at most one plain-language
+latest output. Exact task links can open related product work. Opaque output
+references remain secondary, and raw conversations, prompts, filesystem paths,
+and agent conclusions never become owner-facing truth through Operations.
+
 **Refresh now** supports production health and keeping agents unblocked. It
 scans each already configured read-only source for the selected workspace,
 reconciles pending events when that workspace is writable, and reloads the

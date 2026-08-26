@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "observedAt": "2026-08-02T12:00:00+00:00",
   "staleAfterSeconds": 604800,
   "commands": [
@@ -29,12 +29,20 @@
       },
       "enabled": true,
       "commandId": "refresh-workspace",
+      "taskId": "task:ovenlight:packing-display",
       "nextRunAt": "2026-08-03T08:00:00+00:00",
       "lastRun": {
         "status": "succeeded",
         "startedAt": "2026-08-02T11:59:00+00:00",
         "completedAt": "2026-08-02T12:00:00+00:00",
         "summary": "The fictional bakery owner view refreshed successfully."
+      },
+      "latestArtifact": {
+        "kind": "candidate_research",
+        "label": "Pickup display observations",
+        "summary": "A fictional customer-observation packet is ready for product review.",
+        "observedAt": "2026-08-02T11:58:00+00:00",
+        "reference": "packet:ovenlight-pickup-display"
       }
     },
     {

@@ -76,12 +76,13 @@ class TodayUIContractTests(unittest.TestCase):
                 "dragstart", "moveOwnerTask", "set-priority", "set-task",
                 'id="owner-complete-dialog"', "Mark complete",
                 "complete-owner-task", "ownerCompletionAvailable",
-                "renderOperations", "Agent sessions", "Recurring jobs", "Runs through",
+                "renderOperations", "Agent sessions", "Agent jobs & recurring work", "Runs through",
                 "groupOperationsByRunner", "Healthy", "Problematic",
                 "Agents now", "Open Operations", "Unlinked agent session",
                 "Start work", "Copy agent prompt", "Start in Codex",
                 "Start in Claude Code", "buildAgentPrompt",
                 "Show command", "No run has been recorded yet.",
+                "Candidate research", "Open related work", "Show output reference",
                 "No agent sessions are active", "The observer is connected."):
             self.assertIn(required, markup + script + style)
         self.assertIn("Execution status remains agent-reported", script)

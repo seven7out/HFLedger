@@ -202,6 +202,13 @@ test("operations uses closed owner-facing health labels", () => {
   assert.equal(ui.operationHealth({ enabled: true, lastRun: { status: "failed" } }), "problematic");
   assert.equal(ui.operationHealthLabel("problematic"), "Problematic");
   assert.equal(ui.operationRunnerLabel({ runner: { name: "Example Agent", model: "Model One" } }), "Example Agent · Model One");
+  assert.equal(ui.operationArtifactKindLabel("candidate_research"), "Candidate research");
+  assert.equal(ui.operationArtifactKindLabel("report"), "Report");
+  assert.equal(ui.operationArtifactKindLabel("unsupported"), "Output");
+  const related = [{ id: "item-one", sourceItemRef: "task-one" }];
+  assert.equal(ui.operationRelatedItem("task-one", related).id, "item-one");
+  assert.equal(ui.operationRelatedItem("item-one", related).id, "item-one");
+  assert.equal(ui.operationRelatedItem("missing", related), null);
 });
 
 test("operations groups recurring jobs by runner with problems first", () => {

@@ -53,6 +53,17 @@ def operation_report(observed_at="2026-08-14T11:55:00+00:00", status="succeeded"
     }
     if version == 1:
         report["schedules"][0].pop("runner")
+    if version >= 3:
+        report["schedules"][0].update({
+            "taskId": "task-menu",
+            "latestArtifact": {
+                "kind": "candidate_research",
+                "label": "Customer pickup themes",
+                "summary": "A fictional research packet is ready for product review.",
+                "observedAt": "2026-08-14T11:53:00+00:00",
+                "reference": "packet:fictional-pickup-themes",
+            },
+        })
     return report
 
 
@@ -391,6 +402,7 @@ class OperationsTests(unittest.TestCase):
         self.write_report(operation_report(status="failed"))
         degraded = operations.build_view(self.home, NOW)
         self.assertEqual(degraded["state"], "degraded")
+        self.assertEqual(degraded["summary"], "1 operation needs attention.")
         self.assertEqual(degraded["schedules"][0]["health"], "problematic")
         self.write_report(operation_report(observed_at="2026-08-14T01:00:00+00:00"))
         stale = operations.build_view(self.home, NOW)
@@ -401,7 +413,7 @@ class OperationsTests(unittest.TestCase):
         self.write_report(operation_report(version=1))
         view = operations.build_view(self.home, NOW)
         self.assertEqual(view["state"], "healthy")
-        self.assertEqual(view["version"], 3)
+        self.assertEqual(view["version"], 4)
         self.assertEqual(view["schedules"][0]["runner"], {
             "type": "unknown", "name": "Runner not reported", "model": None,
         })
@@ -413,6 +425,40 @@ class OperationsTests(unittest.TestCase):
         self.assertEqual(operations.build_view(self.home, NOW)["state"], "invalid")
         report = operation_report()
         report["schedules"][0].pop("runner")
+        self.write_report(report)
+        self.assertEqual(operations.build_view(self.home, NOW)["state"], "invalid")
+
+    def test_version_three_links_agent_output_to_related_work(self):
+        self.write_report(operation_report(version=3))
+        view = operations.build_view(self.home, NOW)
+        schedule = view["schedules"][0]
+        self.assertEqual(schedule["taskId"], "task-menu")
+        self.assertEqual(schedule["latestArtifact"], {
+            "kind": "candidate_research",
+            "label": "Customer pickup themes",
+            "summary": "A fictional research packet is ready for product review.",
+            "observedAt": "2026-08-14T11:53:00+00:00",
+            "reference": "packet:fictional-pickup-themes",
+        })
+
+    def test_agent_output_metadata_is_closed_plain_and_path_free(self):
+        invalid_changes = (
+            ("extra", "unsupported"),
+            ("kind", "conversation_transcript"),
+            ("summary", "Inspect commit abcdef1 before accepting this output."),
+            ("reference", "/Users/example/private/report.md"),
+        )
+        for field, value in invalid_changes:
+            with self.subTest(field=field):
+                report = operation_report(version=3)
+                report["schedules"][0]["latestArtifact"][field] = value
+                self.write_report(report)
+                self.assertEqual(
+                    operations.build_view(self.home, NOW)["state"], "invalid")
+
+    def test_agent_output_fields_are_rejected_from_legacy_report_versions(self):
+        report = operation_report(version=3)
+        report["version"] = 2
         self.write_report(report)
         self.assertEqual(operations.build_view(self.home, NOW)["state"], "invalid")
 
