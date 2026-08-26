@@ -930,11 +930,11 @@ function registerRow(element, descriptor, {
   const key = `${descriptor.kind}:${descriptor.id}`;
   element.dataset.rowKey = key;
   element.addEventListener("click", (event) => {
-    if (ignoreInteractive && event.target?.closest?.("button, a, input, select, textarea, summary")) return;
+    if (ignoreInteractive && event.target?.closest?.("button, a, input, select, textarea, summary, details")) return;
     selectDescriptor(descriptor, { focus: false });
   });
   element.addEventListener("dblclick", (event) => {
-    if (ignoreInteractive && event.target?.closest?.("button, a, input, select, textarea, summary")) return;
+    if (ignoreInteractive && event.target?.closest?.("button, a, input, select, textarea, summary, details")) return;
     openDescriptor(descriptor);
   });
   state.visibleRows.push({ key, element, descriptor, selectionAttribute });
@@ -1795,6 +1795,39 @@ function operationHealthLabel(value) {
   return ({ healthy: "Healthy", problematic: "Problematic", running: "Running", unknown: "Unknown", paused: "Paused" })[value] || "Unknown";
 }
 
+function operationStatusExplanation(schedule) {
+  const health = operationHealth(schedule);
+  const runStatus = safeText(schedule?.lastRun?.status, 24);
+  if (health === "problematic" && runStatus === "missed") {
+    return "The expected run was not reported as completed.";
+  }
+  if (health === "problematic") return "The latest reported run failed.";
+  if (health === "running") return "The latest reported run is still in progress.";
+  if (health === "paused") return "This job is configured but is not currently enabled.";
+  if (health === "healthy") return "The latest reported run completed successfully.";
+  return "HFLedger does not have a conclusive result for this job.";
+}
+
+function operationRecoveryGuidance(schedule) {
+  const health = operationHealth(schedule);
+  const runner = safeText(schedule?.runner?.name, 80) || "the listed runner";
+  const runStatus = safeText(schedule?.lastRun?.status, 24);
+  if (health === "problematic" && runStatus === "missed") {
+    return `Check whether ${runner} and its schedule were available, then start or reschedule the work there if it should still run. HFLedger will not start it.`;
+  }
+  if (health === "problematic") {
+    return `Review the reported outcome below, then ask ${runner} to inspect the failed run, correct the problem, and rerun it or wait for the next scheduled run. HFLedger will not retry it.`;
+  }
+  if (health === "running") {
+    return `Wait for ${runner} to report a result. If it remains running beyond its normal cadence, inspect that runner; HFLedger will not stop or restart it.`;
+  }
+  if (health === "paused") {
+    return `Enable this job in ${runner} only if you intend it to resume. HFLedger will not change its schedule.`;
+  }
+  if (health === "healthy") return "No recovery action is indicated by the latest report.";
+  return `Check ${runner} for a completed result and confirm that its reporting connection is current.`;
+}
+
 function operationRunnerLabel(schedule) {
   const name = safeText(schedule?.runner?.name, 80) || "Runner not reported";
   const model = safeText(schedule?.runner?.model, 120);
@@ -1838,6 +1871,15 @@ function agentSessionHeadline(session, ownerItems) {
   const linked = (Array.isArray(ownerItems) ? ownerItems : []).find(
     (item) => item?.id === taskId);
   return safeText(linked?.title, 160) || "Unlinked agent session";
+}
+
+function agentSessionGuidance(session) {
+  const value = safeText(session?.state, 24);
+  if (value === "working") return "The session is actively working. No owner action is implied.";
+  if (value === "waiting") return "The session is waiting, but HFLedger cannot infer that it is waiting on the owner.";
+  if (value === "stopped") return "The session stopped. That does not prove its related work is complete.";
+  if (value === "problematic") return "The observer reported a session problem. Inspect the connected agent harness; HFLedger does not read conversations or attempt recovery.";
+  return "The observer could not determine a reliable session state.";
 }
 
 function renderTodayAgentSessions() {
@@ -1884,6 +1926,23 @@ function groupOperationsByRunner(schedules) {
         safeText(left.label || left.id, 120).localeCompare(safeText(right.label || right.id, 120))
       )),
     }));
+}
+
+function registerOperationRow(row, descriptor, label) {
+  row.tabIndex = 0;
+  row.setAttribute("role", "group");
+  row.setAttribute("aria-current", "false");
+  row.setAttribute("aria-label", `${safeText(label, 180) || "Operation"}. Open details.`);
+  row.addEventListener("keydown", (event) => {
+    if (event.target !== row || (event.key !== "Enter" && event.key !== " ")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    selectDescriptor(descriptor, { focus: false });
+  });
+  return registerRow(row, descriptor, {
+    ignoreInteractive: true,
+    selectionAttribute: "aria-current",
+  });
 }
 
 function openCalendarEvent(event) {
@@ -2065,7 +2124,11 @@ function renderOperations() {
       node("code", "", safeText(session?.id, 128) || "Unavailable"),
     );
     row.append(details);
-    sessions.append(row);
+    sessions.append(registerOperationRow(
+      row,
+      { kind: "agent-session", id: safeText(session?.id, 128) },
+      `${agentSessionHeadline(session, ownerItems)}, ${agentSessionStateLabel(sessionState)}`,
+    ));
   });
   if (!sessions.childElementCount) {
     const observation = model.sessionObservation || {};
@@ -2131,7 +2194,11 @@ function renderOperations() {
         );
         row.append(details);
       }
-      list.append(row);
+      list.append(registerOperationRow(
+        row,
+        { kind: "operation-schedule", id: safeText(schedule?.id, 128) },
+        `${schedule.label || schedule.id}, ${operationHealthLabel(health)}`,
+      ));
     });
     runner.append(list);
     schedules.append(runner);
@@ -2465,6 +2532,16 @@ function renderInspector(descriptor) {
   }
   if (descriptor.kind === "coverage") return renderCoverageInspector(target);
   if (descriptor.kind === "run") return renderRunInspector(target, runMap().get(descriptor.id));
+  if (descriptor.kind === "operation-schedule") {
+    const schedule = (state.data?.operations?.schedules || []).find(
+      (entry) => safeText(entry?.id, 128) === descriptor.id);
+    return renderOperationScheduleInspector(target, schedule);
+  }
+  if (descriptor.kind === "agent-session") {
+    const session = (state.data?.operations?.sessions || []).find(
+      (entry) => safeText(entry?.id, 128) === descriptor.id);
+    return renderAgentSessionInspector(target, session);
+  }
   if (descriptor.kind === "change" && !descriptor.itemId) return renderChangeInspector(target, changeMap().get(descriptor.id));
   const item = descriptor.kind === "item" ? itemMap().get(descriptor.id) : itemMap().get(descriptor.itemId);
   if (!item) return renderChangeInspector(target, changeMap().get(descriptor.id));
@@ -2990,6 +3067,145 @@ function renderRunInspector(target, run) {
   wrapper.append(inspectorSection("Changes", `${(run.changeIds || []).length} exact change reference${(run.changeIds || []).length === 1 ? "" : "s"}.`));
   target.replaceChildren(wrapper);
   $("#ledger-inspector").setAttribute("aria-label", `Details for ${safeText(run.label || "observed run", 180)}`);
+}
+
+function renderOperationScheduleInspector(target, schedule) {
+  if (!schedule) return renderInspector(null);
+  const health = operationHealth(schedule);
+  const lastRun = schedule.lastRun && typeof schedule.lastRun === "object"
+    ? schedule.lastRun : null;
+  const latestArtifact = schedule.latestArtifact && typeof schedule.latestArtifact === "object"
+    ? schedule.latestArtifact : null;
+  const wrapper = node("article", "dossier operation-dossier");
+  const header = node("header", "dossier-header");
+  header.append(node("span", "dossier-glyph", "↻"), node("div", ""));
+  header.lastChild.append(
+    node("h2", "", schedule.label || schedule.id || "Recurring work"),
+    node("p", "dossier-identity", `Agent job · ${operationHealthLabel(health)}`),
+  );
+  wrapper.append(header);
+
+  const status = node("div", "operation-inspector-copy");
+  status.append(node("p", "", operationStatusExplanation(schedule)));
+  if (lastRun?.summary) status.append(node("p", "inspector-muted", lastRun.summary));
+  wrapper.append(inspectorSection(
+    health === "problematic" ? "Why this is problematic" : "What this status means",
+    status,
+  ));
+  wrapper.append(inspectorSection("What to do", operationRecoveryGuidance(schedule)));
+  wrapper.append(inspectorSection(
+    "Purpose", schedule.description || "No product description was supplied."));
+
+  const facts = node("dl", "clock-list");
+  facts.append(
+    node("dt", "", "Runs through"), node("dd", "", operationRunnerLabel(schedule)),
+    node("dt", "", "Schedule"), node("dd", "", schedule.cadence || "Cadence unknown"),
+    node("dt", "", "Next run"), node("dd", "", schedule.enabled === false
+      ? "Paused" : schedule.nextRunAt ? exactTime(schedule.nextRunAt) : "Not reported"),
+    node("dt", "", "Last result"), node("dd", "", lastRun
+      ? operationRunLabel(lastRun.status) : "Not reported"),
+    node("dt", "", "Started"), node("dd", "", lastRun?.startedAt
+      ? exactTime(lastRun.startedAt) : "Not reported"),
+    node("dt", "", "Completed"), node("dd", "", lastRun?.completedAt
+      ? exactTime(lastRun.completedAt) : "Not reported"),
+    node("dt", "", "Observed"), node("dd", "", state.data?.operations?.observedAt
+      ? exactTime(state.data.operations.observedAt) : "Not reported"),
+  );
+  wrapper.append(inspectorSection("Timing & responsibility", facts));
+
+  if (latestArtifact) {
+    const artifact = node("div", "operation-inspector-copy");
+    artifact.append(
+      node("strong", "", safeText(latestArtifact.label, 120) || operationArtifactKindLabel(latestArtifact.kind)),
+      node("p", "", safeText(latestArtifact.summary, 300) || "A bounded output was reported."),
+      node("small", "inspector-muted", latestArtifact.observedAt
+        ? `Produced ${exactTime(latestArtifact.observedAt)}` : "Production time not reported"),
+    );
+    if (latestArtifact.reference) {
+      const reference = node("details", "operation-invocation");
+      reference.append(
+        node("summary", "", "Show output reference"),
+        node("code", "", safeText(latestArtifact.reference, 128)),
+      );
+      artifact.append(reference);
+    }
+    wrapper.append(inspectorSection("Latest bounded output", artifact));
+  }
+
+  const relatedItem = operationRelatedItem(schedule.taskId, state.orientation?.items);
+  if (relatedItem) {
+    const related = node("div", "operation-inspector-copy");
+    related.append(
+      node("p", "", relatedItem.title || "Related product work"),
+      button("control-button", "Open related work", () => {
+        selectDescriptor({ kind: "item", id: relatedItem.id }, { focus: false });
+        announce("Opened the related work in Details.");
+      }),
+    );
+    wrapper.append(inspectorSection("Related work", related));
+  }
+
+  const internals = node("details", "internals");
+  internals.append(node("summary", "", "Technical identifiers"));
+  const internalsList = node("dl", "clock-list");
+  internalsList.append(
+    node("dt", "", "Job ID"), node("dd", "mono", schedule.id || "Unknown"),
+    node("dt", "", "Related task"), node("dd", "mono", schedule.taskId || "Not supplied"),
+  );
+  internals.append(internalsList);
+  wrapper.append(internals);
+  target.replaceChildren(wrapper);
+  $("#ledger-inspector").setAttribute(
+    "aria-label", `Details for ${safeText(schedule.label || schedule.id, 180)}`);
+}
+
+function renderAgentSessionInspector(target, session) {
+  if (!session) return renderInspector(null);
+  const ownerItems = state.data?.ownerControl?.items || [];
+  const headline = agentSessionHeadline(session, ownerItems);
+  const wrapper = node("article", "dossier operation-dossier");
+  const header = node("header", "dossier-header");
+  header.append(node("span", "dossier-glyph", "◇"), node("div", ""));
+  header.lastChild.append(
+    node("h2", "", headline),
+    node("p", "dossier-identity", `Agent session · ${agentSessionStateLabel(session.state)}`),
+  );
+  wrapper.append(header);
+  wrapper.append(inspectorSection("What this state means", agentSessionGuidance(session)));
+  const facts = node("dl", "clock-list");
+  facts.append(
+    node("dt", "", "Runs through"), node("dd", "", agentSessionRunnerLabel(session)),
+    node("dt", "", "Agent"), node("dd", "", safeText(session?.runner?.agent, 120) || "Not reported"),
+    node("dt", "", "Started"), node("dd", "", session.startedAt ? exactTime(session.startedAt) : "Not reported"),
+    node("dt", "", "Last activity"), node("dd", "", session.updatedAt ? exactTime(session.updatedAt) : "Not reported"),
+  );
+  wrapper.append(inspectorSection("Session observation", facts));
+  const relatedItem = operationRelatedItem(session.taskId, state.orientation?.items);
+  if (relatedItem) {
+    const related = node("div", "operation-inspector-copy");
+    related.append(
+      node("p", "", relatedItem.title || "Related product work"),
+      button("control-button", "Open related work", () => {
+        selectDescriptor({ kind: "item", id: relatedItem.id }, { focus: false });
+        announce("Opened the related work in Details.");
+      }),
+    );
+    wrapper.append(inspectorSection("Related work", related));
+  } else {
+    wrapper.append(inspectorSection(
+      "Related work", "No exact owner-plan item is linked to this session."));
+  }
+  const internals = node("details", "internals");
+  internals.append(node("summary", "", "Technical identifiers"));
+  const internalsList = node("dl", "clock-list");
+  internalsList.append(
+    node("dt", "", "Session reference"), node("dd", "mono", safeText(session.id, 128) || "Unknown"),
+    node("dt", "", "Related task"), node("dd", "mono", safeText(session.taskId, 128) || "Not supplied"),
+  );
+  internals.append(internalsList);
+  wrapper.append(internals);
+  target.replaceChildren(wrapper);
+  $("#ledger-inspector").setAttribute("aria-label", `Details for ${safeText(headline, 180)}`);
 }
 
 function renderChangeInspector(target, change) {
@@ -3873,12 +4089,15 @@ globalThis.HFLedgerUI = Object.freeze({
   operationRunLabel,
   operationHealth,
   operationHealthLabel,
+  operationStatusExplanation,
+  operationRecoveryGuidance,
   operationRunnerLabel,
   operationArtifactKindLabel,
   operationRelatedItem,
   agentSessionStateLabel,
   agentSessionRunnerLabel,
   agentSessionHeadline,
+  agentSessionGuidance,
   groupOperationsByRunner,
   calendarDateKey,
   calendarEventDateKey,

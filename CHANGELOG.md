@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Made agent-session and recurring-job rows open exact, keyboard-accessible
+  Details dossiers. Failed and missed jobs now explain the bounded reported
+  outcome, timing, responsible runner, and a conservative recovery step;
+  healthy, running, paused, and unknown states remain explicit. Viewing a job
+  never retries it, changes its schedule, reads a conversation, or invents an
+  unreported root cause.
 - Added bounded external-agent output observation to Operations. Version-3
   reports can associate a job with one exact task and one latest candidate
   research packet, report, evidence record, or generic output. Owners see the

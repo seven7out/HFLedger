@@ -130,7 +130,10 @@ Agent jobs use the same rule. The owner sees what the job does, who runs it,
 when it runs, whether its latest run worked, and at most one plain-language
 latest output. Exact task links can open related product work. Opaque output
 references remain secondary, and raw conversations, prompts, filesystem paths,
-and agent conclusions never become owner-facing truth through Operations.
+and agent conclusions never become owner-facing truth through Operations. Each
+session and job opens the existing Details inspector. A problematic job explains
+the bounded reported outcome and a safe next step without implying that
+HFLedger knows an unreported root cause or has authority to retry the work.
 
 **Refresh now** supports production health and keeping agents unblocked. It
 scans each already configured read-only source for the selected workspace,

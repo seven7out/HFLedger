@@ -213,6 +213,14 @@ Jobs are grouped by runner and problematic jobs appear first within their
 group. Failed, missed, stale, invalid, and unconfigured reporting cannot appear
 healthy.
 
+Every session and job row is an exact mouse and keyboard selection target for
+the existing Details inspector. Job Details leads a problematic state with the
+bounded reported failure or missed-run explanation, then shows a conservative
+next step, purpose, runner, cadence, last/next timing, exact related work, and
+the optional bounded output. When the report does not supply an underlying
+cause, Details says so by limiting its claim to the reported outcome. It never
+retries, pauses, enables, or edits work.
+
 Version-3 operations reports may attach one exact related task and one bounded
 latest artifact to a job. The owner sees its product summary, kind, and time and
 can open related work in Details. The opaque artifact reference stays behind a

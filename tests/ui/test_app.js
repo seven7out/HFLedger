@@ -201,6 +201,26 @@ test("operations uses closed owner-facing health labels", () => {
   assert.equal(ui.operationHealth({ enabled: true, lastRun: { status: "succeeded" } }), "healthy");
   assert.equal(ui.operationHealth({ enabled: true, lastRun: { status: "failed" } }), "problematic");
   assert.equal(ui.operationHealthLabel("problematic"), "Problematic");
+  assert.equal(
+    ui.operationStatusExplanation({ enabled: true, lastRun: { status: "failed" } }),
+    "The latest reported run failed.",
+  );
+  assert.equal(
+    ui.operationStatusExplanation({ enabled: true, lastRun: { status: "missed" } }),
+    "The expected run was not reported as completed.",
+  );
+  assert.match(
+    ui.operationRecoveryGuidance({
+      enabled: true,
+      lastRun: { status: "failed" },
+      runner: { name: "Example Agent" },
+    }),
+    /ask Example Agent to inspect the failed run.*HFLedger will not retry it/,
+  );
+  assert.equal(
+    ui.operationRecoveryGuidance({ enabled: true, lastRun: { status: "succeeded" } }),
+    "No recovery action is indicated by the latest report.",
+  );
   assert.equal(ui.operationRunnerLabel({ runner: { name: "Example Agent", model: "Model One" } }), "Example Agent · Model One");
   assert.equal(ui.operationArtifactKindLabel("candidate_research"), "Candidate research");
   assert.equal(ui.operationArtifactKindLabel("report"), "Report");
@@ -239,6 +259,8 @@ test("agent sessions use product headlines and keep runtime identity secondary",
   assert.equal(ui.agentSessionStateLabel("working"), "Working");
   assert.equal(ui.agentSessionStateLabel("stopped"), "Stopped");
   assert.equal(ui.agentSessionStateLabel("unrecognized"), "Unknown");
+  assert.match(ui.agentSessionGuidance({ state: "waiting" }), /cannot infer.*waiting on the owner/);
+  assert.match(ui.agentSessionGuidance({ state: "problematic" }), /does not read conversations/);
 });
 
 test("pane resize continues and cleans up after the pointer leaves the divider", () => {

@@ -20,7 +20,9 @@ responsible for them and can optionally show metadata-only Berd sessions as
 working, waiting, stopped, or problematic. A job may expose one bounded latest
 output and an exact related-task link without importing a conversation. Product
 task headlines lead; model, harness, cadence, output references, source
-references, and commands remain secondary detail.
+references, and commands remain secondary detail. Selecting any session or job
+opens Details with its exact state, timing, responsibility, and safe next step;
+Details observes work but never retries or changes it.
 An owner-only manual task has a separate **Mark
 complete** action because the owner, not an agent, knows whether that action was
 performed.

@@ -83,11 +83,31 @@ class TodayUIContractTests(unittest.TestCase):
                 "Start in Claude Code", "buildAgentPrompt",
                 "Show command", "No run has been recorded yet.",
                 "Candidate research", "Open related work", "Show output reference",
-                "No agent sessions are active", "The observer is connected."):
+                "No agent sessions are active", "The observer is connected.",
+                "registerOperationRow", 'kind: "operation-schedule"',
+                'kind: "agent-session"', "Why this is problematic",
+                "What to do", "HFLedger will not retry it."):
             self.assertIn(required, markup + script + style)
         self.assertIn("Execution status remains agent-reported", script)
         self.assertIn("Urgent is always the first five in Exact order", script)
         self.assertNotIn("Run command", script)
+
+    def test_operations_rows_are_keyboard_selectable_and_open_details(self):
+        script = JS.read_text(encoding="utf-8")
+        style = CSS.read_text(encoding="utf-8")
+        helper = script[
+            script.index("function registerOperationRow"):
+            script.index("function openCalendarEvent")
+        ]
+        self.assertIn('row.tabIndex = 0', helper)
+        self.assertIn('row.setAttribute("role", "group")', helper)
+        self.assertIn('row.setAttribute("aria-current", "false")', helper)
+        self.assertIn('event.key !== "Enter" && event.key !== " "', helper)
+        self.assertIn('event.stopPropagation()', helper)
+        self.assertIn('selectionAttribute: "aria-current"', helper)
+        self.assertIn("renderOperationScheduleInspector", script)
+        self.assertIn("renderAgentSessionInspector", script)
+        self.assertIn(".operation-row[data-row-key].is-selected", style)
 
     def test_calendar_is_a_real_owner_view_with_editable_need_by_dates(self):
         markup = HTML.read_text(encoding="utf-8")
