@@ -17,6 +17,9 @@ SETTINGS_CSS = NATIVE / "src" / "styles.css"
 RUST = NATIVE / "src-tauri" / "src" / "lib.rs"
 TAURI_CONFIG = NATIVE / "src-tauri" / "tauri.conf.json"
 CAPABILITY = NATIVE / "src-tauri" / "capabilities" / "default.json"
+BOARD_CAPABILITY = (
+    NATIVE / "src-tauri" / "capabilities" / "board-agent-handoff.json"
+)
 
 
 class SettingsSearchSeparationTests(unittest.TestCase):
@@ -58,10 +61,11 @@ class SettingsSearchSeparationTests(unittest.TestCase):
         self.assertIn('"view.commands": focusGlobalSearch', dispatch)
         self.assertNotIn('"help.commands"', dispatch)
 
-    def test_settings_handoff_is_exact_and_does_not_add_board_ipc(self):
+    def test_settings_handoff_is_exact_and_keeps_agent_ipc_separate(self):
         script = APP_JS.read_text(encoding="utf-8")
         source = RUST.read_text(encoding="utf-8")
         capability = json.loads(CAPABILITY.read_text(encoding="utf-8"))
+        board_capability = json.loads(BOARD_CAPABILITY.read_text(encoding="utf-8"))
 
         self.assertIn('location.assign("/__hfledger/settings")', script)
         self.assertIn('const SETTINGS_NAVIGATION_PATH: &str = "/__hfledger/settings";', source)
@@ -91,6 +95,10 @@ class SettingsSearchSeparationTests(unittest.TestCase):
         self.assertRegex(builder, r"show_settings\(&settings_app\);\s*false")
         self.assertEqual(capability["windows"], ["main"])
         self.assertEqual(capability["webviews"], ["settings-panel"])
+        self.assertNotIn("allow-open-agent-session", capability["permissions"])
+        self.assertEqual(board_capability["windows"], ["board"])
+        self.assertEqual(
+            board_capability["permissions"], ["allow-open-agent-session"])
         self.assertIn('WebviewBuilder::new(', source)
         self.assertIn('"settings-panel"', source)
         self.assertIn(".add_child(", source)

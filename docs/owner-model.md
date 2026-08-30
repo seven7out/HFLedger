@@ -74,6 +74,11 @@ styling. Card counts and flow labels use the vocabulary above, while any source
 or implementation detail remains available only through secondary links or the
 existing evidence inspector.
 
+Each card-count box and product-flow stage is an owner navigation control. It
+opens the exact items represented by that count in the current validated view;
+an empty count opens an honest empty state. The filtered list keeps the same
+plain product headlines and secondary evidence drill-down used everywhere else.
+
 When the native production monitor is enabled, its observation replaces the
 stored production-health snapshot on Today without changing the authoritative
 workspace. The primary sentence remains product-shaped. “Checked a minute ago”
@@ -96,12 +101,48 @@ priority field. HFLedger supplies deterministic automatic starting sections for
 the remaining work, labels them as suggestions, and lets the owner move any
 item. An owner-chosen section always overrides the automatic suggestion.
 
+Selecting a priority always opens the same owner-readable product brief in
+Details. The **Start work** handoff supports the keep-agents-unblocked zone: it
+translates that brief into a bounded prompt that names the product outcome,
+importance, definition of done, risks, and authority boundary. Before work, the
+prompt requires the agent to read relevant project instructions and resource
+packets, verify that the task remains unfinished, inspect current state, and
+research unresolved facts from authoritative sources when needed. Browser use
+can copy it. The Mac app can also open a blank named local agent CLI after
+copying it, but the owner still reviews, pastes, and submits the text. HFLedger
+never treats observed task content as executable instructions or deployment
+authority.
+
 Calendar supports priority-setting and keeping agents unblocked. It combines
 only dates that imply future action: owner need-by dates, source deadlines,
 decision deadlines, deferred items returning for attention, and the next run of
 enabled scheduled work. Routine created, edited, and evidence timestamps do not
 become calendar events. Task dates are owner-editable from Priorities; decision
 and schedule dates remain read-only projections of their authoritative source.
+
+Operations also supports keeping agents unblocked. Its primary session rows use
+the linked product task headline and a plain working, waiting, stopped, problem,
+or unknown state. Harness, model, agent identity, timestamps, and source ids are
+secondary. Runtime state never proves that work is complete or that the owner
+is blocking it, and it never files a card automatically.
+
+Agent jobs use the same rule. The owner sees what the job does, who runs it,
+when it runs, whether its latest run worked, and at most one plain-language
+latest output. Exact task links can open related product work. Opaque output
+references remain secondary, and raw conversations, prompts, filesystem paths,
+and agent conclusions never become owner-facing truth through Operations. Each
+session and job opens the existing Details inspector. A problematic job explains
+the bounded reported outcome and a safe next step without implying that
+HFLedger knows an unreported root cause or has authority to retry the work.
+
+**Refresh now** supports production health and keeping agents unblocked. It
+scans each already configured read-only source for the selected workspace,
+reconciles pending events when that workspace is writable, and reloads the
+validated owner view. Observer workspaces never mutate their authoritative
+board, ledger, or configuration. The result is one plain sentence: up to date,
+partially unreachable, no sources connected, or a scan already running. It
+never discovers new sources, changes configuration, runs agent work, or grants
+delivery authority.
 
 Opening queue work leads with a bounded product brief derived from the
 authoritative task: **What changes**, **Why it matters**, **What done looks

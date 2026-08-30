@@ -21,6 +21,9 @@ workspace directly in its native Today window.
 - native View/Item commands for Today, Changes, All Work, Shipped Log, Watched,
   filtering, inspector/sidebar visibility, open, acknowledge, snooze, watch,
   and Copy Context;
+- a priority handoff that copies an owner-readable prompt and can open a blank
+  local Codex or Claude Code CLI session without placing observed text in a
+  process argument;
 - bounded local Command-K search over already-projected metadata;
 - an in-window Settings panel with General, Appearance, Workspaces, and
   Data & Diagnostics sections, plus persistent Light or Dark appearance and
@@ -33,9 +36,12 @@ workspace directly in its native Today window.
   adapter files, without recursive discovery or a primary Refresh button;
 - `.app` and DMG builds with signature, bundle-integrity, and privacy checks.
 
-The loopback board has no general Tauri IPC authority. Native commands enter
-the page only as an allowlisted one-way event; page state returns through the
-closed loopback API. Settings is a separate capability-scoped child webview
+The loopback board has no general Tauri IPC authority. Native menu commands
+enter the page only as an allowlisted one-way event. The one exception is a
+separate capability that permits the exact active loopback origin to call only
+the closed `open_agent_session` target enum; it carries no task text, prompt,
+path, or shell fragment. Page state otherwise returns through the closed
+loopback API. Settings is a separate capability-scoped child webview
 shown inside the Today window, so it can own filesystem selection and process
 control without granting IPC to the served board. The standalone native
 settings surface remains only for first-run onboarding and recovery before a

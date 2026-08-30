@@ -8,7 +8,7 @@ import threading
 import unittest
 
 from app import server
-from core import operations, owner_control, schema, store
+from core import operations, owner_control, schema, session_observer, store
 from tests.helpers import new_home
 
 
@@ -53,6 +53,17 @@ def operation_report(observed_at="2026-08-14T11:55:00+00:00", status="succeeded"
     }
     if version == 1:
         report["schedules"][0].pop("runner")
+    if version >= 3:
+        report["schedules"][0].update({
+            "taskId": "task-menu",
+            "latestArtifact": {
+                "kind": "candidate_research",
+                "label": "Customer pickup themes",
+                "summary": "A fictional research packet is ready for product review.",
+                "observedAt": "2026-08-14T11:53:00+00:00",
+                "reference": "packet:fictional-pickup-themes",
+            },
+        })
     return report
 
 
@@ -382,12 +393,16 @@ class OperationsTests(unittest.TestCase):
         self.assertEqual(healthy["counts"], {
             "commands": 1, "schedules": 1, "failing": 0, "runners": 1,
             "healthy": 1, "problematic": 0, "running": 0, "unknown": 0,
-            "paused": 0,
+            "paused": 0, "sessions": 0, "sessionsWorking": 0,
+            "sessionsWaiting": 0, "sessionsStopped": 0,
+            "sessionsProblematic": 0, "sessionsUnknown": 0,
+            "sessionsUnlinked": 0,
         })
         self.assertEqual(healthy["schedules"][0]["health"], "healthy")
         self.write_report(operation_report(status="failed"))
         degraded = operations.build_view(self.home, NOW)
         self.assertEqual(degraded["state"], "degraded")
+        self.assertEqual(degraded["summary"], "1 operation needs attention.")
         self.assertEqual(degraded["schedules"][0]["health"], "problematic")
         self.write_report(operation_report(observed_at="2026-08-14T01:00:00+00:00"))
         stale = operations.build_view(self.home, NOW)
@@ -398,7 +413,7 @@ class OperationsTests(unittest.TestCase):
         self.write_report(operation_report(version=1))
         view = operations.build_view(self.home, NOW)
         self.assertEqual(view["state"], "healthy")
-        self.assertEqual(view["version"], 2)
+        self.assertEqual(view["version"], 4)
         self.assertEqual(view["schedules"][0]["runner"], {
             "type": "unknown", "name": "Runner not reported", "model": None,
         })
@@ -410,6 +425,40 @@ class OperationsTests(unittest.TestCase):
         self.assertEqual(operations.build_view(self.home, NOW)["state"], "invalid")
         report = operation_report()
         report["schedules"][0].pop("runner")
+        self.write_report(report)
+        self.assertEqual(operations.build_view(self.home, NOW)["state"], "invalid")
+
+    def test_version_three_links_agent_output_to_related_work(self):
+        self.write_report(operation_report(version=3))
+        view = operations.build_view(self.home, NOW)
+        schedule = view["schedules"][0]
+        self.assertEqual(schedule["taskId"], "task-menu")
+        self.assertEqual(schedule["latestArtifact"], {
+            "kind": "candidate_research",
+            "label": "Customer pickup themes",
+            "summary": "A fictional research packet is ready for product review.",
+            "observedAt": "2026-08-14T11:53:00+00:00",
+            "reference": "packet:fictional-pickup-themes",
+        })
+
+    def test_agent_output_metadata_is_closed_plain_and_path_free(self):
+        invalid_changes = (
+            ("extra", "unsupported"),
+            ("kind", "conversation_transcript"),
+            ("summary", "Inspect commit abcdef1 before accepting this output."),
+            ("reference", "/Users/example/private/report.md"),
+        )
+        for field, value in invalid_changes:
+            with self.subTest(field=field):
+                report = operation_report(version=3)
+                report["schedules"][0]["latestArtifact"][field] = value
+                self.write_report(report)
+                self.assertEqual(
+                    operations.build_view(self.home, NOW)["state"], "invalid")
+
+    def test_agent_output_fields_are_rejected_from_legacy_report_versions(self):
+        report = operation_report(version=3)
+        report["version"] = 2
         self.write_report(report)
         self.assertEqual(operations.build_view(self.home, NOW)["state"], "invalid")
 
@@ -457,6 +506,74 @@ class OperationsTests(unittest.TestCase):
         target.mkdir()
         reports.symlink_to(target, target_is_directory=True)
         self.assertEqual(operations.build_view(self.home, NOW)["state"], "invalid")
+
+    def test_session_freshness_is_independent_and_stale_work_is_not_claimed_active(self):
+        self.write_report(operation_report())
+        session_observer.write_report(self.home, {
+            "version": 1,
+            "source": "berd",
+            "state": "healthy",
+            "observedAt": "2026-08-14T11:50:00+00:00",
+            "staleAfterSeconds": 300,
+            "sessions": [{
+                "id": "fictional-session-1",
+                "state": "working",
+                "startedAt": "2026-08-14T11:00:00+00:00",
+                "updatedAt": "2026-08-14T11:49:00+00:00",
+                "taskId": "task-menu",
+                "runner": {
+                    "harness": "Example harness",
+                    "model": "Example model",
+                    "agent": None,
+                },
+            }],
+        })
+        stale = operations.build_view(self.home, NOW)
+        self.assertEqual(stale["state"], "stale")
+        self.assertEqual(stale["schedules"][0]["health"], "healthy")
+        self.assertEqual(stale["sessions"][0]["state"], "unknown")
+        self.assertEqual(stale["sessions"][0]["reportedState"], "working")
+        self.assertEqual(stale["counts"]["sessionsWorking"], 0)
+        self.assertEqual(stale["counts"]["sessionsUnknown"], 1)
+
+    def test_invalid_session_report_does_not_hide_a_valid_operations_report(self):
+        self.write_report(operation_report())
+        path = Path(self.home, session_observer.REPORT_RELATIVE_PATH)
+        path.write_text('{"version": 1, "messages": ["not allowed"]}')
+        path.chmod(0o600)
+        view = operations.build_view(self.home, NOW)
+        self.assertEqual(view["state"], "invalid")
+        self.assertEqual(view["schedules"][0]["health"], "healthy")
+        self.assertEqual(view["sessions"], [])
+
+    def test_secret_shaped_session_labels_invalidate_only_session_reporting(self):
+        self.write_report(operation_report())
+        path = Path(self.home, session_observer.REPORT_RELATIVE_PATH)
+        report = {
+            "version": 1,
+            "source": "berd",
+            "state": "healthy",
+            "observedAt": "2026-08-14T11:50:00+00:00",
+            "staleAfterSeconds": 300,
+            "sessions": [{
+                "id": "fictional-session-1",
+                "state": "working",
+                "startedAt": None,
+                "updatedAt": "2026-08-14T11:49:00+00:00",
+                "taskId": None,
+                "runner": {
+                    "harness": "Bearer abcdefghijklmnop",
+                    "model": None,
+                    "agent": None,
+                },
+            }],
+        }
+        path.write_text(json.dumps(report))
+        path.chmod(0o600)
+        view = operations.build_view(self.home, NOW)
+        self.assertEqual(view["state"], "invalid")
+        self.assertEqual(view["schedules"][0]["health"], "healthy")
+        self.assertEqual(view["sessions"], [])
 
 
 class OwnerControlServerTests(unittest.TestCase):

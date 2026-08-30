@@ -38,6 +38,23 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertNotIn("Mark done", markup)
         self.assertNotIn("Record outcome", markup)
 
+    def test_refresh_now_is_a_plain_owner_control_with_a_bounded_request(self):
+        markup = HTML.read_text(encoding="utf-8")
+        script = JS.read_text(encoding="utf-8")
+        self.assertIn('id="refresh-button"', markup)
+        self.assertIn(">Refresh now</button>", markup)
+        self.assertIn("Scan every connected source and update this workspace", markup)
+        refresh = script[
+            script.index("async function refreshNow"):
+            script.index("async function loadBoard")
+        ]
+        self.assertIn('request("/api/refresh"', refresh)
+        self.assertIn("schemaVersion: 1, context: state.context", refresh)
+        self.assertIn("Scanning everything…", refresh)
+        self.assertNotIn("readOnly", refresh)
+        for forbidden in ("repository", "path", "command", "prompt"):
+            self.assertNotIn(forbidden, refresh)
+
     def test_owner_control_and_operations_are_product_facing_real_surfaces(self):
         markup = HTML.read_text(encoding="utf-8")
         script = JS.read_text(encoding="utf-8")
@@ -59,13 +76,38 @@ class TodayUIContractTests(unittest.TestCase):
                 "dragstart", "moveOwnerTask", "set-priority", "set-task",
                 'id="owner-complete-dialog"', "Mark complete",
                 "complete-owner-task", "ownerCompletionAvailable",
-                "renderOperations", "Recurring jobs", "Runs through",
+                "renderOperations", "Agent sessions", "Agent jobs & recurring work", "Runs through",
                 "groupOperationsByRunner", "Healthy", "Problematic",
-                "Show command", "No run has been recorded yet."):
+                "Agents now", "Open Operations", "Unlinked agent session",
+                "Start work", "Copy agent prompt", "Start in Codex",
+                "Start in Claude Code", "buildAgentPrompt", "/goal Complete the task below",
+                "Show command", "No run has been recorded yet.",
+                "Candidate research", "Open related work", "Show output reference",
+                "No agent sessions are active", "The observer is connected.",
+                "registerOperationRow", 'kind: "operation-schedule"',
+                'kind: "agent-session"', "Why this is problematic",
+                "What to do", "HFLedger will not retry it."):
             self.assertIn(required, markup + script + style)
         self.assertIn("Execution status remains agent-reported", script)
         self.assertIn("Urgent is always the first five in Exact order", script)
         self.assertNotIn("Run command", script)
+
+    def test_operations_rows_are_keyboard_selectable_and_open_details(self):
+        script = JS.read_text(encoding="utf-8")
+        style = CSS.read_text(encoding="utf-8")
+        helper = script[
+            script.index("function registerOperationRow"):
+            script.index("function openCalendarEvent")
+        ]
+        self.assertIn('row.tabIndex = 0', helper)
+        self.assertIn('row.setAttribute("role", "group")', helper)
+        self.assertIn('row.setAttribute("aria-current", "false")', helper)
+        self.assertIn('event.key !== "Enter" && event.key !== " "', helper)
+        self.assertIn('event.stopPropagation()', helper)
+        self.assertIn('selectionAttribute: "aria-current"', helper)
+        self.assertIn("renderOperationScheduleInspector", script)
+        self.assertIn("renderAgentSessionInspector", script)
+        self.assertIn(".operation-row[data-row-key].is-selected", style)
 
     def test_calendar_is_a_real_owner_view_with_editable_need_by_dates(self):
         markup = HTML.read_text(encoding="utf-8")
@@ -86,6 +128,7 @@ class TodayUIContractTests(unittest.TestCase):
         for required in (
                 '"What changes"', '"Why it matters"', '"What done looks like"',
                 '"Risks or constraints"', '"Current state"',
+                "const displayTitle", '"dossier-source-title"',
                 'node("details", "dossier-diagnostics")',
                 '"Agent evidence & diagnostics"', '"Observation gaps"'):
             self.assertIn(required, script)
@@ -93,7 +136,24 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertNotIn("No product outcome has been added yet.", script)
         self.assertNotIn("Open source unavailable", script)
 
-    def test_client_has_no_authoritative_write_or_browser_storage_path(self):
+    def test_priority_rows_select_their_exact_item_and_show_selected_state(self):
+        script = JS.read_text(encoding="utf-8")
+        style = CSS.read_text(encoding="utf-8")
+        priority_row = script[
+            script.index("function renderPriorityRow"):
+            script.index("function priorityModeControl")
+        ]
+        self.assertIn('row.setAttribute("role", "group")', priority_row)
+        self.assertIn('row.setAttribute("aria-current", "false")', priority_row)
+        self.assertIn(
+            'selectionAttribute: "aria-current"',
+            priority_row,
+        )
+        self.assertIn('event.key !== "Enter" && event.key !== " "', priority_row)
+        self.assertIn("event.stopPropagation()", priority_row)
+        self.assertIn('.owner-priority-row.is-selected', style)
+
+    def test_client_has_only_bounded_owner_local_and_refresh_post_paths(self):
         script = JS.read_text(encoding="utf-8")
         for forbidden in (
             "innerHTML", "outerHTML", "insertAdjacentHTML", "localStorage", "sessionStorage",
@@ -102,7 +162,7 @@ class TodayUIContractTests(unittest.TestCase):
             self.assertNotIn(forbidden, script)
         post_paths = re.findall(r'request\("([^\"]+)"\s*,\s*\{\s*method:\s*"POST"', script)
         self.assertEqual(post_paths, [
-            "/api/local-state/command", "/api/owner-control/command"])
+            "/api/local-state/command", "/api/owner-control/command", "/api/refresh"])
         self.assertNotIn("/api/tasks/reorder", script)
         self.assertNotIn("/api/tasks/done", script)
         self.assertIn("textContent", script)
@@ -127,9 +187,32 @@ class TodayUIContractTests(unittest.TestCase):
         self.assertIn("prefers-reduced-motion: reduce", style)
         for forbidden in (
             "FileReader", "showOpenFilePicker", "webkitRequestFileSystem",
-            "readTextFile", "invoke(", "shell.open", "quick-look/api",
+            "readTextFile", "shell.open", "quick-look/api",
         ):
             self.assertNotIn(forbidden, script)
+
+    def test_agent_handoff_has_one_bounded_native_command_and_no_prompt_payload(self):
+        script = JS.read_text(encoding="utf-8")
+        invocations = re.findall(
+            r'__TAURI__\.core\.invoke\("([^"]+)"\s*,\s*\{\s*([^}]*)\}', script)
+        self.assertEqual(invocations, [("open_agent_session", "agent ")])
+        launch = script[
+            script.index("async function openAgentSession"):
+            script.index("function openSafeTarget")
+        ]
+        self.assertIn(
+            'if (!await copyAgentPrompt(item, { includeGoal: agent === "codex" })) return',
+            launch)
+        self.assertIn('invoke("open_agent_session", { agent })', launch)
+        for forbidden in ("content }", "prompt }", "item }", "sourceItemRef"):
+            self.assertNotIn(forbidden, launch)
+
+        capability = (ROOT / "native" / "macos-host" / "src-tauri" /
+                      "capabilities" / "board-agent-handoff.json").read_text(encoding="utf-8")
+        self.assertIn('"local": false', capability)
+        self.assertIn('"windows": ["board"]', capability)
+        self.assertIn('"allow-open-agent-session"', capability)
+        self.assertNotIn("core:default", capability)
 
     def test_decision_deck_keeps_the_bounded_surface_without_undo_controls(self):
         current = CSS.read_text(encoding="utf-8")
@@ -176,6 +259,9 @@ class TodayUIContractTests(unittest.TestCase):
         failing_rule = style[style.index(".owner-pipeline-stage[data-stage"):
                              style.index(".ledger-section", style.index(".owner-pipeline-stage[data-stage"))]
         self.assertIn("item.dataset.stage = stage.id", summary)
+        self.assertIn("owner-summary-button", summary)
+        self.assertIn("openOwnerSummaryDrilldown", summary)
+        self.assertIn("Show these items", summary)
         self.assertIn("var(--line)", failing_rule)
         self.assertNotIn("var(--danger)", failing_rule)
         self.assertNotIn(".state-failing", failing_rule)

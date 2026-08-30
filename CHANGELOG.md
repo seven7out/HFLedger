@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+- Made agent-session and recurring-job rows open exact, keyboard-accessible
+  Details dossiers. Failed and missed jobs now explain the bounded reported
+  outcome, timing, responsible runner, and a conservative recovery step;
+  healthy, running, paused, and unknown states remain explicit. Viewing a job
+  never retries it, changes its schedule, reads a conversation, or invents an
+  unreported root cause.
+- Added bounded external-agent output observation to Operations. Version-3
+  reports can associate a job with one exact task and one latest candidate
+  research packet, report, evidence record, or generic output. Owners see the
+  product summary and can open related work; transcripts, prompts, paths, and
+  automatic status or priority changes remain outside the contract.
+- Made the entire priority row open its matching Details dossier, with visible
+  selected and keyboard states. Details now includes a bounded product-shaped
+  agent handoff: copy the prompt in any browser, or use the Mac app to copy it
+  and open a blank local Codex or Claude Code CLI session. Observed task text is
+  never submitted automatically or passed to native process arguments. Every
+  handoff tells the agent to read relevant resource packets and prior evidence,
+  confirm the task is still unfinished, and research unresolved facts from
+  authoritative sources before changing anything. Browser copies and Codex
+  launches now begin with a durable `/goal` whose stopping condition is the
+  verified product outcome and definition of done; Claude Code launches retain
+  the same handoff without the Codex-only command.
+- Made every Today owner-card count and product-flow stage an accessible
+  navigation control that opens the exact represented items, including an
+  explicit empty state for zero-count summaries.
+- Added a global **Refresh now** control. It reconciles pending ledger events,
+  runs every configured read-only source for the selected workspace, reloads
+  the validated owner view, and reports healthy, degraded, idle, or already
+  running outcomes in plain language while preserving the last successful view.
+  Observer workspaces scan without mutating their authoritative board, ledger,
+  or configuration.
+- Added an optional metadata-only Berd session observer. Today summarizes
+  working, waiting, stopped, and problem states; Operations leads linked
+  sessions with product task headlines and keeps runtime identity secondary.
+  The adapter requests zero messages, drops titles and paths, uses exact task-id
+  links only, and keeps session freshness independent from recurring-job
+  freshness. The native host now uses a bounded readiness response so a large
+  valid workspace cannot be mistaken for a failed engine during cold start.
 - Expanded Operations into a cross-agent recurring-jobs registry. Jobs are
   grouped by agent or local runner and show the model when known, product
   purpose, cadence, next run, and a derived owner-facing health state. Existing

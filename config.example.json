@@ -47,6 +47,15 @@
             "maxFiles": 200
           }
         ]
+      },
+      "berd": {
+        "enabled": false,
+        "executable": "berdctl",
+        "sessionLimit": 20,
+        "staleAfterSeconds": 300,
+        "sessionTasks": {
+          "fictional-session-1": "task-example"
+        }
       }
     },
     "workPolicy": {

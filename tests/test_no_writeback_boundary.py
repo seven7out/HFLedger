@@ -15,6 +15,7 @@ import subprocess
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 from app import server
 from core import ledger, orientation, reconcile, schema, store
@@ -29,6 +30,10 @@ DECK_JS = ROOT / "app" / "static" / "deck.js"
 NATIVE_LIB = ROOT / "native" / "macos-host" / "src-tauri" / "src" / "lib.rs"
 NATIVE_CAPABILITY = (
     ROOT / "native" / "macos-host" / "src-tauri" / "capabilities" / "default.json"
+)
+NATIVE_BOARD_CAPABILITY = (
+    ROOT / "native" / "macos-host" / "src-tauri" / "capabilities" /
+    "board-agent-handoff.json"
 )
 UTC = datetime.timezone.utc
 FIXED_NOW = datetime.datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
@@ -340,6 +345,8 @@ class NoWriteBackBoundaryTests(unittest.TestCase):
         self.assertEqual(
             set(server.LOCAL_POST_ROUTES), {"/api/local-state/command"})
         self.assertEqual(
+            set(server.OBSERVATION_POST_ROUTES), {"/api/refresh"})
+        self.assertEqual(
             set(server.OWNER_CONTROL_POST_ROUTES),
             {"/api/owner-control/command"})
 
@@ -350,6 +357,25 @@ class NoWriteBackBoundaryTests(unittest.TestCase):
                 self.assertEqual(response.status, 403, (path, payload))
                 self.assertEqual(payload, {"error": "workspace is read-only"})
                 self._assert_authority_unchanged(before, path)
+
+    def test_read_only_refresh_scans_without_authoritative_writeback(self):
+        context = self.httpd.runtime.context("main")
+        context.config["automation"] = {"sources": {}}
+        report = {
+            "status": "healthy",
+            "completedAt": "2026-07-20T12:00:00+00:00",
+            "sources": [{"source": "berd", "status": "healthy"}],
+        }
+        before = self._authority_snapshot()
+        with mock.patch.object(server, "collect_sources", return_value=report) as collect:
+            response, payload = self._request("POST", "/api/refresh", {
+                "schemaVersion": 1,
+                "context": "main",
+            })
+        self.assertEqual(response.status, 200)
+        self.assertEqual(payload["status"], "healthy")
+        collect.assert_called_once_with(str(self.home), config=context.config)
+        self._assert_authority_unchanged(before, "/api/refresh")
 
     def test_unknown_commands_and_argument_smuggling_fail_closed(self):
         item_id = self.item["id"]
@@ -584,7 +610,8 @@ process.stdout.write(JSON.stringify({
         post_targets = re.findall(
             r'request\("([^\"]+)"\s*,\s*\{\s*method:\s*"POST"', script)
         self.assertEqual(post_targets, [
-            "/api/local-state/command", "/api/owner-control/command"])
+            "/api/local-state/command", "/api/owner-control/command",
+            "/api/refresh"])
 
     def test_projected_link_resolver_rejects_local_and_credentialed_targets(self):
         def web(target):
@@ -642,9 +669,18 @@ process.stdout.write(JSON.stringify({
         client = APP_JS.read_text(encoding="utf-8")
         markup = APP_HTML.read_text(encoding="utf-8")
         capability = json.loads(NATIVE_CAPABILITY.read_text(encoding="utf-8"))
+        board_capability = json.loads(
+            NATIVE_BOARD_CAPABILITY.read_text(encoding="utf-8"))
 
         self.assertEqual(capability["windows"], ["main"])
-        self.assertEqual(capability["permissions"], ["core:default"])
+        self.assertEqual(capability["permissions"][0], "core:default")
+        self.assertNotIn("allow-open-agent-session", capability["permissions"])
+        self.assertEqual(board_capability["windows"], ["board"])
+        self.assertFalse(board_capability["local"])
+        self.assertEqual(
+            board_capability["permissions"], ["allow-open-agent-session"])
+        self.assertNotIn("core:default", board_capability["permissions"])
+        self.assertEqual(len(board_capability["remote"]["urls"]), 29)
 
         router = native[
             native.index("fn native_command_for_menu_id"):
@@ -654,7 +690,8 @@ process.stdout.write(JSON.stringify({
         self.assertEqual(native_menu_ids, {
             "view.today", "view.priorities", "view.calendar", "view.operations",
             "view.changes", "view.all-work", "view.shipped-log",
-            "view.watched", "view.filter", "view.commands", "view.reload",
+            "view.watched", "view.filter", "view.commands", "view.refresh-now",
+            "view.reload",
             "pane.toggle-sidebar", "pane.toggle-inspector", "file.open-source",
             "item.open", "item.acknowledge", "item.snooze", "item.watch",
             "edit.copy-context", "item.copy-context", "help.commands",

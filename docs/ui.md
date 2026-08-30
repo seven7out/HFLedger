@@ -77,6 +77,16 @@ The test site is a proving ground and is explicitly allowed to break. A failure
 there keeps neutral styling and says “Allowed to break.” Only production
 degradation uses alarm styling.
 
+Every card-count box and product-flow stage is clickable and keyboard
+accessible. Activating one replaces the center list with the exact items behind
+that count, titled with the same owner-facing label, plus a **Back to Today**
+control. A zero count opens an explicit empty state rather than doing nothing.
+
+A compact **Agents now** line follows that primary owner summary when session
+observation is connected. It reports only working, waiting, stopped, and problem
+counts and links to Operations for detail; it does not displace production,
+owner judgments, or product flow.
+
 Below that summary, Today remains ordered by consequence rather than a weighted
 score:
 
@@ -127,6 +137,11 @@ section field, where the owner can choose a suggested section or write a custom
 one. Owner choices always override automatic suggestions. The technical source
 title remains secondary provenance in Details and the edit sheet.
 
+Clicking anywhere on a priority row, or pressing Enter or Space while it is
+focused, selects the exact matching item and refreshes Details. The row's Edit,
+Move, and ordering controls retain their own actions instead of changing the
+selection accidentally.
+
 Opening a queue task leads with its effective product brief: **What changes**,
 **Why it matters**, **What done looks like**, and **Risks or constraints**. An
 owner may clarify the source wording for the first three fields without changing
@@ -134,6 +149,23 @@ the observed task. Missing product meaning is named directly; the interface
 never infers importance from rank, age, or an agent-reported status.
 Implementation-shaped legacy wording is omitted from the primary brief and
 labeled as needing translation.
+
+**Start work** builds a bounded, product-shaped handoff from the same owner
+brief. It includes the outcome, reason, definition of done, risks, need-by date,
+and a reminder that context is not authority. Its **Before starting** section
+tells the agent to read relevant project instructions, resource packets,
+specifications, research, evidence, and prior work; confirm the task is still
+unfinished; inspect the current product; and research unresolved factual
+questions from primary or authoritative sources when needed. Missing, stale,
+or contradictory context is reported instead of guessed through. **Copy agent
+prompt** works in the browser-only interface. In the native Mac app, **Start in
+Codex** and **Start in Claude Code** first copy the appropriate prompt and then
+open a blank local CLI session. The browser copy and Codex launch begin with a
+`/goal` objective whose stopping condition is the verified product outcome and
+definition of done. The Claude Code launch omits that Codex-only command while
+preserving the same handoff body. The owner reviews, pastes, and submits the
+prompt; observed text never enters a native process argument and is never
+executed automatically.
 
 **Product outcomes** appears in the inspector. An unsplit task has **Mark
 product outcome complete**. A mixed task may contain two through twelve parts,
@@ -175,17 +207,36 @@ timestamps into commitments.
 
 ## Operations
 
-Operations answers which recurring jobs exist across agents and local
-automation, who runs each one, which model it uses when known, when it runs,
-what product purpose it serves, and whether it is Healthy, Problematic, Running,
-Unknown, or Paused. Jobs are grouped by runner and problematic jobs appear
-first within their group. Invocation text is hidden in a secondary disclosure.
-Failed, missed, stale, invalid, and unconfigured reporting cannot appear
+Operations answers which agent sessions are working, waiting, stopped, or in
+trouble, plus which agent jobs and recurring work exist across agents and local
+automation.
+Linked sessions lead with the owner-facing product task headline. Runtime
+identity, source reference, cadence, and invocation text remain secondary.
+Jobs are grouped by runner and problematic jobs appear first within their
+group. Failed, missed, stale, invalid, and unconfigured reporting cannot appear
 healthy.
 
-The source is an optional private `reports/operations-latest.json` observation.
-The view never runs a command, installs a schedule, retries work, or grants new
-authority. `ledger operations` returns the same bounded projection for agents.
+Every session and job row is an exact mouse and keyboard selection target for
+the existing Details inspector. Job Details leads a problematic state with the
+bounded reported failure or missed-run explanation, then shows a conservative
+next step, purpose, runner, cadence, last/next timing, exact related work, and
+the optional bounded output. When the report does not supply an underlying
+cause, Details says so by limiting its claim to the reported outcome. It never
+retries, pauses, enables, or edits work.
+
+Version-3 operations reports may attach one exact related task and one bounded
+latest artifact to a job. The owner sees its product summary, kind, and time and
+can open related work in Details. The opaque artifact reference stays behind a
+secondary disclosure. Only candidate research, reports, evidence, or a generic
+output are accepted; conversation text, local paths, and technical prose are
+not an artifact channel. An artifact is an observation, not proof that its
+claims are true or that the related task is complete.
+
+The sources are optional private `reports/operations-latest.json` and
+`reports/session-observer-latest.json` observations. Their freshness is
+evaluated independently. The view never controls an agent, runs a command,
+installs a schedule, retries work, changes task status, or grants new authority.
+`ledger operations` returns the same bounded projection for agents.
 
 ## Evidence, provenance, and two clocks
 
@@ -302,13 +353,18 @@ Owner direction can still be written to its independent append-only lane.
   source or scope.
 - **Invalid projection:** contains the failure. Any last-successful content is
   labeled historical rather than current.
-- **Refresh:** keeps the last successful content visible with `aria-busy`; it
-  does not invent skeleton counts or prose.
+- **Refresh now:** runs every configured read-only source for the selected
+  workspace and reloads the validated view. Writable workspaces first reconcile
+  pending events; observer and imported workspaces scan without changing their
+  authoritative board, ledger, or configuration. It keeps the last successful
+  content visible with `aria-busy` and does not invent skeleton counts or prose.
+  A source failure is reported as degraded; an overlapping scheduled scan is
+  reported as already running.
 - **Browser-only:** supports session triage state but not native menus, durable
   state across process restarts, file watching, Dock badges, or native window
   restoration.
-- **Operations unconfigured:** says commands and recurring jobs have not been
-  connected; it never substitutes an empty green success state.
+- **Operations unconfigured:** says sessions, commands, and recurring jobs have
+  not been connected; it never substitutes an empty green success state.
 
 ## Keyboard and native menus
 
@@ -327,29 +383,35 @@ Window, and Help menus.
 | `W` | Set watch/unwatch through private local state. |
 | Command-F | Filter the current destination only. |
 | Command-K | Focus app-wide search over bounded projected metadata only. |
+| Command-R | Refresh the selected workspace now. |
 | Command-1…5 | Today, Changes, All Work, Shipped Log, Watched. |
 | Escape | Close the topmost transient surface and restore its originating focus. |
 
 Unmodified shortcuts do not fire inside editable controls. Selection moves to
 a nearby row or section when a local action hides the selected row; focus never
 falls silently to the document body. Native menu commands cross into the page
-as one allowlisted command id. The board window receives no general Tauri IPC,
-shell, or filesystem capability.
+as one allowlisted command id. The board window receives no general shell or
+filesystem capability. Its only page-to-native command is the closed
+`open_agent_session` target enum, available solely from the exact active
+loopback origin and carrying no task text or prompt.
 
 The Today toolbar keeps Search and Settings separate. Search is an inline text
 box whose popover contains only ledger-item matches. Settings uses one exact
 native-intercepted loopback sentinel to replace Today with a capability-bounded
 Settings child webview in the same window; the board page itself receives no
-native IPC. Back and the Today menu restore the mounted Today webview. Settings
-retains workspace management, engine recovery, notifications, Launch at Login,
-Reopen Last Board, persistent text size, backups, Finder reveals, diagnostics,
-and quit. Its own Global Search dialog is search-only, while the slash-command
-reference lives in a separate Help dialog.
+other native IPC. Back and the Today menu restore the mounted Today webview.
+Settings retains workspace management, engine recovery, notifications, Launch
+at Login, Reopen Last Board, persistent text size, backups, Finder reveals,
+diagnostics, and quit. Its own Global Search dialog is search-only, while the
+slash-command reference lives in a separate Help dialog.
 
 The native host watches only already configured, allowlisted board, ledger,
 collector, and adapter report files. It rejects symlinks, debounces write
-bursts, and refreshes without a primary Refresh button, recursive discovery,
-`git pull`, or collector enablement. Separately, an owner may enable one
+bursts, and reloads the view automatically without starting another scan. The
+owner-facing **Refresh now** button is separate: it invokes the existing
+reconciler and configured read-only collectors for the selected workspace only.
+It performs no recursive discovery, `git pull`, collector enablement, agent
+work, merge, or deployment. Separately, an owner may enable one
 production-health check for a workspace in native Settings. That address stays
 in private app data, requires HTTPS, follows no redirects, and never enters the
 board or ledger. The monitor checks once per minute while HFLedger is running,

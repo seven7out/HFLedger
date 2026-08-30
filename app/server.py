@@ -21,6 +21,7 @@ from core import (admission, calendar_view, item_metadata, ledger, local_state,
                   reconcile, schema, search_links)  # noqa: E402
 from core.link_safety import resolve_projected_link  # noqa: E402
 from core.store import BoardStore, BoardValidationError, load_config, resolve_home  # noqa: E402
+from collectors import CollectorBusyError, collect as collect_sources  # noqa: E402
 
 
 HOST = "127.0.0.1"
@@ -321,6 +322,7 @@ def _build_owner_today(board, observed_health=None):
         })
     decisions = board.get("decisions", {})
     card_counts = {kind: 0 for kind in admission.CARD_KINDS}
+    card_refs = {kind: [] for kind in admission.CARD_KINDS}
     for item in decisions.get("items", []) if isinstance(decisions, dict) else []:
         if not isinstance(item, dict) or item.get("state", "open") == "deferred":
             continue
@@ -330,26 +332,39 @@ def _build_owner_today(board, observed_health=None):
                     continue
             except ValueError:
                 continue
-        card_counts[_owner_card_kind(item)] += 1
+        kind = _owner_card_kind(item)
+        card_counts[kind] += 1
+        if isinstance(item.get("id"), str):
+            card_refs[kind].append(item["id"])
 
     pipeline_counts = {stage_id: 0 for stage_id, _label in PIPELINE_LABELS}
+    pipeline_refs = {stage_id: [] for stage_id, _label in PIPELINE_LABELS}
     pipeline_counts["ideas-waiting-on-pick"] = card_counts["idea_pick"]
+    pipeline_refs["ideas-waiting-on-pick"] = list(card_refs["idea_pick"])
     for item in board.get("inbox", []) if isinstance(board.get("inbox"), list) else []:
         if isinstance(item, dict) and item.get("status") in (
                 "Inbox", "Needs Clarification", "Needs Spec"):
             pipeline_counts["being-specced"] += 1
+            if isinstance(item.get("id"), str):
+                pipeline_refs["being-specced"].append(item["id"])
     for item in board.get("queue", []) if isinstance(board.get("queue"), list) else []:
         if not isinstance(item, dict):
             continue
         product_stage = item.get("productStage")
         if product_stage in pipeline_counts:
-            pipeline_counts[product_stage] += 1
+            stage_id = product_stage
         elif item.get("status") == "Needs Spec":
-            pipeline_counts["being-specced"] += 1
+            stage_id = "being-specced"
         elif item.get("status") in ("Ready for Build", "In Progress"):
-            pipeline_counts["being-built"] += 1
+            stage_id = "being-built"
         elif item.get("status") in ("Needs Review", "Final Review"):
-            pipeline_counts["test-site"] += 1
+            stage_id = "test-site"
+        else:
+            stage_id = None
+        if stage_id is not None:
+            pipeline_counts[stage_id] += 1
+            if isinstance(item.get("id"), str):
+                pipeline_refs[stage_id].append(item["id"])
     test_site_failing = any(
         isinstance(item, dict) and item.get("productStage") == "test-site" and
         item.get("testSiteState") == "failing"
@@ -357,7 +372,12 @@ def _build_owner_today(board, observed_health=None):
     )
     pipeline = []
     for stage_id, label in PIPELINE_LABELS:
-        stage = {"id": stage_id, "label": label, "count": pipeline_counts[stage_id]}
+        stage = {
+            "id": stage_id,
+            "label": label,
+            "count": pipeline_counts[stage_id],
+            "itemRefs": pipeline_refs[stage_id],
+        }
         if stage_id == "test-site":
             stage.update({
                 "tone": "neutral",
@@ -372,7 +392,12 @@ def _build_owner_today(board, observed_health=None):
     return {
         "productionHealth": production_health_model,
         "cardCounts": [
-            {"kind": kind, "label": CARD_KIND_LABELS[kind], "count": card_counts[kind]}
+            {
+                "kind": kind,
+                "label": CARD_KIND_LABELS[kind],
+                "count": card_counts[kind],
+                "itemRefs": card_refs[kind],
+            }
             for kind in admission.CARD_KINDS
         ],
         "totalCards": sum(card_counts.values()),
@@ -672,6 +697,16 @@ def build_cards_view(runtime, context_id=None):
     response = runtime.shell(context.context_id)
     response.update({"project": context.config["project"], "cards": cards})
     return response
+
+
+def build_runtime_health_view(runtime, context_id=None):
+    """Return the validated engine identity without building the full board."""
+    context = runtime.context(context_id)
+    return {
+        "version": 1,
+        "status": "ready",
+        "project": context.config["project"],
+    }
 
 
 def _assert_source(item, body):
@@ -1046,6 +1081,15 @@ def _validate_local_state_command_body(allowed_context_ids, body):
                 any(ord(character) < 32 or ord(character) == 127
                     for character in cursor)):
             raise local_state.LocalStateError("invalid-arguments", 400)
+    if command == "snooze-attention":
+        until = arguments.get("snoozedUntil")
+        try:
+            parsed_until = datetime.datetime.fromisoformat(
+                until.replace("Z", "+00:00"))
+            if parsed_until.tzinfo is None:
+                raise ValueError
+        except (AttributeError, TypeError, ValueError):
+            raise local_state.LocalStateError("invalid-arguments", 400)
     return context_id
 
 
@@ -1197,6 +1241,68 @@ def owner_control_command(runtime, body):
     return {"event": event, "ownerControl": refreshed}
 
 
+def refresh_workspace(runtime, body):
+    """Refresh the selected workspace without crossing its write boundary."""
+    fields = {"schemaVersion", "context"}
+    missing = sorted(fields - set(body))
+    unknown = sorted(set(body) - fields)
+    if missing:
+        raise ApiError(400, "missing refresh field(s): %s" % ", ".join(missing))
+    if unknown:
+        raise ApiError(400, "unsupported refresh field(s): %s" % ", ".join(unknown))
+    if body.get("schemaVersion") != 1 or isinstance(body.get("schemaVersion"), bool):
+        raise ApiError(400, "refresh schemaVersion must be 1")
+    context_id = _text(body.get("context"), "context", 32)
+    context = runtime.context(context_id)
+
+    # Reconciliation stays on the existing fail-closed single-writer path and
+    # is never attempted for an observer/imported workspace. Collection is
+    # observation-only and writes only bounded private reports.
+    if not context.read_only:
+        reconcile.reconcile(context.home, config=context.config)
+    if context.config.get("automation") is None:
+        collection = {
+            "status": "idle",
+            "completedAt": runtime.now_fn().isoformat(),
+            "sources": [],
+        }
+    else:
+        try:
+            collection = collect_sources(context.home, config=context.config)
+        except CollectorBusyError:
+            collection = {
+                "status": "busy",
+                "completedAt": runtime.now_fn().isoformat(),
+                "sources": [],
+            }
+
+    status = collection.get("status")
+    if status == "healthy":
+        summary = "Everything connected was scanned and the Ledger is up to date."
+    elif status == "degraded":
+        summary = "The Ledger updated, but some connected sources could not be reached."
+    elif status == "busy":
+        summary = "A scan is already running. The latest saved Ledger view is shown."
+    else:
+        status = "idle"
+        summary = "The Ledger updated. No external sources are connected."
+    sources = [
+        {"source": item.get("source"), "status": item.get("status")}
+        for item in collection.get("sources", [])
+        if isinstance(item, dict) and item.get("source") in (
+            "github", "localFiles", "berd") and
+        item.get("status") in ("healthy", "degraded", "disabled")
+    ]
+    return {
+        "version": 1,
+        "status": status,
+        "summary": summary,
+        "refreshedAt": collection.get("completedAt") or runtime.now_fn().isoformat(),
+        "context": context.context_id,
+        "sources": sources,
+    }
+
+
 POST_ROUTES = {
     "/api/decisions/reorder": lambda runtime, body: reorder(runtime, body, "decisions"),
     "/api/decisions/resolve": resolve_decision,
@@ -1208,6 +1314,10 @@ POST_ROUTES = {
 
 LOCAL_POST_ROUTES = {
     "/api/local-state/command": local_state_command,
+}
+
+OBSERVATION_POST_ROUTES = {
+    "/api/refresh": refresh_workspace,
 }
 
 OWNER_CONTROL_POST_ROUTES = {
@@ -1334,6 +1444,10 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         context_id = None
         try:
+            if parsed.path == "/api/health":
+                context_id = _context_from_query(parsed)
+                self._send_json(build_runtime_health_view(self.runtime, context_id))
+                return
             if parsed.path == "/api/board":
                 context_id = _context_from_query(parsed)
                 self._send_json(build_board_view(self.runtime, context_id))
@@ -1381,6 +1495,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             path = urlparse(self.path).path
             is_local = path in LOCAL_POST_ROUTES
+            is_observation = path in OBSERVATION_POST_ROUTES
             is_owner_control = path in OWNER_CONTROL_POST_ROUTES
             raw = self._read_raw(
                 LOCAL_STATE_MAX_BODY_BYTES if is_local else MAX_BODY_BYTES)
@@ -1388,6 +1503,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"error": "forbidden: non-loopback Host"}, status=403)
                 return
             route = (LOCAL_POST_ROUTES.get(path) if is_local else
+                     OBSERVATION_POST_ROUTES.get(path) if is_observation else
                      OWNER_CONTROL_POST_ROUTES.get(path) if is_owner_control else
                      POST_ROUTES.get(path))
             if route is None:
@@ -1395,7 +1511,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             body = self._json_body(raw)
             context_id = body.get("context") if isinstance(body.get("context"), str) else None
-            if not is_local and not is_owner_control and self.runtime.context(context_id).read_only:
+            if (not is_local and not is_observation and not is_owner_control and
+                    self.runtime.context(context_id).read_only):
                 self._send_json({"error": "workspace is read-only"}, status=403)
                 return
             with _WRITE_LOCK:

@@ -38,10 +38,18 @@ const LEGACY_CONFIG_VERSION: u32 = 1;
 const LOG_LIMIT_BYTES: u64 = 1_048_576;
 const CORE_FILES: [&str; 3] = ["config.json", "board.json", "ledger.jsonl"];
 const DATA_DIRECTORIES: [&str; 3] = ["locks", "backups", "reports"];
-const DEMO_AUXILIARY_FILES: [&str; 2] = ["owner-control.jsonl", "reports/operations-latest.json"];
+const DEMO_AUXILIARY_FILES: [&str; 3] = [
+    "owner-control.jsonl",
+    "reports/operations-latest.json",
+    "reports/session-observer-latest.json",
+];
 const WATCHED_WORKSPACE_FILES: [&str; 2] = ["board.json", "ledger.jsonl"];
 const WATCHED_OPTIONAL_WORKSPACE_FILES: [&str; 1] = ["owner-control.jsonl"];
-const WATCHED_REPORT_FILES: [&str; 2] = ["collector-latest.json", "operations-latest.json"];
+const WATCHED_REPORT_FILES: [&str; 3] = [
+    "collector-latest.json",
+    "operations-latest.json",
+    "session-observer-latest.json",
+];
 const WATCH_DEBOUNCE: Duration = Duration::from_millis(350);
 const NATIVE_CHROME_POLL: Duration = Duration::from_secs(3);
 const PRODUCTION_MONITOR_INTERVAL_SECONDS: u32 = 60;
@@ -145,6 +153,7 @@ enum NativeCommand {
     ViewWatched,
     ViewFilter,
     ViewCommands,
+    ViewRefreshNow,
     ViewReload,
     ToggleSidebar,
     ToggleInspector,
@@ -169,6 +178,7 @@ impl NativeCommand {
             Self::ViewWatched => "view.watched",
             Self::ViewFilter => "view.filter",
             Self::ViewCommands => "view.commands",
+            Self::ViewRefreshNow => "view.refresh-now",
             Self::ViewReload => "view.reload",
             Self::ToggleSidebar => "pane.toggle-sidebar",
             Self::ToggleInspector => "pane.toggle-inspector",
@@ -193,6 +203,7 @@ impl NativeCommand {
             Self::ViewWatched => native_event_script!("view.watched"),
             Self::ViewFilter => native_event_script!("view.filter"),
             Self::ViewCommands => native_event_script!("view.commands"),
+            Self::ViewRefreshNow => native_event_script!("view.refresh-now"),
             Self::ViewReload => native_event_script!("view.reload"),
             Self::ToggleSidebar => native_event_script!("pane.toggle-sidebar"),
             Self::ToggleInspector => native_event_script!("pane.toggle-inspector"),
@@ -229,6 +240,29 @@ enum WorkspaceKind {
     Managed,
     Existing,
     Demo,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+enum AgentTarget {
+    Codex,
+    ClaudeCode,
+}
+
+impl AgentTarget {
+    fn binary_name(self) -> &'static str {
+        match self {
+            Self::Codex => "codex",
+            Self::ClaudeCode => "claude",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Codex => "Codex",
+            Self::ClaudeCode => "Claude Code",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -600,6 +634,13 @@ struct BackupResult {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+struct AgentLaunchReceipt {
+    agent: AgentTarget,
+    message: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct DiagnosticReport {
     app_version: String,
     engine_version: String,
@@ -699,6 +740,15 @@ fn refresh_demo_operations(destination: &Path) -> Result<(), String> {
                 Value::String(completed.to_rfc3339_opts(SecondsFormat::Secs, false)),
             );
         }
+        if let Some(artifact) = schedule
+            .get_mut("latestArtifact")
+            .and_then(Value::as_object_mut)
+        {
+            artifact.insert(
+                "observedAt".into(),
+                Value::String(completed.to_rfc3339_opts(SecondsFormat::Secs, false)),
+            );
+        }
     }
     let temporary = path.with_extension("json.tmp");
     if temporary.exists() {
@@ -725,6 +775,72 @@ fn refresh_demo_operations(destination: &Path) -> Result<(), String> {
     File::open(path.parent().unwrap_or(destination))
         .and_then(|directory| directory.sync_all())
         .map_err(|error| format!("could not finish the fictional operations report: {error}"))?;
+    Ok(())
+}
+
+fn refresh_demo_sessions(destination: &Path) -> Result<(), String> {
+    let path = destination.join("reports/session-observer-latest.json");
+    reject_symlink(&path)?;
+    let bytes = fs::read(&path)
+        .map_err(|error| format!("could not read the fictional session report: {error}"))?;
+    let mut report: Value = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("fictional session report is invalid: {error}"))?;
+    let object = report
+        .as_object_mut()
+        .ok_or_else(|| "fictional session report must be an object".to_string())?;
+    let now = Utc::now();
+    object.insert(
+        "observedAt".into(),
+        Value::String(now.to_rfc3339_opts(SecondsFormat::Secs, false)),
+    );
+    let sessions = object
+        .get_mut("sessions")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| "fictional sessions are invalid".to_string())?;
+    for (index, session) in sessions.iter_mut().enumerate() {
+        let session = session
+            .as_object_mut()
+            .ok_or_else(|| "fictional session is invalid".to_string())?;
+        session.insert(
+            "startedAt".into(),
+            Value::String(
+                (now - ChronoDuration::minutes(40 + index as i64 * 20))
+                    .to_rfc3339_opts(SecondsFormat::Secs, false),
+            ),
+        );
+        session.insert(
+            "updatedAt".into(),
+            Value::String(
+                (now - ChronoDuration::minutes(index as i64 + 1))
+                    .to_rfc3339_opts(SecondsFormat::Secs, false),
+            ),
+        );
+    }
+    let temporary = path.with_extension("json.tmp");
+    if temporary.exists() {
+        reject_symlink(&temporary)?;
+        fs::remove_file(&temporary).map_err(|error| {
+            format!("could not clear the fictional session staging file: {error}")
+        })?;
+    }
+    let payload = serde_json::to_vec_pretty(&report)
+        .map_err(|error| format!("could not encode the fictional session report: {error}"))?;
+    let mut file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(&temporary)
+        .map_err(|error| format!("could not stage the fictional session report: {error}"))?;
+    file.write_all(&payload)
+        .and_then(|_| file.write_all(b"\n"))
+        .and_then(|_| file.sync_all())
+        .map_err(|error| format!("could not save the fictional session report: {error}"))?;
+    fs::rename(&temporary, &path)
+        .map_err(|error| format!("could not replace the fictional session report: {error}"))?;
+    private_permissions(&path, 0o600)?;
+    File::open(path.parent().unwrap_or(destination))
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| format!("could not finish the fictional session report: {error}"))?;
     Ok(())
 }
 
@@ -780,6 +896,7 @@ fn copy_demo(source: &Path, destination: &Path) -> Result<(), String> {
             private_permissions(&to, 0o600)?;
         }
         refresh_demo_operations(destination)?;
+        refresh_demo_sessions(destination)?;
         return Ok(());
     }
     create_private_dir(destination)?;
@@ -811,6 +928,7 @@ fn copy_demo(source: &Path, destination: &Path) -> Result<(), String> {
         private_permissions(&to, 0o600)?;
     }
     refresh_demo_operations(destination)?;
+    refresh_demo_sessions(destination)?;
     Ok(())
 }
 
@@ -1429,12 +1547,15 @@ fn fetch_board(port: u16) -> Option<Value> {
 }
 
 fn verified_board(port: u16, expected_project: &str) -> bool {
-    fetch_board(port)
+    fetch_json(port, "/api/health")
         .and_then(|value| {
-            value
-                .get("project")
-                .and_then(Value::as_str)
-                .map(str::to_string)
+            let ready = value.get("status").and_then(Value::as_str) == Some("ready");
+            ready.then(|| {
+                value
+                    .get("project")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })?
         })
         .as_deref()
         == Some(expected_project)
@@ -1616,9 +1737,7 @@ fn start_workspace_watch(
             if saw_error {
                 set_observer_error(
                     &app_handle.state::<HostRuntime>(),
-                    Some(
-                        "Workspace observation paused; use Refresh Sources or restart the engine.",
-                    ),
+                    Some("Workspace observation paused; use Refresh now or restart the engine."),
                 );
             } else {
                 set_observer_error(&app_handle.state::<HostRuntime>(), None);
@@ -1881,6 +2000,14 @@ fn is_board_settings_navigation(url: &tauri::Url, port: u16) -> bool {
         && url.fragment().is_none()
 }
 
+fn is_board_navigation(url: &tauri::Url, port: u16) -> bool {
+    url.scheme() == "http"
+        && url.host_str() == Some(HOST)
+        && url.port() == Some(port)
+        && url.username().is_empty()
+        && url.password().is_none()
+}
+
 fn show_board_window(app: &AppHandle, workspace: &Workspace, port: u16) -> Result<(), String> {
     let url = format!("http://{HOST}:{port}/")
         .parse()
@@ -1912,7 +2039,7 @@ fn show_board_window(app: &AppHandle, workspace: &Workspace, port: u16) -> Resul
                     show_settings(&settings_app);
                     false
                 } else {
-                    true
+                    is_board_navigation(target, port)
                 }
             })
             .build()
@@ -2252,6 +2379,101 @@ fn report_text_size_error(app: &AppHandle) {
             "window.dispatchEvent(new CustomEvent('hfledger:settings-error',{detail:{message:'Text size could not be saved. The previous size was restored.'}}));",
         );
     }
+}
+
+fn agent_executable_candidates(agent: AgentTarget, home_dir: Option<&Path>) -> Vec<PathBuf> {
+    let binary = agent.binary_name();
+    let mut candidates = Vec::new();
+    if let Some(home_dir) = home_dir {
+        candidates.extend([
+            home_dir.join(".local/bin").join(binary),
+            home_dir.join(".cargo/bin").join(binary),
+            home_dir.join(".npm-global/bin").join(binary),
+        ]);
+    }
+    candidates.extend([
+        PathBuf::from("/opt/homebrew/bin").join(binary),
+        PathBuf::from("/usr/local/bin").join(binary),
+        PathBuf::from("/usr/bin").join(binary),
+    ]);
+    let mut seen = HashSet::new();
+    candidates
+        .into_iter()
+        .filter(|candidate| seen.insert(candidate.clone()))
+        .collect()
+}
+
+fn resolve_agent_executable(agent: AgentTarget) -> Result<PathBuf, String> {
+    let home_dir = std::env::var_os("HOME").map(PathBuf::from);
+    agent_executable_candidates(agent, home_dir.as_deref())
+        .into_iter()
+        .find(|candidate| {
+            fs::metadata(candidate)
+                .map(|metadata| {
+                    metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
+                })
+                .unwrap_or(false)
+        })
+        .ok_or_else(|| {
+            format!(
+                "{} CLI is not installed in a supported location. The prompt is still on your clipboard.",
+                agent.label()
+            )
+        })
+}
+
+fn terminal_agent_arguments(executable: &Path) -> Vec<OsString> {
+    [
+        "-e",
+        "on run argv",
+        "-e",
+        "set agentPath to item 1 of argv",
+        "-e",
+        "tell application \"Terminal\"",
+        "-e",
+        "activate",
+        "-e",
+        "do script \"exec \" & quoted form of agentPath",
+        "-e",
+        "end tell",
+        "-e",
+        "end run",
+    ]
+    .into_iter()
+    .map(OsString::from)
+    .chain(std::iter::once(executable.as_os_str().to_os_string()))
+    .collect()
+}
+
+fn open_agent_session_inner(agent: AgentTarget) -> Result<AgentLaunchReceipt, String> {
+    let executable = resolve_agent_executable(agent)?;
+    let output = Command::new("/usr/bin/osascript")
+        .args(terminal_agent_arguments(&executable))
+        .output()
+        .map_err(|_| {
+            format!(
+                "{} could not be opened. The prompt is still on your clipboard.",
+                agent.label()
+            )
+        })?;
+    if !output.status.success() {
+        return Err(format!(
+            "{} could not be opened. The prompt is still on your clipboard.",
+            agent.label()
+        ));
+    }
+    Ok(AgentLaunchReceipt {
+        agent,
+        message: format!(
+            "{} opened. Paste the copied prompt and press Return to begin.",
+            agent.label()
+        ),
+    })
+}
+
+#[tauri::command]
+fn open_agent_session(agent: AgentTarget) -> Result<AgentLaunchReceipt, String> {
+    open_agent_session_inner(agent)
 }
 
 #[tauri::command]
@@ -3136,8 +3358,8 @@ fn build_native_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, Native
     )?;
     let reload = custom_menu_item(
         app,
-        "view.reload",
-        "Refresh Sources",
+        "view.refresh-now",
+        "Refresh Now",
         false,
         Some("CmdOrCtrl+R"),
     )?;
@@ -3729,6 +3951,7 @@ fn native_command_for_menu_id(id: &str) -> Option<NativeCommand> {
         "view.watched" => Some(NativeCommand::ViewWatched),
         "view.filter" => Some(NativeCommand::ViewFilter),
         "view.commands" => Some(NativeCommand::ViewCommands),
+        "view.refresh-now" => Some(NativeCommand::ViewRefreshNow),
         "view.reload" => Some(NativeCommand::ViewReload),
         "pane.toggle-sidebar" => Some(NativeCommand::ToggleSidebar),
         "pane.toggle-inspector" => Some(NativeCommand::ToggleInspector),
@@ -3944,6 +4167,7 @@ pub fn run() {
             reveal_logs,
             reveal_backups,
             diagnostics,
+            open_agent_session,
             quit_app,
         ])
         .build(tauri::generate_context!())
@@ -3964,19 +4188,20 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        active_context_id, allowlisted_deep_link, attention_badge_count,
-        canonical_production_endpoint, copy_demo, current_host_status, decision_count,
-        decode_stored_config, deep_link_board_url, deep_link_window_plan, diagnostic_host_value,
-        engine_serve_arguments, event_is_relevant, guarded_item_menu_accelerator,
-        is_board_settings_navigation, menu_eligibility, merge_watch_signal,
-        native_command_for_menu_id, parse_deep_link, primary_surface_plan,
-        production_health_signature, project_slug, recent_duplicate, refresh_demo_operations,
-        sync_production_monitor_config, text_size_after, validate_search_response,
-        validate_stored_config, watch_snapshot_is_safe, workspace_id, workspace_watch_plan,
-        write_config_unlocked, AppPaths, AppSnapshot, Appearance, DeepLinkIntent,
-        DeepLinkRejection, DeepLinkWindowPlan, HostRuntime, HostStatus, NativeCommand, Preferences,
-        PrimarySurfacePlan, ProductionMonitorSettings, SearchResponse, StoredConfig, TextSize,
-        TextSizeAction, Workspace, WorkspaceKind, CONFIG_VERSION, CORE_FILES, DATA_DIRECTORIES,
+        active_context_id, agent_executable_candidates, allowlisted_deep_link,
+        attention_badge_count, canonical_production_endpoint, copy_demo, current_host_status,
+        decision_count, decode_stored_config, deep_link_board_url, deep_link_window_plan,
+        diagnostic_host_value, engine_serve_arguments, event_is_relevant,
+        guarded_item_menu_accelerator, is_board_navigation, is_board_settings_navigation,
+        menu_eligibility, merge_watch_signal, native_command_for_menu_id, parse_deep_link,
+        primary_surface_plan, production_health_signature, project_slug, recent_duplicate,
+        refresh_demo_operations, sync_production_monitor_config, terminal_agent_arguments,
+        text_size_after, validate_search_response, validate_stored_config, watch_snapshot_is_safe,
+        workspace_id, workspace_watch_plan, write_config_unlocked, AgentTarget, AppPaths,
+        AppSnapshot, Appearance, DeepLinkIntent, DeepLinkRejection, DeepLinkWindowPlan,
+        HostRuntime, HostStatus, NativeCommand, Preferences, PrimarySurfacePlan,
+        ProductionMonitorSettings, SearchResponse, StoredConfig, TextSize, TextSizeAction,
+        Workspace, WorkspaceKind, CONFIG_VERSION, CORE_FILES, DATA_DIRECTORIES,
         DEEP_LINK_REJECTION_MESSAGE,
     };
     use notify::{Event, EventKind};
@@ -4060,6 +4285,81 @@ mod tests {
                 "{rejected} must not open Settings"
             );
         }
+    }
+
+    #[test]
+    fn board_navigation_stays_on_the_exact_active_loopback_origin() {
+        for accepted in [
+            "http://127.0.0.1:17171/",
+            "http://127.0.0.1:17171/deck?context=main",
+            "http://127.0.0.1:17171/#item=item-0123456789abcdef01234567",
+        ] {
+            let url = tauri::Url::parse(accepted).expect("valid board URL");
+            assert!(is_board_navigation(&url, 17171), "{accepted}");
+        }
+        for rejected in [
+            "https://127.0.0.1:17171/",
+            "http://localhost:17171/",
+            "http://127.0.0.1:17172/",
+            "http://person@127.0.0.1:17171/",
+            "https://example.test/",
+        ] {
+            let url = tauri::Url::parse(rejected).expect("valid rejection URL");
+            assert!(!is_board_navigation(&url, 17171), "{rejected}");
+        }
+    }
+
+    #[test]
+    fn agent_launch_targets_are_closed_and_use_only_fixed_executable_locations() {
+        assert_eq!(
+            serde_json::from_value::<AgentTarget>(json!("codex")).expect("Codex target"),
+            AgentTarget::Codex
+        );
+        assert_eq!(
+            serde_json::from_value::<AgentTarget>(json!("claude-code"))
+                .expect("Claude Code target"),
+            AgentTarget::ClaudeCode
+        );
+        assert!(serde_json::from_value::<AgentTarget>(json!("other-agent")).is_err());
+
+        let candidates =
+            agent_executable_candidates(AgentTarget::Codex, Some(Path::new("/tmp/fictional-home")));
+        assert_eq!(
+            candidates,
+            vec![
+                PathBuf::from("/tmp/fictional-home/.local/bin/codex"),
+                PathBuf::from("/tmp/fictional-home/.cargo/bin/codex"),
+                PathBuf::from("/tmp/fictional-home/.npm-global/bin/codex"),
+                PathBuf::from("/opt/homebrew/bin/codex"),
+                PathBuf::from("/usr/local/bin/codex"),
+                PathBuf::from("/usr/bin/codex"),
+            ]
+        );
+    }
+
+    #[test]
+    fn agent_launch_arguments_never_contain_observed_task_text() {
+        let executable = Path::new("/tmp/fictional-home/.local/bin/codex");
+        let arguments = terminal_agent_arguments(executable);
+        assert_eq!(
+            arguments.last(),
+            Some(&executable.as_os_str().to_os_string())
+        );
+        let joined = arguments
+            .iter()
+            .map(|value| value.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(joined.contains("quoted form of agentPath"));
+        assert!(!joined.contains("customer task"));
+        assert!(!joined.contains("HFLedger work handoff"));
+        assert_eq!(
+            arguments
+                .iter()
+                .filter(|value| value.as_os_str() == executable.as_os_str())
+                .count(),
+            1
+        );
     }
 
     #[test]
@@ -4475,6 +4775,9 @@ mod tests {
             .contains(&first_root.join("reports/operations-latest.json")));
         assert!(first_plan
             .allowed_files
+            .contains(&first_root.join("reports/session-observer-latest.json")));
+        assert!(first_plan
+            .allowed_files
             .is_disjoint(&second_plan.allowed_files));
 
         let board_event = Event::new(EventKind::Any).add_path(first_root.join("board.json"));
@@ -4541,6 +4844,7 @@ mod tests {
             ("view.watched", NativeCommand::ViewWatched),
             ("view.filter", NativeCommand::ViewFilter),
             ("view.commands", NativeCommand::ViewCommands),
+            ("view.refresh-now", NativeCommand::ViewRefreshNow),
             ("view.reload", NativeCommand::ViewReload),
             ("pane.toggle-sidebar", NativeCommand::ToggleSidebar),
             ("pane.toggle-inspector", NativeCommand::ToggleInspector),
@@ -5004,6 +5308,9 @@ mod tests {
                     "lastRun": {
                         "startedAt": "2000-01-01T23:58:00+00:00",
                         "completedAt": "2000-01-01T23:59:00+00:00"
+                    },
+                    "latestArtifact": {
+                        "observedAt": "2000-01-01T23:57:00+00:00"
                     }
                 }]
             }))
@@ -5018,6 +5325,10 @@ mod tests {
         assert_ne!(
             refreshed["schedules"][0]["nextRunAt"],
             "2000-01-02T00:00:00+00:00"
+        );
+        assert_ne!(
+            refreshed["schedules"][0]["latestArtifact"]["observedAt"],
+            "2000-01-01T23:57:00+00:00"
         );
         assert_eq!(
             fs::metadata(&path)
@@ -5059,6 +5370,11 @@ mod tests {
             b"{\"observedAt\":\"2000-01-01T00:00:00+00:00\",\"schedules\":[]}",
         )
         .expect("write included operations report");
+        fs::write(
+            source.join("reports/session-observer-latest.json"),
+            b"{\"observedAt\":\"2000-01-01T00:00:00+00:00\",\"sessions\":[]}",
+        )
+        .expect("write included session report");
 
         let board_before =
             fs::read(destination.join("board.json")).expect("read previous board before upgrade");
@@ -5066,6 +5382,9 @@ mod tests {
 
         assert!(destination.join("owner-control.jsonl").is_file());
         assert!(destination.join("reports/operations-latest.json").is_file());
+        assert!(destination
+            .join("reports/session-observer-latest.json")
+            .is_file());
         assert_eq!(
             fs::read(destination.join("board.json")).expect("read board after upgrade"),
             board_before

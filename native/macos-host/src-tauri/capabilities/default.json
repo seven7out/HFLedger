@@ -4,5 +4,30 @@
   "description": "Native workspace and preferences shell for HFLedger",
   "windows": ["main"],
   "webviews": ["settings-panel"],
-  "permissions": ["core:default"]
+  "permissions": [
+    "core:default",
+    "allow-app-snapshot",
+    "allow-show-today",
+    "allow-repair-settings",
+    "allow-open-fictional-demo",
+    "allow-host-status",
+    "allow-search-workspaces",
+    "allow-open-search-result",
+    "allow-dismiss-navigation-notice",
+    "allow-choose-workspace-folder",
+    "allow-add-existing-workspace",
+    "allow-create-workspace",
+    "allow-remove-workspace",
+    "allow-start-workspace",
+    "allow-restart-workspace",
+    "allow-stop-workspace",
+    "allow-create-backup",
+    "allow-update-production-monitor",
+    "allow-update-preferences",
+    "allow-reveal-workspace",
+    "allow-reveal-logs",
+    "allow-reveal-backups",
+    "allow-diagnostics",
+    "allow-quit-app"
+  ]
 }

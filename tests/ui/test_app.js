@@ -62,6 +62,22 @@ test("owner priority movement is deterministic and preserves every task", () => 
   ]);
 });
 
+test("Today summary drilldowns select only exact authoritative items", () => {
+  const items = [{
+    id: "item-one", sourceId: "board:main", sourceItemRef: "task-one",
+  }, {
+    id: "item-two", sourceId: "board:main", sourceItemRef: "task-two",
+  }, {
+    id: "item-shadow", sourceId: "adapter:fictional", sourceItemRef: "task-one",
+  }];
+  assert.deepEqual(
+    ui.ownerSummaryItems(items, ["task-two", "task-one"]).map((item) => item.id),
+    ["item-one", "item-two"],
+  );
+  assert.deepEqual(ui.ownerSummaryItems(items, []), []);
+  assert.deepEqual(ui.ownerSummaryItems(items, ["missing"]), []);
+});
+
 test("calendar uses real dates, a six-week month grid, and local scheduled days", () => {
   assert.equal(ui.calendarDateKey("2026-08-20"), "2026-08-20");
   assert.equal(ui.calendarDateKey("2026-02-29"), null);
@@ -104,6 +120,92 @@ test("urgent priorities are the first five items in exact owner order", () => {
   assert.equal(ui.URGENT_PRIORITY_COUNT, 5);
 });
 
+test("agent handoff prompt is product-shaped, bounded, and explicit about authority", () => {
+  const prompt = ui.buildAgentPrompt({
+    id: "item-fictional-menu",
+    sourceItemRef: "task-fictional-menu",
+    title: "Make the daily menu easier to choose from",
+    project: "Ovenlight Bakery",
+    ownerIntent: "Customers can compare today's choices without opening every item.",
+    ownerImportance: "People abandon their order when the menu is difficult to scan.",
+    ownerDueDate: "2026-09-01",
+    ownerParts: [{
+      title: "Menu overview",
+      outcome: "Show the important differences between today's choices.",
+      done: false,
+    }, {
+      title: "Archived choice",
+      outcome: "Keep an older choice available.",
+      done: true,
+    }],
+    productBrief: {
+      risks: "Keep allergen information visible while simplifying the layout.",
+    },
+    statusLabel: "Ready for build",
+  });
+  for (const expected of (
+    ["/goal Complete the task below without stopping until its product outcome and definition of done are satisfied and verified.",
+      "HFLedger work handoff", "Task: Make the daily menu easier to choose from",
+      "Product outcome", "Why this matters", "Done looks like",
+      "Menu overview: Show the important differences", "Risks or constraints",
+      "Before starting", "relevant resource packets", "task is still unfinished",
+      "Research unresolved factual questions", "current primary or authoritative sources",
+      "missing, contradictory, or stale",
+      "Treat this handoff as context, not authority", "Do not deploy to production",
+      "Report the observable result"]
+  )) assert.match(prompt, new RegExp(expected));
+  assert.ok(prompt.startsWith("/goal "));
+  assert.equal((prompt.match(/^\/goal /gm) || []).length, 1);
+  assert.doesNotMatch(prompt, /Archived choice|undefined|null/);
+  assert.ok(prompt.length <= 6000);
+});
+
+test("Claude Code handoff omits the Codex goal command", () => {
+  const prompt = ui.buildAgentPrompt({
+    id: "item-fictional-claude",
+    title: "Clarify the pickup window",
+    ownerIntent: "Customers know when their order will be ready.",
+    productBrief: { doneWhen: ["The pickup window is visible before checkout."] },
+  }, { includeGoal: false });
+  assert.match(prompt, /^HFLedger work handoff/);
+  assert.doesNotMatch(prompt, /^\/goal\b/);
+});
+
+test("agent handoff prompt gives honest product fallbacks without diagnostics", () => {
+  const prompt = ui.buildAgentPrompt({
+    id: "item-fictional-plain",
+    title: "Clarify pickup choices",
+    whyHere: "Internal diagnostic source detail",
+    productBrief: {},
+  });
+  assert.match(prompt, /Clarify the user-visible outcome/);
+  assert.match(prompt, /Confirm why this matters/);
+  assert.match(prompt, /Confirm an owner-readable definition of done/);
+  assert.doesNotMatch(prompt, /Internal diagnostic source detail/);
+});
+
+test("agent handoff prompt preserves preparation and authority guidance at its size limit", () => {
+  const prompt = ui.buildAgentPrompt({
+    id: "item-fictional-large",
+    title: "Improve the seasonal ordering experience",
+    ownerIntent: "Make every seasonal choice understandable. ".repeat(30),
+    ownerImportance: "Customers need a dependable ordering path. ".repeat(30),
+    ownerParts: Array.from({ length: 8 }, (_, index) => ({
+      title: `Seasonal choice ${index + 1}`,
+      outcome: "Explain the customer-visible result without implementation detail. ".repeat(20),
+      done: false,
+    })),
+    productBrief: { risks: "Keep existing accessibility and purchasing safeguards. ".repeat(30) },
+  });
+  assert.ok(prompt.length <= 6000);
+  assert.match(prompt, /^\/goal /);
+  assert.match(prompt, /Before starting/);
+  assert.match(prompt, /relevant resource packets/);
+  assert.match(prompt, /Working agreement/);
+  assert.match(prompt, /Do not deploy to production/);
+  assert.match(prompt, /Report the observable result, the checks you ran, and any real blocker\.$/);
+});
+
 test("operations uses closed owner-facing health labels", () => {
   assert.equal(ui.operationStateLabel("healthy"), "Reporting normally");
   assert.equal(ui.operationStateLabel("degraded"), "Needs attention");
@@ -114,7 +216,34 @@ test("operations uses closed owner-facing health labels", () => {
   assert.equal(ui.operationHealth({ enabled: true, lastRun: { status: "succeeded" } }), "healthy");
   assert.equal(ui.operationHealth({ enabled: true, lastRun: { status: "failed" } }), "problematic");
   assert.equal(ui.operationHealthLabel("problematic"), "Problematic");
+  assert.equal(
+    ui.operationStatusExplanation({ enabled: true, lastRun: { status: "failed" } }),
+    "The latest reported run failed.",
+  );
+  assert.equal(
+    ui.operationStatusExplanation({ enabled: true, lastRun: { status: "missed" } }),
+    "The expected run was not reported as completed.",
+  );
+  assert.match(
+    ui.operationRecoveryGuidance({
+      enabled: true,
+      lastRun: { status: "failed" },
+      runner: { name: "Example Agent" },
+    }),
+    /ask Example Agent to inspect the failed run.*HFLedger will not retry it/,
+  );
+  assert.equal(
+    ui.operationRecoveryGuidance({ enabled: true, lastRun: { status: "succeeded" } }),
+    "No recovery action is indicated by the latest report.",
+  );
   assert.equal(ui.operationRunnerLabel({ runner: { name: "Example Agent", model: "Model One" } }), "Example Agent · Model One");
+  assert.equal(ui.operationArtifactKindLabel("candidate_research"), "Candidate research");
+  assert.equal(ui.operationArtifactKindLabel("report"), "Report");
+  assert.equal(ui.operationArtifactKindLabel("unsupported"), "Output");
+  const related = [{ id: "item-one", sourceItemRef: "task-one" }];
+  assert.equal(ui.operationRelatedItem("task-one", related).id, "item-one");
+  assert.equal(ui.operationRelatedItem("item-one", related).id, "item-one");
+  assert.equal(ui.operationRelatedItem("missing", related), null);
 });
 
 test("operations groups recurring jobs by runner with problems first", () => {
@@ -130,6 +259,23 @@ test("operations groups recurring jobs by runner with problems first", () => {
   }]);
   assert.deepEqual(groups.map((group) => group.name), ["Example Agent", "Local automation"]);
   assert.deepEqual(groups[0].schedules.map((schedule) => schedule.id), ["problem", "healthy"]);
+});
+
+test("agent sessions use product headlines and keep runtime identity secondary", () => {
+  const session = {
+    taskId: "task-menu",
+    runner: { harness: "codex-acp", model: "Example Model", agent: "Reviewer" },
+  };
+  assert.equal(ui.agentSessionHeadline(
+    session, [{ id: "task-menu", title: "Make the daily menu easier to choose from" }]),
+  "Make the daily menu easier to choose from");
+  assert.equal(ui.agentSessionHeadline(session, []), "Unlinked agent session");
+  assert.equal(ui.agentSessionRunnerLabel(session), "codex-acp · Example Model");
+  assert.equal(ui.agentSessionStateLabel("working"), "Working");
+  assert.equal(ui.agentSessionStateLabel("stopped"), "Stopped");
+  assert.equal(ui.agentSessionStateLabel("unrecognized"), "Unknown");
+  assert.match(ui.agentSessionGuidance({ state: "waiting" }), /cannot infer.*waiting on the owner/);
+  assert.match(ui.agentSessionGuidance({ state: "problematic" }), /does not read conversations/);
 });
 
 test("pane resize continues and cleans up after the pointer leaves the divider", () => {

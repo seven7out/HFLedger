@@ -7,11 +7,12 @@ import re
 import stat
 import unicodedata
 
-from . import admission
+from . import admission, session_observer
 
 
-VERSION = 2
-SUPPORTED_VERSIONS = frozenset((1, VERSION))
+VERSION = 4
+LATEST_REPORT_VERSION = 3
+SUPPORTED_VERSIONS = frozenset((1, 2, LATEST_REPORT_VERSION))
 REPORT_RELATIVE_PATH = os.path.join("reports", "operations-latest.json")
 MAX_REPORT_BYTES = 256 * 1024
 MAX_COMMANDS = 64
@@ -19,6 +20,9 @@ MAX_SCHEDULES = 128
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,127}$")
 RUN_STATUSES = frozenset(("succeeded", "failed", "running", "missed", "unknown"))
 RUNNER_TYPES = frozenset(("agent", "local_automation", "unknown"))
+ARTIFACT_KINDS = frozenset((
+    "candidate_research", "report", "evidence", "other",
+))
 SECRET_PATTERNS = (
     re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----", re.IGNORECASE),
     re.compile(r"(?:^|\s)(?:sk|rk)-[A-Za-z0-9_-]{12,}"),
@@ -90,7 +94,7 @@ def validate_report(value):
     })
     report_version = value.get("version")
     if report_version not in SUPPORTED_VERSIONS:
-        raise OperationsError("operations report version must be 1 or 2")
+        raise OperationsError("operations report version must be 1, 2, or 3")
     _timestamp(value.get("observedAt"), "observedAt")
     stale_after = value.get("staleAfterSeconds")
     if (not isinstance(stale_after, int) or isinstance(stale_after, bool) or
@@ -122,6 +126,8 @@ def validate_report(value):
         }
         if report_version >= 2:
             schedule_fields.add("runner")
+        if report_version >= 3:
+            schedule_fields.update(("taskId", "latestArtifact"))
         _closed(schedule, label, schedule_fields)
         schedule_id = _id(schedule.get("id"), "%s id" % label)
         if schedule_id in schedule_ids:
@@ -138,6 +144,30 @@ def validate_report(value):
             _one_line(runner.get("name"), "%s runner name" % label, 80)
             if runner.get("model") is not None:
                 _one_line(runner.get("model"), "%s runner model" % label, 120)
+        if report_version >= 3:
+            task_id = schedule.get("taskId")
+            if task_id is not None:
+                _id(task_id, "%s taskId" % label)
+            artifact = schedule.get("latestArtifact")
+            if artifact is not None:
+                _closed(artifact, "%s latestArtifact" % label, {
+                    "kind", "label", "summary", "observedAt", "reference",
+                })
+                if artifact.get("kind") not in ARTIFACT_KINDS:
+                    raise OperationsError(
+                        "%s latestArtifact kind is invalid" % label)
+                _one_line(
+                    artifact.get("label"),
+                    "%s latestArtifact label" % label, 120, True)
+                _one_line(
+                    artifact.get("summary"),
+                    "%s latestArtifact summary" % label, 300, True)
+                _timestamp(
+                    artifact.get("observedAt"),
+                    "%s latestArtifact observedAt" % label)
+                _id(
+                    artifact.get("reference"),
+                    "%s latestArtifact reference" % label)
         if not isinstance(schedule.get("enabled"), bool):
             raise OperationsError("%s enabled must be boolean" % label)
         command_id = schedule.get("commandId")
@@ -205,10 +235,11 @@ def build_view(home, now=None):
     if now.tzinfo is None:
         now = now.replace(tzinfo=datetime.timezone.utc)
     now = now.astimezone(datetime.timezone.utc)
+    session_view = session_observer.build_view(home, now=now)
     try:
         report = _load_private_report(home)
     except OperationsError:
-        return {
+        return _combine_views({
             "version": VERSION,
             "connected": True,
             "state": "invalid",
@@ -217,9 +248,9 @@ def build_view(home, now=None):
             "commands": [],
             "schedules": [],
             "counts": _empty_counts(),
-        }
+        }, session_view)
     if report is None:
-        return {
+        return _combine_views({
             "version": VERSION,
             "connected": False,
             "state": "unconfigured",
@@ -228,7 +259,7 @@ def build_view(home, now=None):
             "commands": [],
             "schedules": [],
             "counts": _empty_counts(),
-        }
+        }, session_view)
     observed = _timestamp(report["observedAt"], "observedAt")
     stale = now - observed > datetime.timedelta(seconds=report["staleAfterSeconds"])
     schedules = json.loads(json.dumps(report["schedules"], ensure_ascii=False))
@@ -260,7 +291,7 @@ def build_view(home, now=None):
         status: sum(schedule["health"] == status for schedule in schedules)
         for status in ("healthy", "problematic", "running", "unknown", "paused")
     }
-    return {
+    return _combine_views({
         "version": VERSION,
         "connected": True,
         "state": state,
@@ -275,7 +306,81 @@ def build_view(home, now=None):
             "runners": len({schedule["runner"]["name"] for schedule in schedules}),
             **health_counts,
         },
+    }, session_view)
+
+
+def _combine_views(operations_view, sessions_view):
+    """Combine independent freshness domains without converting absence to health."""
+    combined = dict(operations_view)
+    sessions = json.loads(json.dumps(
+        sessions_view.get("sessions", []), ensure_ascii=False))
+    session_counts = sessions_view.get("counts", {})
+    combined["sessions"] = sessions
+    combined["sessionObservation"] = {
+        "version": sessions_view.get("version"),
+        "source": sessions_view.get("source"),
+        "connected": sessions_view.get("connected") is True,
+        "state": sessions_view.get("state", "invalid"),
+        "summary": sessions_view.get(
+            "summary", "Agent session reporting could not be read."),
+        "observedAt": sessions_view.get("observedAt"),
     }
+    combined["counts"] = {
+        **combined["counts"],
+        "sessions": session_counts.get("sessions", 0),
+        "sessionsWorking": session_counts.get("working", 0),
+        "sessionsWaiting": session_counts.get("waiting", 0),
+        "sessionsStopped": session_counts.get("stopped", 0),
+        "sessionsProblematic": session_counts.get("problematic", 0),
+        "sessionsUnknown": session_counts.get("unknown", 0),
+        "sessionsUnlinked": session_counts.get("unlinked", 0),
+    }
+    operations_state = operations_view["state"]
+    sessions_state = sessions_view.get("state", "invalid")
+    operations_connected = operations_view.get("connected") is True
+    sessions_connected = sessions_view.get("connected") is True
+    combined["connected"] = operations_connected or sessions_connected
+    if "invalid" in (operations_state, sessions_state):
+        combined["state"] = "invalid"
+        combined["summary"] = "Some Operations reporting could not be read."
+    elif (operations_state == "degraded" or sessions_state == "degraded" or
+          combined["counts"]["sessionsProblematic"]):
+        combined["state"] = "degraded"
+        problem_count = (
+            combined["counts"]["failing"] +
+            combined["counts"]["sessionsProblematic"])
+        combined["summary"] = (
+            "%d operation%s %s attention." % (
+                problem_count,
+                "" if problem_count == 1 else "s",
+                "needs" if problem_count == 1 else "need")
+            if problem_count else
+            "Some Operations reporting could not be refreshed.")
+    elif "stale" in (operations_state, sessions_state):
+        combined["state"] = "stale"
+        combined["summary"] = "Some Operations reporting has stopped updating."
+    elif operations_connected and sessions_connected:
+        combined["state"] = "healthy"
+        combined["summary"] = "Agent work and recurring jobs are reporting normally."
+    elif sessions_connected:
+        combined["state"] = "healthy"
+        combined["summary"] = "Agent sessions are reporting normally."
+    elif operations_connected:
+        combined["state"] = operations_state
+        combined["summary"] = operations_view["summary"]
+    else:
+        combined["state"] = "unconfigured"
+        combined["summary"] = (
+            "Agent sessions, commands, and recurring jobs have not been connected yet.")
+    timestamps = [
+        value for value in (
+            operations_view.get("observedAt"), sessions_view.get("observedAt"))
+        if isinstance(value, str)
+    ]
+    combined["observedAt"] = (
+        max(timestamps, key=lambda value: _timestamp(value, "observedAt"))
+        if timestamps else None)
+    return combined
 
 
 def _empty_counts():
@@ -289,6 +394,13 @@ def _empty_counts():
         "running": 0,
         "unknown": 0,
         "paused": 0,
+        "sessions": 0,
+        "sessionsWorking": 0,
+        "sessionsWaiting": 0,
+        "sessionsStopped": 0,
+        "sessionsProblematic": 0,
+        "sessionsUnknown": 0,
+        "sessionsUnlinked": 0,
     }
 
 
