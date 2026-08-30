@@ -419,8 +419,9 @@ function buildCopyContext(item, orientation = state.orientation) {
 }
 
 const AGENT_PROMPT_MAX_CHARS = 6000;
+const CODEX_GOAL_PROMPT = "/goal Complete the task below without stopping until its product outcome and definition of done are satisfied and verified.";
 
-function buildAgentPrompt(item) {
+function buildAgentPrompt(item, { includeGoal = true } = {}) {
   if (!item) return "";
   const brief = item.productBrief && typeof item.productBrief === "object"
     ? item.productBrief : {};
@@ -439,11 +440,9 @@ function buildAgentPrompt(item) {
     .filter(Boolean)
     .slice(0, 8);
 
-  const lines = [
-    "HFLedger work handoff",
-    "",
-    `Task: ${title}`,
-  ];
+  const lines = includeGoal
+    ? [CODEX_GOAL_PROMPT, "", "HFLedger work handoff", "", `Task: ${title}`]
+    : ["HFLedger work handoff", "", `Task: ${title}`];
   const project = safePlainText(item.project, 180);
   const reference = safePlainText(item.sourceItemRef || item.id, 180);
   if (project) lines.push(`Project: ${project}`);
@@ -3339,8 +3338,8 @@ function nativeAgentLaunchAvailable() {
     && typeof window.__TAURI__?.core?.invoke === "function";
 }
 
-async function copyAgentPrompt(item) {
-  const content = buildAgentPrompt(item);
+async function copyAgentPrompt(item, { includeGoal = true } = {}) {
+  const content = buildAgentPrompt(item, { includeGoal });
   if (!content) {
     announce("An agent prompt is unavailable for this selection.");
     return false;
@@ -3356,7 +3355,7 @@ async function copyAgentPrompt(item) {
 }
 
 async function openAgentSession(item, agent) {
-  if (!await copyAgentPrompt(item)) return;
+  if (!await copyAgentPrompt(item, { includeGoal: agent === "codex" })) return;
   if (!nativeAgentLaunchAvailable()) {
     announce("Agent prompt copied. Open your agent and paste it to begin.");
     return;

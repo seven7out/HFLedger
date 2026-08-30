@@ -20,7 +20,10 @@
   never submitted automatically or passed to native process arguments. Every
   handoff tells the agent to read relevant resource packets and prior evidence,
   confirm the task is still unfinished, and research unresolved facts from
-  authoritative sources before changing anything.
+  authoritative sources before changing anything. Browser copies and Codex
+  launches now begin with a durable `/goal` whose stopping condition is the
+  verified product outcome and definition of done; Claude Code launches retain
+  the same handoff without the Codex-only command.
 - Made every Today owner-card count and product-flow stage an accessible
   navigation control that opens the exact represented items, including an
   explicit empty state for zero-count summaries.

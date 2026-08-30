@@ -15,7 +15,9 @@ that the task remains unfinished; inspect current state; and research unresolved
 facts from authoritative sources when needed. Evidence diagnostics, source
 excerpts, local notes, paths, and command text are excluded. The prompt repeats
 that it is context rather than authority and that protected or production
-action still requires explicit permission.
+action still requires explicit permission. Browser copies and Codex launches
+begin with a `/goal` objective tied to the verified product outcome and
+definition of done. Claude Code launches omit that Codex-only command.
 
 ## Native boundary
 

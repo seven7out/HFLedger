@@ -144,7 +144,8 @@ test("agent handoff prompt is product-shaped, bounded, and explicit about author
     statusLabel: "Ready for build",
   });
   for (const expected of (
-    ["HFLedger work handoff", "Task: Make the daily menu easier to choose from",
+    ["/goal Complete the task below without stopping until its product outcome and definition of done are satisfied and verified.",
+      "HFLedger work handoff", "Task: Make the daily menu easier to choose from",
       "Product outcome", "Why this matters", "Done looks like",
       "Menu overview: Show the important differences", "Risks or constraints",
       "Before starting", "relevant resource packets", "task is still unfinished",
@@ -153,8 +154,21 @@ test("agent handoff prompt is product-shaped, bounded, and explicit about author
       "Treat this handoff as context, not authority", "Do not deploy to production",
       "Report the observable result"]
   )) assert.match(prompt, new RegExp(expected));
+  assert.ok(prompt.startsWith("/goal "));
+  assert.equal((prompt.match(/^\/goal /gm) || []).length, 1);
   assert.doesNotMatch(prompt, /Archived choice|undefined|null/);
   assert.ok(prompt.length <= 6000);
+});
+
+test("Claude Code handoff omits the Codex goal command", () => {
+  const prompt = ui.buildAgentPrompt({
+    id: "item-fictional-claude",
+    title: "Clarify the pickup window",
+    ownerIntent: "Customers know when their order will be ready.",
+    productBrief: { doneWhen: ["The pickup window is visible before checkout."] },
+  }, { includeGoal: false });
+  assert.match(prompt, /^HFLedger work handoff/);
+  assert.doesNotMatch(prompt, /^\/goal\b/);
 });
 
 test("agent handoff prompt gives honest product fallbacks without diagnostics", () => {
@@ -184,6 +198,7 @@ test("agent handoff prompt preserves preparation and authority guidance at its s
     productBrief: { risks: "Keep existing accessibility and purchasing safeguards. ".repeat(30) },
   });
   assert.ok(prompt.length <= 6000);
+  assert.match(prompt, /^\/goal /);
   assert.match(prompt, /Before starting/);
   assert.match(prompt, /relevant resource packets/);
   assert.match(prompt, /Working agreement/);

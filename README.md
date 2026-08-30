@@ -192,8 +192,9 @@ The standard-library HTTP service provides:
   whole-row Details selection, owner headlines, outcomes, need-by dates, and
   active/parked planning state that agents can read through the CLI;
 - a product-shaped **Start work** handoff that copies an agent-ready prompt in
-  every client and, in the Mac app, can open a blank local Codex or Claude Code
-  CLI session without automatically submitting observed text;
+  every client, starts copied and Codex-launched prompts with a durable `/goal`,
+  and, in the Mac app, can open a blank local Codex or Claude Code CLI session
+  without automatically submitting observed text;
 - Calendar with a familiar month grid and agenda for task need-by dates,
   decision deadlines, deferred-item returns, and next scheduled runs;
 - Operations with product-led live session state plus agent jobs and recurring

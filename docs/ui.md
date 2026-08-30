@@ -159,10 +159,13 @@ unfinished; inspect the current product; and research unresolved factual
 questions from primary or authoritative sources when needed. Missing, stale,
 or contradictory context is reported instead of guessed through. **Copy agent
 prompt** works in the browser-only interface. In the native Mac app, **Start in
-Codex** and **Start in Claude Code** first copy that prompt and then open a blank
-local CLI session. The owner reviews, pastes, and submits the prompt; observed
-text never enters a native process argument and is never executed
-automatically.
+Codex** and **Start in Claude Code** first copy the appropriate prompt and then
+open a blank local CLI session. The browser copy and Codex launch begin with a
+`/goal` objective whose stopping condition is the verified product outcome and
+definition of done. The Claude Code launch omits that Codex-only command while
+preserving the same handoff body. The owner reviews, pastes, and submits the
+prompt; observed text never enters a native process argument and is never
+executed automatically.
 
 **Product outcomes** appears in the inspector. An unsplit task has **Mark
 product outcome complete**. A mixed task may contain two through twelve parts,

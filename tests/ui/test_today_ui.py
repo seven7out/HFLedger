@@ -80,7 +80,7 @@ class TodayUIContractTests(unittest.TestCase):
                 "groupOperationsByRunner", "Healthy", "Problematic",
                 "Agents now", "Open Operations", "Unlinked agent session",
                 "Start work", "Copy agent prompt", "Start in Codex",
-                "Start in Claude Code", "buildAgentPrompt",
+                "Start in Claude Code", "buildAgentPrompt", "/goal Complete the task below",
                 "Show command", "No run has been recorded yet.",
                 "Candidate research", "Open related work", "Show output reference",
                 "No agent sessions are active", "The observer is connected.",
@@ -200,7 +200,9 @@ class TodayUIContractTests(unittest.TestCase):
             script.index("async function openAgentSession"):
             script.index("function openSafeTarget")
         ]
-        self.assertIn("if (!await copyAgentPrompt(item)) return", launch)
+        self.assertIn(
+            'if (!await copyAgentPrompt(item, { includeGoal: agent === "codex" })) return',
+            launch)
         self.assertIn('invoke("open_agent_session", { agent })', launch)
         for forbidden in ("content }", "prompt }", "item }", "sourceItemRef"):
             self.assertNotIn(forbidden, launch)
